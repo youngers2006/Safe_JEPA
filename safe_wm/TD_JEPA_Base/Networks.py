@@ -98,7 +98,9 @@ class DynamicsPredictor(nnx.Module):
             current_dim = h
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
         
-    def __call__(self, x: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        x = jnp.concatenate([z, u], axis=-1)
+
         for l in range(0, len(self.layers), 2):
             linear_layer = self.layers[l]
             norm_layer = self.layers[l+1]
@@ -128,7 +130,9 @@ class SuccessorFeatures(nnx.Module):
             current_dim = h
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
              
-    def __call__(self, x: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        x = jnp.concatenate([z, u], axis=-1)
+
         for l in range(0, len(self.layers), 2):
             linear_layer = self.layers[l]
             norm_layer = self.layers[l+1]
