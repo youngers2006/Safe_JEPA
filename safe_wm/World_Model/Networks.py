@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 
-class ContextEncoder(nnx.Module):
+class Encoder(nnx.Module):
     def __init__(self, in_channels: int, flattened_dim: int, d_latent: int, *, rngs: nnx.Rngs):
         # Channels: in_channels -> 32 -> 32 -> 32 -> 32 
         # Standard DrQ-V2 CNN setup, uses Valid padding
@@ -111,7 +111,7 @@ class DynamicsPredictor(nnx.Module):
         
         return self.output_layer(x, update_spectral_norm)
 
-class SuccessorFeatures(nnx.Module):
+class ValueNet(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         self.layers = []
@@ -130,15 +130,13 @@ class SuccessorFeatures(nnx.Module):
             current_dim = h
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
              
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        x = jnp.concatenate([z, u], axis=-1)
-
+    def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         for l in range(0, len(self.layers), 2):
             linear_layer = self.layers[l]
             norm_layer = self.layers[l+1]
 
-            x = linear_layer(x, update_spectral_norm)
-            x = norm_layer(x)
-            x = nnx.silu(x)
+            z = linear_layer(z, update_spectral_norm)
+            z = norm_layer(z)
+            z = nnx.silu(z)
         
-        return self.output_layer(x, update_spectral_norm)
+        return self.output_layer(z, update_spectral_norm)
