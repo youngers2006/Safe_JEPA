@@ -4,7 +4,7 @@ import flax.nnx as nnx
 import optax
 
 # import modules
-from Networks import ValueNet, Encoder, DynamicsPredictor
+from Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor
 from Q_safety_critic import Q_safety_critic
 
 class WorldModel(nnx.Module):
@@ -83,7 +83,14 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.trainable_nodes = (self.encoder, self.dynamics, self.value_fn, self.safety_critic)
+        self.reward_fn = RewardPredictor(
+            d_in=d_latent + d_action,
+            hidden_features=(256, 256),
+            d_out=d_latent,
+            rngs=rngs
+        )
+
+        self.trainable_nodes = (self.encoder, self.dynamics, self.value_fn, self.safety_critic, self.reward_fn)
         self.target_nodes = (self.target_encoder, self.target_value_fn, self.target_safety_critic)
         self.optimiser = nnx.Optimizer(self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param)
 
@@ -138,7 +145,7 @@ class WorldModel(nnx.Module):
     ) -> jax.Array:
         def loss_fn(trainable_partition: tuple[jax.Array, ...]) -> jax.Array:
             # Extract trainable networks
-            enc, dyn, val_fn, safety_Q = trainable_partition
+            enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
 
             # Encode observations to latent space
             z = enc(obs)
@@ -152,6 +159,10 @@ class WorldModel(nnx.Module):
 
             # Get latent loss
             loss_z = jnp.mean((next_z - next_z_target) ** 2)
+
+            # Get reward loss
+            r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze()
+            loss_r = jnp.mean((r_pred - reward) ** 2)
 
             # Get next value bellman target
             next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False)
@@ -199,14 +210,15 @@ class WorldModel(nnx.Module):
             loss_s = loss_q_risk_mse + (self.cql_alpha * cql_risk_loss)
 
             # Total world model loss
-            total_loss = loss_z + loss_v + loss_vicreg + loss_s
+            total_loss = loss_z + loss_v + (loss_vicreg * self.gamma) + loss_s + loss_r
 
             metrics = {
                 "loss_total": total_loss,
                 "loss_dyn": loss_z,
                 "loss_v": loss_v,
                 "loss_safety": loss_s,
-                "loss_var": loss_vicreg
+                "loss_var": loss_vicreg,
+                "loss_r": loss_r
             }
             return total_loss, metrics
 
