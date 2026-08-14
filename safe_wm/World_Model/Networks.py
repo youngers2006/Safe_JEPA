@@ -6,10 +6,10 @@ class Encoder(nnx.Module):
     def __init__(self, in_channels: int, flattened_dim: int, d_latent: int, rngs: nnx.Rngs):
         # Channels: in_channels -> 32 -> 32 -> 32 -> 32 
         # Standard DrQ-V2 CNN setup, uses Valid padding
-        self.conv1 = nnx.Conv(in_channels, 32, kernel_size=(3, 3), strides=(2, 2), rngs=rngs)
-        self.conv2 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), rngs=rngs)
-        self.conv3 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), rngs=rngs)
-        self.conv4 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), rngs=rngs)
+        self.conv1 = nnx.Conv(in_channels, 32, kernel_size=(3, 3), strides=(2, 2), padding='VALID', rngs=rngs)
+        self.conv2 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), padding='VALID', rngs=rngs)
+        self.conv3 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), padding='VALID', rngs=rngs)
+        self.conv4 = nnx.Conv(32, 32, kernel_size=(3, 3), strides=(1, 1), padding='VALID', rngs=rngs)
 
         # Processing Network
         self.linear_proj = nnx.Linear(flattened_dim, d_latent, rngs=rngs)
