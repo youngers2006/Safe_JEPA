@@ -77,7 +77,6 @@ class WorldModel(nnx.Module):
             hidden_features=(256, 256),
             d_out=1,
             rngs=rngs
-                    
         )
 
         nnx.update(self.target_encoder, nnx.state(self.encoder, nnx.Param))
@@ -98,8 +97,12 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.trainable_nodes = (self.encoder, self.dynamics, self.value_fn, self.safety_critic, self.reward_fn)
-        self.target_nodes = (self.target_encoder, self.target_value_fn, self.target_safety_critic)
+        self.trainable_nodes = nnx.List(
+            [self.encoder, self.dynamics, self.value_fn, self.safety_critic, self.reward_fn]
+        )
+        self.target_nodes = nnx.List(
+            [self.target_encoder, self.target_value_fn, self.target_safety_critic]
+        )
         self.optimiser = nnx.Optimizer(self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param)
 
         self.lambda_dyn = lambda_dyn
@@ -179,7 +182,7 @@ class WorldModel(nnx.Module):
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> jax.Array:
-        def loss_fn(trainable_partition: tuple[jax.Array, ...]) -> dict:
+        def loss_fn(trainable_partition: nnx.List) -> dict:
             # Extract trainable networks
             enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
 

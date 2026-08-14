@@ -12,11 +12,12 @@
 #SBATCH --error=train_%j.err
 
 cd /lustre/home/sy493/Safe_JEPA/safe_wm
-
 module load nvidia-cuda/12.1.1
+eval "$(conda shell.bash hook)"
+conda activate safe_JEPA
 
 export WANDB_API_KEY="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"
 export MUJOCO_GL="egl"
-export LD_LIBRARY_PATH=/lustre/home/sy493/.conda/envs/safe_JEPA/lib/python3.12/site-packages/nvidia/cusparse/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=/lustre/home/sy493/.conda/envs/safe_JEPA/lib/python3.12/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
-/lustre/home/sy493/.conda/envs/safe_JEPA/bin/python training_point_maze.py
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cusparse/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
+python training_point_maze.py
