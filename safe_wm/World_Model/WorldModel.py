@@ -132,6 +132,28 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_value_fn, new_target_params)
 
     @nnx.jit
+    def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
+        self.update_target_encoder(tau_vals[0])
+        self.update_target_safety_critic(tau_vals[1])
+        self.update_target_value_fn(tau_vals[2])
+
+    @nnx.jit
+    def update_target_safety_critic(self, tau: float = 0.01) -> None:
+        # Extract both param sets
+        online_params = nnx.state(self.safety_critic, nnx.Param)
+        target_params = nnx.state(self.target_safety_critic, nnx.Param)
+
+        # Use moving average to update target encoder
+        new_target_params = optax.incremental_update(
+            new_tensors=online_params,
+            old_tensors=target_params,
+            step_size=tau
+        )
+
+        # Update the target encoder state
+        nnx.update(self.target_safety_critic, new_target_params)
+
+    @nnx.jit
     def train_step(
         self, 
         obs: jax.Array, 

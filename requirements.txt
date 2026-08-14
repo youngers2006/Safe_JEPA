@@ -1,0 +1,10 @@
+# Standard dependencies
+numpy
+tqdm
+wandb
+ogbench
+flax
+
+# DO NOT ADD JAX HERE. 
+# Run command in the terminal to get the GPU drivers:
+# pip install -U "jax[cuda12]"
