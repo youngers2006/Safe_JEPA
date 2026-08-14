@@ -32,7 +32,7 @@ class WorldModel(nnx.Module):
         d = d - 3 + 1         # Conv2: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv3: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv4: Kernel 3, Stride 1
-        flattened_dim = d * d * 32
+        flattened_dim = 20000
 
         self.encoder = Encoder(
             in_channels=d_in_obs,
