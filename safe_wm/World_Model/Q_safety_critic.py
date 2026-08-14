@@ -45,7 +45,7 @@ class SafetyCriticEnsemble(nnx.Module):
 
         VectorisedEnsemble = nnx.vmap(
             QSafetyCritic,
-            in_axes=(None, None, None), # z, u, usn
+            in_axes=(None, None), # z, u
             out_axes=0,
             axis_size=ensemble_size
         )
