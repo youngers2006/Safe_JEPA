@@ -211,36 +211,19 @@ class WorldModel(nnx.Module):
             std = jnp.sqrt(jnp.var(z, axis=0) + 1e-4)
             loss_vicreg = jnp.mean(jax.nn.relu(self.gamma - std))
 
-            # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * min_u_Q_next
-            q_risk_val = safety_Q(z, action, update_spectral_norm=True).squeeze()
-            batch_size = obs.shape[0]
-            random_key = self.rngs.default()
-            sampled_actions = jax.random.uniform(
-                random_key, 
-                shape=(batch_size, Q_minima_samples, action.shape[-1]), 
-                minval=action_bounds[0], 
-                maxval=action_bounds[1]
-            ).reshape(-1, action.shape[-1])
-            z_q = jnp.repeat(jnp.expand_dims(next_z_target, axis=1), Q_minima_samples, axis=1).reshape(-1, next_z_target.shape[-1])
-            next_q = self.target_safety_critic(
-                z_q, sampled_actions, update_spectral_norm=False
-            ).squeeze().reshape(batch_size, Q_minima_samples)
-            min_next_q = jnp.min(next_q, axis=-1)
-            q_target = jax.lax.stop_gradient(safety_cost + self.discount * (1.0 - done) * min_next_q)
-            loss_q_risk_mse = jnp.mean((q_risk_val - q_target) ** 2)
-
-            # CQL q loss, pushes up ood actions up
-            z_expanded = jnp.repeat(
-                jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
-            ).reshape(-1, z.shape[-1])
-            q_risk_ood = safety_Q(
-                z_expanded, sampled_actions, update_spectral_norm=True
-            ).squeeze().reshape(batch_size, Q_minima_samples)
-            mean_q_risk_ood = jnp.mean(q_risk_ood, axis=1)
-            cql_risk_loss = jnp.mean(q_risk_val - mean_q_risk_ood)
-
-            # total safety Q loss
-            loss_s = loss_q_risk_mse + (self.cql_alpha * cql_risk_loss)
+            loss_s = safety_Q.compute_loss(
+                self.target_safety_critic,
+                z,
+                next_z_target,
+                action,
+                safety_cost,
+                done,
+                self.discount,
+                self.cql_alpha,
+                action_bounds,
+                rng_key,
+                Q_minima_samples
+            )
 
             # Total world model loss
             total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
