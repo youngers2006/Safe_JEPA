@@ -45,13 +45,13 @@ class SafetyCriticEnsemble(nnx.Module):
 
         VectorisedEnsemble = nnx.vmap(
             QSafetyCritic,
-            in_axes=(None, None), # z, u
+            in_axes=(None, None, None, None), # z, u
             out_axes=0,
             axis_size=ensemble_size
         )
 
         self.critic_ensemble = VectorisedEnsemble(
-            d_in, hidden_features, d_out, rngs=rngs
+            d_in, hidden_features, d_out, rngs
         )
 
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
