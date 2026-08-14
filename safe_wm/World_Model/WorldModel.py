@@ -232,7 +232,7 @@ class WorldModel(nnx.Module):
             loss_s = loss_q_risk_mse + (self.cql_alpha * cql_risk_loss)
 
             # Total world model loss
-            total_loss = loss_z + loss_v + (loss_vicreg * self.gamma) + loss_s + loss_r
+            total_loss = loss_z + loss_v + loss_vicreg + loss_s + loss_r
 
             metrics = {
                 "loss_total": total_loss,
