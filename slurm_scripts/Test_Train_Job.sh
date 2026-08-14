@@ -13,7 +13,7 @@
 
 cd /lustre/home/sy493/Safe_JEPA/safe_wm
 
-module load cuda/12.1
+module load nvidia-cuda/12.1.1
 
 export WANDB_API_KEY="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"
 
