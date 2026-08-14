@@ -35,7 +35,7 @@ class WorldModel(nnx.Module):
         flattened_dim = 20000
 
         self.encoder = Encoder(
-            in_channels=d_in_obs,
+            in_channels=3,
             flattened_dim=flattened_dim,
             d_latent=d_latent,
             rngs=rngs
@@ -49,7 +49,7 @@ class WorldModel(nnx.Module):
         )
 
         self.target_encoder = Encoder(
-            in_channels=d_in_obs,
+            in_channels=3,
             flattened_dim=flattened_dim,
             d_latent=d_latent,
             rngs=rngs
