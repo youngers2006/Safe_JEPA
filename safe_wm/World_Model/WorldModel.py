@@ -4,8 +4,8 @@ import flax.nnx as nnx
 import optax
 
 # import modules
-from Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor
-from Q_safety_critic import Q_safety_critic
+from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor
+from World_Model.Q_safety_critic import SafetyCriticEnsemble
 
 class WorldModel(nnx.Module):
     def __init__(
@@ -18,6 +18,7 @@ class WorldModel(nnx.Module):
             gamma: float = 1.0, 
             discount: float = 0.99, 
             alpha: float = 1.0,
+            safety_ensemble_size: int = 5,
             lambda_dyn: float = 1.0,
             lambda_v: float = 0.1,
             lambda_r: float = 1.0,
@@ -61,7 +62,8 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.safety_critic = Q_safety_critic(
+        self.safety_critic = SafetyCriticEnsemble(
+            ensemble_size=safety_ensemble_size,
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
@@ -69,7 +71,8 @@ class WorldModel(nnx.Module):
                     
         )
         
-        self.target_safety_critic = Q_safety_critic(
+        self.target_safety_critic = SafetyCriticEnsemble(
+            ensemble_size=safety_ensemble_size,
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
