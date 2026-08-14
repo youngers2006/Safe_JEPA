@@ -82,20 +82,21 @@ class SpectralNormLinear(nnx.Module):
 class DynamicsPredictor(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
-        self.layers = []
+        temp_layers = []
         
         current_dim = d_in
         
         for h in hidden_features:
-            self.layers.append(
+            temp_layers.append(
                 SpectralNormLinear(current_dim, h, rngs=rngs)
             )
-            self.layers.append(
+            temp_layers.append(
                 nnx.LayerNorm(
                     h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
                 )
             )
             current_dim = h
+        self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
@@ -114,20 +115,21 @@ class DynamicsPredictor(nnx.Module):
 class ValueNet(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
-        self.layers = []
+        temp_layers = []
             
         current_dim = d_in
         
         for h in hidden_features:
-            self.layers.append(
+            temp_layers.append(
                     SpectralNormLinear(current_dim, h, rngs=rngs)
             )
-            self.layers.append(
+            temp_layers.append(
                 nnx.LayerNorm(
                     h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
                 )
             )
             current_dim = h
+        self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
              
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
@@ -144,20 +146,21 @@ class ValueNet(nnx.Module):
 class RewardPredictor(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
-        self.layers = []
+        temp_layers = []
         
         current_dim = d_in
         
         for h in hidden_features:
-            self.layers.append(
+            temp_layers.append(
                 SpectralNormLinear(current_dim, h, rngs=rngs)
             )
-            self.layers.append(
+            temp_layers.append(
                 nnx.LayerNorm(
                     h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
                 )
             )
             current_dim = h
+        self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
