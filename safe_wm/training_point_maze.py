@@ -2,6 +2,7 @@ import ogbench
 import numpy as np
 import wandb
 import flax.nnx as nnx
+import flax.serialization
 from tqdm import tqdm
 
 from World_Model import WorldModel
@@ -87,6 +88,15 @@ def train():
 
     wandb.finish()
     print("Training complete.")
+
+    print("Extracting and saving model state...")
+    model_state = nnx.state(world_model)
+    bytes_data = flax.serialization.to_bytes(model_state)
+    
+    with open("scp_world_model.msgpack", "wb") as f:
+        f.write(bytes_data)
+        
+    print("Model weights successfully saved to scp_world_model.msgpack")
 
 if __name__ == "__main__":
     train()

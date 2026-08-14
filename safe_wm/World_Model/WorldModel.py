@@ -17,7 +17,12 @@ class WorldModel(nnx.Module):
             lr: float, 
             gamma: float = 1.0, 
             discount: float = 0.99, 
-            alpha: float = 1.0, 
+            alpha: float = 1.0,
+            lambda_dyn: float = 1.0,
+            lambda_v: float = 0.1,
+            lambda_r: float = 1.0,
+            lambda_s: float = 1.0,
+            lambda_var: float = 10.0,
             *, 
             rngs: nnx.Rngs
         ):
@@ -94,7 +99,13 @@ class WorldModel(nnx.Module):
         self.target_nodes = (self.target_encoder, self.target_value_fn, self.target_safety_critic)
         self.optimiser = nnx.Optimizer(self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param)
 
-        self.disount = discount
+        self.lambda_dyn = lambda_dyn
+        self.lambda_v = lambda_v
+        self.lambda_r = lambda_r
+        self.lambda_s = lambda_s
+        self.lambda_var = lambda_var
+
+        self.discount = discount
         self.gamma = gamma # VicReg variance threshold
         self.cql_alpha = alpha # CQL penalty weight
         self.rngs = rngs
@@ -165,7 +176,7 @@ class WorldModel(nnx.Module):
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> jax.Array:
-        def loss_fn(trainable_partition: tuple[jax.Array, ...]) -> jax.Array:
+        def loss_fn(trainable_partition: tuple[jax.Array, ...]) -> dict:
             # Extract trainable networks
             enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
 
@@ -187,7 +198,7 @@ class WorldModel(nnx.Module):
             loss_r = jnp.mean((r_pred - reward) ** 2)
 
             # Get next value bellman target
-            next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False)
+            next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False).squeeze()
             target_v = reward + self.discount * (1.0 - done) * next_v_target
 
             # Get value prediction
@@ -232,7 +243,8 @@ class WorldModel(nnx.Module):
             loss_s = loss_q_risk_mse + (self.cql_alpha * cql_risk_loss)
 
             # Total world model loss
-            total_loss = loss_z + loss_v + loss_vicreg + loss_s + loss_r
+            total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
+                          self.lambda_var * loss_vicreg + self.lambda_s * loss_s + self.lambda_r * loss_r)
 
             metrics = {
                 "loss_total": total_loss,
