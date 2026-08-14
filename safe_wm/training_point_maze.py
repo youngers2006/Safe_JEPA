@@ -40,9 +40,12 @@ def train():
 
     print("Dataset Loaded")
 
+    obs_shape = env.observation_space.shape
+    dynamic_d_in = int(np.prod(obs_shape))
+
     rngs = nnx.Rngs(seed)
     world_model = WorldModel(
-        d_in_obs=3,
+        d_in_obs=dynamic_d_in,
         image_size=64, 
         d_latent=64, 
         d_action=actions.shape[-1], 
