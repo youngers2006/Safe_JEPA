@@ -18,6 +18,8 @@ conda activate safe_JEPA
 
 export WANDB_API_KEY="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"
 export MUJOCO_GL="egl"
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cusparse/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cublas/lib:$LD_LIBRARY_PATH
+CUSPARSE_DIR=$(dirname $(find $CONDA_PREFIX -name libcusparse.so* | head -n 1))
+CUBLAS_DIR=$(dirname $(find $CONDA_PREFIX -name libcublas.so* | head -n 1))
+export LD_LIBRARY_PATH=$CUSPARSE_DIR:$CUBLAS_DIR:$LD_LIBRARY_PATH
+export XLA_FLAGS="--xla_gpu_cuda_data_dir=$CONDA_PREFIX"
 python training_point_maze.py

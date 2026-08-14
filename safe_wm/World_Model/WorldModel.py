@@ -245,7 +245,7 @@ class WorldModel(nnx.Module):
             }
             return total_loss, metrics
 
-        grad_fn = nnx.value_and_grad(loss_fn, has_aux=True, wrt=nnx.Param)
+        grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
         (loss, metrics), grad = grad_fn(self.trainable_nodes)
         self.optimiser.update(grad)
         return metrics
