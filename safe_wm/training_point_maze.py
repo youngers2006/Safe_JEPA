@@ -5,7 +5,7 @@ import flax.nnx as nnx
 import flax.serialization
 from tqdm import tqdm
 
-from World_Model import WorldModel
+from World_Model.WorldModel import WorldModel
 
 def get_batches(dataset_size, batch_size, key: np.random.Generator):
     indices = np.arange(dataset_size)
@@ -42,7 +42,7 @@ def train():
 
     rngs = nnx.Rngs(seed)
     world_model = WorldModel(
-        d_in_obs=3, 
+        d_in_obs=3,
         image_size=64, 
         d_latent=64, 
         d_action=actions.shape[-1], 
