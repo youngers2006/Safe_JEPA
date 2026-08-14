@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 # Import files
-from Networks import SpectralNormLinear
+from World_Model.Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):

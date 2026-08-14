@@ -224,7 +224,7 @@ class WorldModel(nnx.Module):
                 self.discount,
                 self.cql_alpha,
                 action_bounds,
-                rng_key,
+                self.rngs,
                 Q_minima_samples
             )
 
