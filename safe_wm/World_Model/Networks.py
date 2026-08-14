@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 class Encoder(nnx.Module):
-    def __init__(self, in_channels: int, flattened_dim: int, d_latent: int, *, rngs: nnx.Rngs):
+    def __init__(self, in_channels: int, flattened_dim: int, d_latent: int, rngs: nnx.Rngs):
         # Channels: in_channels -> 32 -> 32 -> 32 -> 32 
         # Standard DrQ-V2 CNN setup, uses Valid padding
         self.conv1 = nnx.Conv(in_channels, 32, kernel_size=(3, 3), strides=(2, 2), rngs=rngs)
@@ -32,7 +32,7 @@ class Encoder(nnx.Module):
         return nnx.tanh(x)
 
 class SpectralNormLinear(nnx.Module):
-    def __init__(self, d_in, d_out, *, rngs):
+    def __init__(self, d_in, d_out, rngs):
         self.network = nnx.Linear(d_in, d_out, rngs=rngs)
 
         # Largest singular value (define as variable to allow updates when jit)
@@ -80,7 +80,7 @@ class SpectralNormLinear(nnx.Module):
         return y
     
 class DynamicsPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -113,7 +113,7 @@ class DynamicsPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -144,7 +144,7 @@ class ValueNet(nnx.Module):
         return self.output_layer(z, update_spectral_norm)
 
 class RewardPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         

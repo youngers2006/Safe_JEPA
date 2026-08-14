@@ -6,7 +6,7 @@ import flax.nnx as nnx
 from World_Model.Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -39,7 +39,7 @@ class QSafetyCritic(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class SafetyCriticEnsemble(nnx.Module):
-    def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, *, rngs: nnx.Rngs):
+    def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
 
         self.ensemble_size = ensemble_size
 
