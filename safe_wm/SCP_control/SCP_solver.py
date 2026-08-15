@@ -3,9 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
 
-from SCP_control.get_jacobians import get_jacobians
-
-def ScpSolver():
+class ScpSolver():
     def __init__(self, horizon: int, d_z: int, d_u: int, u_min:float = -1.0, u_max: float = 1.0):
         # Constants
         self.horizon = horizon
@@ -123,7 +121,7 @@ def ScpSolver():
 
         try:
             self.problem.solve(solver=cp.CLARABEL, warm_start=True)
-            status = self.objective.status
+            status = self.problem.status
 
             if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]: # Success
                 return self.u.value, self.z.value
