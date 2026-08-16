@@ -5,6 +5,7 @@ import cvxpy as cp
 
 from SCP_control.SCP_solver import ScpSolver
 from SCP_control.get_jacobians import get_jacobians
+from nonlinear_cost_fn import nonlinear_cost_fn
 
 class EconomicSCPSolver():
     def __init__(
@@ -77,7 +78,8 @@ class EconomicSCPSolver():
         cost_jax = self.nonlinear_cost_fn(
             jnp.array(z_c), 
             jnp.array(u),
-            wm_networks
+            wm_networks,
+            self.hyperparams
         )
         return np.asarray(cost_jax)
 
