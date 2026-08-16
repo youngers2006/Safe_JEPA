@@ -32,33 +32,35 @@ def get_jacobians(
 
     # Get reward jacobians
     r_jac_fn = jax.jacrev(reward_fn, argnums=(0, 1))
-    Jr_z, Jr_u = jax.vmap(r_jac_fn, in_axes=(0, 0))(z_ref, u_ref)
+    Jr_z, Jr_u = jax.vmap(r_jac_fn, in_axes=(0, 0))(z_ref[:-1], u_ref)
 
-    # Get value jacobians
+    # Get value jacobian
     v_jac_fn = jax.jacrev(value_fn, argnums=(0,))
-    Jv_z = jax.vmap(v_jac_fn, in_axes=(0,))(z_ref)
+    Jv_z = v_jac_fn(z_ref[-1])
 
     # Get dynamics jacobians and dynamics prediction
     f_jac_fn = jax.jacfwd(dyn_fn, argnums=(0, 1))
-    Jf_z, Jf_u = jax.vmap(f_jac_fn, in_axes=(0, 0))(z_ref, u_ref)
-    f_ref = jax.vmap(dyn_fn, in_axes=(0, 0))
+    Jf_z, Jf_u = jax.vmap(f_jac_fn, in_axes=(0, 0))(z_ref[:-1], u_ref)
+    f_ref = jax.vmap(dyn_fn, in_axes=(0, 0))(z_ref[:-1], u_ref)
 
     # Get safety Jacobians and safety prediction
     Q_jac_fn = jax.jacrev(safety_fn, argnums=(0, 1))
     (JQmu_z, JQmu_u), (JQvar_z, JQvar_u) = jax.vmap(
         Q_jac_fn, in_axes=(0, 0)
     )(z_ref, u_ref)
-    Q_mu, Q_var = jax.vmap(safety_fn, in_axes=(0, 0))
+    Q_mu, Q_var = jax.vmap(safety_fn, in_axes=(0, 0))(z_ref[:-1], u_ref)
 
     # Get linearised dynamics system coefficients
+    z_un = z_ref[:-1, ..., jnp.newaxis]
+    u_un = u_ref[..., jnp.newaxis]
     A = Jf_z
     B = Jf_u
-    r = f_ref - (Jf_z @ z_ref) - (Jf_u @ u_ref)
+    r = f_ref - (Jf_z @ z_un).squeeze(-1) - (Jf_u @ u_un).squeeze(-1)
 
     # Get safety system coefficients
     C = JQmu_z + lambda_unc * JQvar_z
     D = JQmu_u + lambda_unc * JQvar_u
-    r_prime = (Q_mu - (JQmu_u @ u_ref) - (JQmu_z @ z_ref)) + lambda_unc * (
-        Q_var - (JQvar_u @ u_ref) - (JQvar_z @ z_ref))
+    r_prime = (Q_mu - (JQmu_u @ u_un).squeeze(-1) - (JQmu_z @ z_un).squeeze(-1)) + lambda_unc * (
+        Q_var - (JQvar_u @ u_un).squeeze(-1) - (JQvar_z @ z_un).squeeze(-1))
     
     return Jr_z, Jr_u, Jv_z, A, B, r, C, D, r_prime

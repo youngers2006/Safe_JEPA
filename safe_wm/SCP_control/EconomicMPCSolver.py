@@ -31,6 +31,8 @@ class EconomicSCPSolver():
         self.scp_iters = scp_iters
         self.tol = tol
 
+        self.is_first_step = True
+
         self.rho_lower = rho_lower
         self.rho_upper = rho_upper
         
@@ -98,16 +100,30 @@ class EconomicSCPSolver():
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
-        # Shift actions by 1 and set last action to 0
-        u_ref = np.roll(self.u_prev, shift=-1, axis=0)
-        u_ref[-1, :] = 0.0
+        if self.is_first_step:
+            # Initial u is zeros
+            u_ref = self.u_prev
 
-        # Shift states forward by 1 and set last state to the same as previous
-        z_ref = np.roll(self.z_prev, shift=-1, axis=0)
-        z_ref[-1, :] = z_ref[-2, :]
+            # Initialise trajectory
+            z_ref_list = [z_c]
+            z_curr = z_c
+            for i in range(self.horizon):
+                z_curr = f_fn(z_curr, jnp.array(u_ref[i, :]), update_spectral_norm=False)
+                z_ref_list.append(z_curr)
 
-        # Anchor states to observation
-        z_ref[0, :] = z_c
+            z_ref = np.asarray(jnp.stack(z_ref_list))
+            self.is_first_step = False
+        else:
+            # Shift actions by 1 and set last action to 0
+            u_ref = np.roll(self.u_prev, shift=-1, axis=0)
+            u_ref[-1, :] = 0.0
+
+            # Shift states forward by 1 and set last state to the same as previous
+            z_ref = np.roll(self.z_prev, shift=-1, axis=0)
+            z_ref[-1, :] = z_ref[-2, :]
+
+            # Anchor states to observation
+            z_ref[0, :] = z_c
 
         for _ in range(self.scp_iters):
             # Extract matrices from world model
@@ -176,6 +192,11 @@ class EconomicSCPSolver():
                 # If solution has converged, break the loop
                 if delta_u < self.tol:
                     break
+
+        # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
+        if rho < self.rho_lower:
+            u_opt = u_ref
+            z_opt = z_ref
 
         # Update orevious solution buffer and return 1st action to take
         self.u_prev = u_opt

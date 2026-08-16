@@ -93,7 +93,7 @@ class WorldModel(nnx.Module):
         self.reward_fn = RewardPredictor(
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
-            d_out=d_latent,
+            d_out=1,
             rngs=rngs
         )
 
