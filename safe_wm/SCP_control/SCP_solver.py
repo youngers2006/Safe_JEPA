@@ -76,30 +76,20 @@ class ScpSolver():
 
     def solve_problem(
             self, 
-            system_matrices: tuple[jax.Array, ...], 
-            z_c: jax.Array, 
-            z_ref: jax.Array, 
-            u_ref: jax.Array, 
+            system_matrices, 
+            z_c, 
+            z_ref, 
+            u_ref, 
             hyperparams: dict
         ):
         # Extract matrices from tuple
-        Jr_z_jax, Jr_u_jax, Jv_z_jax, A_jax, B_jax, r_jax, C_jax, D_jax, r_prime_jax = system_matrices
-
-        # Move all matrices onto cpu and into numpy
-        A_np = np.asarray(A_jax)
-        B_np = np.asarray(B_jax)
-        r_np = np.asarray(r_jax)
-        C_np = np.asarray(C_jax)
-        D_np = np.asarray(D_jax)
-        r_prime_np = np.asarray(r_prime_jax)
-        Jr_z_np = np.asarray(Jr_z_jax)
-        Jr_u_np = np.asarray(Jr_u_jax)
-
+        Jr_z_np, Jr_u_np, Jv_z_np, A_np, B_np, r_np, C_np, D_np, r_prime_np = system_matrices
+        
         # Setup static values
-        self.z_c.value = np.asarray(z_c)
-        self.z_ref.value = np.asarray(z_ref)
-        self.u_ref.value = np.asarray(u_ref)
-        self.Jv_z.value = np.asarray(Jv_z_jax)
+        self.z_c.value = z_c
+        self.z_ref.value = z_ref
+        self.u_ref.value = u_ref
+        self.Jv_z.value = Jv_z_np
 
         # Setup hyperparams
         self.tau.value = float(hyperparams['tau'])
