@@ -10,8 +10,8 @@ from SCP_control.nonlinear_cost_fn import nonlinear_cost_fn
 class EconomicSCPSolver():
     def __init__(
             self, 
-            jax_extractor_fn, # Jit compiled function
-            non_linear_cost_fn, # Jit compiled function
+            jax_extractor_fn: get_jacobians, # Jit compiled function
+            nonlinear_cost_fn: nonlinear_cost_fn, # Jit compiled function
             SCP_solver: ScpSolver, 
             horizon: int, 
             d_z: int, 
@@ -23,6 +23,8 @@ class EconomicSCPSolver():
             tol: float = 1e-3
         ):
         self.jax_extractor_fn = jax_extractor_fn
+        self.nonlinear_cost_fn = nonlinear_cost_fn
+
         self.SCP_solver = SCP_solver
         self.horizon = horizon
         self.hyperparams = hyperparams
