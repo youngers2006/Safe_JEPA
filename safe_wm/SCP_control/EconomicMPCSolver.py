@@ -5,12 +5,13 @@ import cvxpy as cp
 
 from SCP_control.SCP_solver import ScpSolver
 from SCP_control.get_jacobians import get_jacobians
-from nonlinear_cost_fn import nonlinear_cost_fn
+from SCP_control.nonlinear_cost_fn import nonlinear_cost_fn
 
 class EconomicSCPSolver():
     def __init__(
             self, 
             jax_extractor_fn, # Jit compiled function
+            non_linear_cost_fn, # Jit compiled function
             SCP_solver: ScpSolver, 
             horizon: int, 
             d_z: int, 
@@ -48,16 +49,24 @@ class EconomicSCPSolver():
         # Vectorized discount array [1, gamma, gamma^2, ...]
         discount_vec = gamma ** np.arange(self.horizon)
 
+        # Define unsqeezed vectors to allow @ operation on 3rd order tensor
+        z_un = z[..., np.newaxis]
+        u_un = u[..., np.newaxis]
+
         # Reward for trajectory
-        reward_vec = np.sum(Jr_z @ z[:-1], axis=1) + np.sum(Jr_u @ u, axis=1)
-        discounted_reward = discount_vec * reward_vec
+        reward_vec = np.sum(Jr_z * z[:-1], axis=1) + np.sum(Jr_u * u, axis=1)
+        discounted_reward = np.sum(discount_vec * reward_vec)
 
         # mu_p and mu_n usage penalty
-        dyn_error = z[1:] - (A @ z + B @ u + r)
+        Az = (A @ z_un[:-1]).squeeze(-1)
+        Bu = (B @ u_un).squeeze(-1)
+        dyn_error = z[1:] - (Az + Bu + r)
         dyn_penalty = np.sum(dyn_error ** 2)
 
         # nu usage penalty
-        safe_pred = np.sum(C @ z[:-1], axis=1) + np.sum(D @ u, axis=1) + r_prime
+        Cz = np.sum(C * z[:-1], axis=1)
+        Du = np.sum(D * u, axis=1)
+        safe_pred = Cz + Du + r_prime
         safe_error = np.maximum(0.0, safe_pred - tau)
         safe_penalty = np.sum(safe_error ** 2)
 
@@ -65,7 +74,7 @@ class EconomicSCPSolver():
         control_penalty = rho_u * np.sum(u ** 2)
 
         # Terminal value reward
-        terminal_value = (gamma ** self.self.horizon) * np.sum(Jv_z * z[-1]) 
+        terminal_value = (gamma ** self.horizon) * np.sum(Jv_z * z[-1]) 
 
         # Compute total trajectory cost for the linearised system
         J_lin = (-discounted_reward 
