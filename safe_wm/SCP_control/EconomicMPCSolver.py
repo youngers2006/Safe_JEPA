@@ -22,17 +22,21 @@ class EconomicSCPSolver():
             rho_upper: float = 0.75,
             tol: float = 1e-3
         ):
+        # Jitted function objects
         self.jax_extractor_fn = jax_extractor_fn
         self.nonlinear_cost_fn = nonlinear_cost_fn
 
+        # Solver parameters
         self.SCP_solver = SCP_solver
         self.horizon = horizon
         self.hyperparams = hyperparams
         self.scp_iters = scp_iters
         self.tol = tol
 
+        # Flag to trigger initial warm start
         self.is_first_step = True
 
+        # TR dynamic resizing trigger bounds
         self.rho_lower = rho_lower
         self.rho_upper = rho_upper
         
