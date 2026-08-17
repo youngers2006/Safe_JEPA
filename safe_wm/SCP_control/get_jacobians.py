@@ -60,7 +60,7 @@ def get_jacobians(
     # Get safety system coefficients
     C = JQmu_z + lambda_unc * JQvar_z
     D = JQmu_u + lambda_unc * JQvar_u
-    r_prime = (Q_mu - (JQmu_u @ u_un).squeeze(-1) - (JQmu_z @ z_un).squeeze(-1)) + lambda_unc * (
-        Q_var - (JQvar_u @ u_un).squeeze(-1) - (JQvar_z @ z_un).squeeze(-1))
+    r_prime = (Q_mu - jnp.sum(JQmu_u * u_ref) - jnp.sum(JQmu_z * z_ref)) + lambda_unc * (
+        Q_var - jnp.sum(JQvar_u * u_ref) - jnp.sum(JQvar_z * z_ref))
     
     return Jr_z, Jr_u, Jv_z, A, B, r, C, D, r_prime

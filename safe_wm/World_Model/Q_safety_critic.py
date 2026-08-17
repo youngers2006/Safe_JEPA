@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 # Import files
-from World_Model.Networks import SpectralNormLinear
+from Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
@@ -40,22 +40,31 @@ class QSafetyCritic(nnx.Module):
 
 class SafetyCriticEnsemble(nnx.Module):
     def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
-
+        # Save enemble size
         self.ensemble_size = ensemble_size
 
+        # Create vectorised ensemble with all networks in parrallel, initialised with separate keys
         VectorisedEnsemble = nnx.vmap(
             QSafetyCritic,
-            in_axes=(None, None, None, None), # z, u
+            in_axes=(None, None, None, 0), # d_in, hf, d_out, rngs 
             out_axes=0,
             axis_size=ensemble_size
         )
 
+        # Instantiate ensemble, using keys array
         self.critic_ensemble = VectorisedEnsemble(
-            d_in, hidden_features, d_out, rngs
+            d_in, hidden_features, d_out, rngs.split(ensemble_size)
         )
 
+    @nnx.vmap(in_axes=(0, None, None, None), out_axes=0)
+    def forward_pass(model, z_in, u_in, update_sn):
+        return model(z_in, u_in, update_sn)
+
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        return self.critic_ensemble(z, u, update_spectral_norm)
+        return nnx.vmap(
+            lambda model, input_z, input_u, spectral_norm: model(input_z, input_u, spectral_norm), 
+            in_axes=(0, None, None, None)
+        )(self.critic_ensemble, z, u, update_spectral_norm)
 
     def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         Q_vals = self(z, u, update_spectral_norm)
@@ -78,7 +87,7 @@ class SafetyCriticEnsemble(nnx.Module):
             Q_minima_samples: int = 64
         ):
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * min_u_Q_next
-        q_risk_vals = self(z, action, update_spectral_norm=True).squeeze()
+        q_risk_vals = self(z, action, update_spectral_norm=True).squeeze(axis=-1)
 
         # Compute MSE loss
         batch_size = z.shape[0]
@@ -117,7 +126,7 @@ class SafetyCriticEnsemble(nnx.Module):
             jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
         ).reshape(-1, z.shape[-1])
         q_risk_ood = self(
-            z_expanded, sampled_actions, update_spectral_norm=True
+            z_expanded, sampled_actions, update_spectral_norm=False
         ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
         mean_q_risk_ood = jnp.mean(q_risk_ood, axis=-1)
         cql_risk_loss = jnp.mean(q_risk_vals - mean_q_risk_ood, axis=1)

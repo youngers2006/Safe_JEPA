@@ -32,7 +32,7 @@ class WorldModel(nnx.Module):
         d = d - 3 + 1         # Conv2: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv3: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv4: Kernel 3, Stride 1
-        flattened_dim = 20000
+        flattened_dim = d * d * 32
 
         self.encoder = Encoder(
             in_channels=3,
@@ -67,8 +67,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
-            rngs=rngs
-                    
+            rngs=rngs      
         )
         
         self.target_safety_critic = SafetyCriticEnsemble(

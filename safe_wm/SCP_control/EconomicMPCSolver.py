@@ -171,7 +171,7 @@ class EconomicSCPSolver():
             # Compute the ratio of cost improvement between true and linearised system
             dJ_actual = nonlinear_cost_old - nonlinear_cost_new
             dJ_predicted = linear_cost_old - linear_cost_new
-            rho = dJ_actual / dJ_predicted
+            rho = dJ_actual / (dJ_predicted + 1e-8)
 
             if rho < self.rho_lower: # Reject u* and decrease TR size
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']

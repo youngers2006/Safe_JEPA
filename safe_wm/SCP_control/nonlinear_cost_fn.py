@@ -17,9 +17,9 @@ def nonlinear_cost_fn(z_c, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
     lambda_unc = hyperparams['lambda_unc']
 
     def scan_step(z_current, u_current):
-        z_next = f_graph.apply(f_state)(z_current, u_current, update_spectral_norm=False)
-        reward = r_graph.apply(r_state)(z_current, u_current, update_spectral_norm=False)
-        q_mu, q_var = Q_graph.apply(Q_state).get_moments(z_current, u_current, update_spectral_norm=False)
+        z_next = nnx.merge(f_graph, f_state)(z_current, u_current, update_spectral_norm=False)
+        reward = nnx.merge(r_graph, r_state)(z_current, u_current, update_spectral_norm=False)
+        q_mu, q_var = nnx.merge(Q_graph, Q_state).get_moments(z_current, u_current, update_spectral_norm=False)
         q_safe = q_mu + lambda_unc * q_var
         return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_mu, q_var)
 
@@ -44,7 +44,7 @@ def nonlinear_cost_fn(z_c, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
     control_cost = jnp.sum(u ** 2)
 
     # Terminal value cost
-    v_terminal = v_fn(z_terminal, update_spectral_norm=False)
+    v_terminal = v_fn(z_terminal, update_spectral_norm=False).squeeze(-1)
     terminal_term = (gamma ** horizon) * v_terminal
     
     # Compute final penalty
