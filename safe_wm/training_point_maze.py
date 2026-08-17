@@ -7,11 +7,57 @@ from tqdm import tqdm
 
 from World_Model.WorldModel import WorldModel
 
-def get_batches(dataset_size, batch_size, key: np.random.Generator):
-    indices = np.arange(dataset_size)
-    key.shuffle(indices)
-    for i in range(0, dataset_size - batch_size + 1, batch_size):
-        yield indices[i:i + batch_size]
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+import ogbench
+import numpy as np
+import wandb
+import h5py
+import jax
+import flax.nnx as nnx
+import flax.serialization
+from tqdm import tqdm
+
+from World_Model.WorldModel import WorldModel
+
+def get_lazy_batches(h5_file_path: str, batch_size: int, chunk_size: int, key: np.random.Generator):
+    """
+    Reads data directly from disk in chunks, preventing RAM exhaustion.
+    Shuffles data locally within each chunk.
+    """
+    with h5py.File(h5_file_path, 'r') as f:
+        total_steps = f['observations'].shape[0]
+        
+        # Calculate chunk boundaries
+        starts = np.arange(0, total_steps, chunk_size)
+        
+        # Optionally shuffle the order in which we read chunks
+        key.shuffle(starts)
+        
+        for start_idx in starts:
+            end_idx = min(start_idx + chunk_size, total_steps)
+            
+            # Load only this specific chunk into RAM
+            obs_chunk = f['observations'][start_idx:end_idx]
+            next_obs_chunk = f['next_observations'][start_idx:end_idx]
+            actions_chunk = f['actions'][start_idx:end_idx]
+            rewards_chunk = f['rewards'][start_idx:end_idx]
+            masks_chunk = f['masks'][start_idx:end_idx]
+            
+            chunk_len = obs_chunk.shape[0]
+            indices = np.arange(chunk_len)
+            key.shuffle(indices)
+            
+            for i in range(0, chunk_len - batch_size + 1, batch_size):
+                batch_idx = indices[i:i + batch_size]
+                yield (
+                    obs_chunk[batch_idx],
+                    next_obs_chunk[batch_idx],
+                    actions_chunk[batch_idx],
+                    rewards_chunk[batch_idx],
+                    masks_chunk[batch_idx]
+                )
 
 def train():
     Batch_Size = 128
@@ -19,26 +65,30 @@ def train():
     lr = 3e-4
     tau = 0.01
     seed = 20
+    chunk_size = 50000 # Tune this based on your available RAM
     dataset_name = 'visual-cube-single-play-singletask-task1-v0'
 
     wandb.init(project="scp-jepa-world-model", config={
         "batch_size": Batch_Size, "epochs": Epochs, "lr": lr, "tau": tau, "dataset": dataset_name
     })
 
-    print("Loading Dataset ...")
-    env, train_dataset, val_dataset = ogbench.make_env_and_datasets(dataset_name)
+    # We only use make_env_and_datasets to get the environment shapes and trigger the download.
+    # We DO NOT extract the arrays from the train_dataset dictionary.
+    print("Initializing environment and ensuring dataset is downloaded...")
+    env, _, _ = ogbench.make_env_and_datasets(dataset_name)
 
-    # Extract the 4D image tensor (N, 64, 64, 3)
-    obs_uint8 = train_dataset['observations'] 
-    next_obs_uint8 = train_dataset['next_observations']
-    actions = train_dataset['actions']
-    rewards = train_dataset['rewards']
-    done = 1.0 - train_dataset['masks']
-    safety_costs = (np.max(np.abs(actions), axis=-1) > 0.8).astype(np.float32)
+    # You must locate the HDF5 file downloaded by ogbench.
+    # It is typically cached in your home directory. 
+    # Update this path to match your system's cache location.
+    h5_file_path = os.path.expanduser(f"~/.ogbench/{dataset_name}.hdf5")
+    
+    if not os.path.exists(h5_file_path):
+        raise FileNotFoundError(f"Could not find the dataset at {h5_file_path}. Please check where ogbench caches files.")
 
-    dataset_size = obs_uint8.shape[0]
-
-    print("Dataset Loaded")
+    # Get total size purely from metadata (Zero RAM cost)
+    with h5py.File(h5_file_path, 'r') as f:
+        dataset_size = f['observations'].shape[0]
+        action_dim = f['actions'].shape[-1]
 
     obs_shape = env.observation_space.shape
     dynamic_d_in = int(np.prod(obs_shape))
@@ -48,7 +98,7 @@ def train():
         d_in_obs=dynamic_d_in,
         image_size=64, 
         d_latent=64, 
-        d_action=actions.shape[-1], 
+        d_action=action_dim, 
         lr=lr, 
         rngs=rngs
     )
@@ -61,16 +111,18 @@ def train():
             "loss_r": [], "loss_safety": [], "loss_var": []
         }
 
-        for batch_idx in tqdm(get_batches(dataset_size, Batch_Size, np_rng), desc=f"In Epoch {epoch+1} / {Epochs}"):
-            b_obs_uint = obs_uint8[batch_idx]
-            b_next_obs_uint = next_obs_uint8[batch_idx]
+        # Calculate approximate batches per epoch for the tqdm progress bar
+        total_batches = dataset_size // Batch_Size
+        batch_generator = get_lazy_batches(h5_file_path, Batch_Size, chunk_size, np_rng)
+
+        for batch_data in tqdm(batch_generator, total=total_batches, desc=f"Epoch {epoch+1}/{Epochs}"):
+            b_obs_uint, b_next_obs_uint, b_actions, b_rewards, b_masks = batch_data
+
+            # Process data on-the-fly (saves massive amounts of RAM)
             b_obs = (b_obs_uint.astype(np.float32) / 255.0) - 0.5
             b_next_obs = (b_next_obs_uint.astype(np.float32) / 255.0) - 0.5
-
-            b_actions = actions[batch_idx]
-            b_rewards = rewards[batch_idx]
-            b_done = done[batch_idx]
-            b_safety_costs = safety_costs[batch_idx]
+            b_done = 1.0 - b_masks
+            b_safety_costs = (np.max(np.abs(b_actions), axis=-1) > 0.8).astype(np.float32)
 
             metrics = world_model.train_step(
                 b_obs,
