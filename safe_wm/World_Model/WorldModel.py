@@ -4,7 +4,7 @@ import flax.nnx as nnx
 import optax
 
 # import modules
-from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor
+from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
 from World_Model.Q_safety_critic import SafetyCriticEnsemble
 
 class WorldModel(nnx.Module):
@@ -80,7 +80,9 @@ class WorldModel(nnx.Module):
 
         nnx.update(self.target_encoder, nnx.state(self.encoder, nnx.Param))
         nnx.update(self.target_value_fn, nnx.state(self.value_fn, nnx.Param))
+        nnx.update(self.target_value_fn, nnx.state(self.value_fn, SpectralStat))
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, nnx.Param))
+        nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
         self.dynamics = DynamicsPredictor(
             d_in=d_latent + d_action,
@@ -146,6 +148,7 @@ class WorldModel(nnx.Module):
 
         # Update the target encoder state
         nnx.update(self.target_value_fn, new_target_params)
+        nnx.update(self.target_value_fn, nnx.state(self.value_fn, SpectralStat))
 
     @nnx.jit
     def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
@@ -168,6 +171,7 @@ class WorldModel(nnx.Module):
 
         # Update the target encoder state
         nnx.update(self.target_safety_critic, new_target_params)
+        nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
     @nnx.jit
     def train_step(

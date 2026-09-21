@@ -117,10 +117,11 @@ class ScpSolver():
                 return self.u.value, self.z.value
             elif status == cp.INFEASIBLE: # Failed due to infeasible preoblem
                 print("SCP Error: Problem is Infeasible. Falling Back to Previous Solution")
-                return self.z_ref.value, self.u_ref.value
+                return self.u_ref.value, self.z_ref.value
             else: # Failed for other reason
                 print(f"Solver Error: Solver exited with status {status}")
-                return self.z_ref.value, self.u_ref.value
+                return self.u_ref.value, self.z_ref.value
             
         except cp.SolverError as e:
             print(f"C++ Backend Crashed: {e}")
+            return self.u_ref.value, self.z_ref.value

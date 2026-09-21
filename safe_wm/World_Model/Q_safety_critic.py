@@ -66,30 +66,34 @@ class SafetyCriticEnsemble(nnx.Module):
             in_axes=(0, None, None, None)
         )(self.critic_ensemble, z, u, update_spectral_norm)
 
-    def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> tuple[jax.Array, jax.Array]:
         Q_vals = self(z, u, update_spectral_norm)
         mu = jnp.mean(Q_vals, axis=0)
         var = jnp.var(Q_vals, axis=0)
-        return mu, var
+        return mu, jnp.sqrt(var + 1e-6)
 
     def compute_loss(
             self, 
             target_ensemble: "SafetyCriticEnsemble", 
-            z: jax.Array, 
-            next_z_target: jax.Array, 
-            action: jax.Array, 
-            safety_cost: jax.Array, 
-            done: jax.Array,
+            z: jax.Array, # (Batch, d_z)
+            next_z_target: jax.Array, # (Batch, d_z)
+            action: jax.Array, # (Batch, d_u)
+            safety_cost: jax.Array, # (Batch,)
+            done: jax.Array, # (Batch,)
             discount: float, 
             cql_alpha: float, 
             action_bounds: tuple[float, float], 
             rng_key: nnx.Rngs,
             Q_minima_samples: int = 64
         ):
-        # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * min_u_Q_next
-        q_risk_vals = self(z, action, update_spectral_norm=True).squeeze(axis=-1)
+        # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
+        # q_risk: (M, B). Score safety of actions taken
+        q_risk_vals = self(
+            z, action, update_spectral_norm=True
+        ).squeeze(axis=-1)
 
-        # Compute MSE loss
+        # Sample actions from actions space to approximate min
+        # Build the action candidate set
         batch_size = z.shape[0]
         random_key = rng_key.default()
         sampled_actions = jax.random.uniform(
@@ -99,38 +103,62 @@ class SafetyCriticEnsemble(nnx.Module):
             maxval=action_bounds[1]
         ).reshape(-1, action.shape[-1])
 
-        z_q = jnp.repeat(jnp.expand_dims(next_z_target, axis=1), Q_minima_samples, axis=1).reshape(-1, next_z_target.shape[-1])
+        # Expand dimension of next z from (Batch, d_u) -> (Batch, action_samples, d_u)
+        # Then flatten to (Batch * action_samples, d_z) for NN processing
+        z_q = jnp.repeat(
+            jnp.expand_dims(next_z_target, axis=1), Q_minima_samples, axis=1
+        ).reshape(-1, next_z_target.shape[-1])
+
+        # Get safety value for each action sample, next_q: (Ensemble, Batch, action_samples)
         next_q = self(
             z_q, sampled_actions, update_spectral_norm=False
         ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
-        mean_next_q = jnp.mean(next_q, axis=0)
+
+        # Obtain action that minimises Q
+        mean_next_q = jnp.mean(next_q, axis=0) # mean value across ensemble
         best_action_indices = jnp.argmin(mean_next_q, axis=-1)
 
+        # Get target Q values
         target_next_q = target_ensemble(
             z_q, sampled_actions, update_spectral_norm=False
         ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
+        # Select the minima action for each transition in the batch
         indices_expanded = jnp.broadcast_to(
             best_action_indices[None, :, None],
             (self.ensemble_size, batch_size, 1)
         )
+        selected_target_q = jnp.take_along_axis(
+            target_next_q, indices_expanded, axis=-1
+        ).squeeze(axis=-1)
 
-        selected_target_q = jnp.take_along_axis(target_next_q, indices_expanded, axis=-1).squeeze(axis=-1) 
-        pessimistic_q = jnp.max(selected_target_q, axis=0)
+        # Expand c and d into ensemble dimension to allow broadcast
+        c = safety_cost[None, :]
+        d = done[None, :]
 
-        q_target = jax.lax.stop_gradient(safety_cost + discount * (1.0 - done) * pessimistic_q)
+        # Create safety target and calculate safety prediction mse loss
+        q_target = jax.lax.stop_gradient(
+            c + discount * (1.0 - c) * (1.0 - d) * selected_target_q
+        )
         loss_q_risk_mse = jnp.mean((q_risk_vals - q_target) ** 2, axis=1)
 
         # CQL q loss, pushes up ood actions up
+        # expand z dims in action sample dims
         z_expanded = jnp.repeat(
             jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
         ).reshape(-1, z.shape[-1])
+
+        # Calculate safety prediction at each action sample around state
         q_risk_ood = self(
             z_expanded, sampled_actions, update_spectral_norm=False
         ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
-        mean_q_risk_ood = jnp.mean(q_risk_ood, axis=-1)
+
+        # Obtain mean risk prediction across the set of samples
+        mean_q_risk_ood = jnp.mean(q_risk_ood, axis=-1) # (Ensemble, Batch)
+
+        # Get CQL loss, pushes seen actions down and unseen actions up
         cql_risk_loss = jnp.mean(q_risk_vals - mean_q_risk_ood, axis=1)
 
-        # total safety Q loss
-        loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss)
-        return jnp.sum(loss_s)
+        # total safety Q loss for each ensemble member then combine into a single loss
+        loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss) # (Ensemble,)
+        return jnp.mean(loss_s)

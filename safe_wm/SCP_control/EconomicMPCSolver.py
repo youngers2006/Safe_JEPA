@@ -91,11 +91,11 @@ class EconomicSCPSolver():
                  - terminal_value)
         return J_lin
 
-    def non_linear_cost_fn(self, wm_networks: tuple[jax.Array, ...], z_c: jax.Array, u: jax.Array) -> np.ndarray:
+    def non_linear_cost_fn(self, wm_networks: tuple[jax.Array, ...], z: jax.Array, u: jax.Array) -> np.ndarray:
         cost_jax = self.nonlinear_cost_fn(
-            jnp.array(z_c), 
+            jnp.array(z), 
             jnp.array(u),
-            wm_networks,
+            *wm_networks,
             self.hyperparams
         )
         return np.asarray(cost_jax)
@@ -129,6 +129,7 @@ class EconomicSCPSolver():
             # Anchor states to observation
             z_ref[0, :] = z_c
 
+        rho = -np.inf
         for _ in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jax_extractor_fn(
@@ -161,15 +162,15 @@ class EconomicSCPSolver():
                 cpu_matrices, z_ref_np, u_ref_np
             )
             nonlinear_cost_old = self.non_linear_cost_fn(
-                wm_networks, z_c, u_ref
+                wm_networks, z_ref, u_ref
             )
 
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
-                cpu_matrices, z_ref_np, u_opt
+                cpu_matrices, z_opt, u_opt
             )
             nonlinear_cost_new = self.non_linear_cost_fn(
-                wm_networks, z_c, u_opt
+                wm_networks, z_opt, u_opt
             )
 
             # Compute the ratio of cost improvement between true and linearised system

@@ -31,17 +31,20 @@ class Encoder(nnx.Module):
         x = self.layer_norm(x)
         return nnx.tanh(x)
 
+class SpectralStat(nnx.Variable):
+    """Power-iteration state: derived from W, not learned, not data-dependent."""
+    pass
 class SpectralNormLinear(nnx.Module):
     def __init__(self, d_in, d_out, rngs):
         self.network = nnx.Linear(d_in, d_out, rngs=rngs)
 
         # Largest singular value (define as variable to allow updates when jit)
-        self.sigma = nnx.Variable(jnp.ones(()))
+        self.sigma = SpectralStat(jnp.ones(()))
 
         # Direction vector for power iteration
         u_init = jax.random.normal(rngs.params(), (d_out,))
         u_init = u_init / (jnp.linalg.norm(u_init) + 1e-8)
-        self.u = nnx.Variable(u_init)
+        self.u = SpectralStat(u_init)
 
     def power_iteration(self, W: jax.Array) -> None:
         # Extract direction vector

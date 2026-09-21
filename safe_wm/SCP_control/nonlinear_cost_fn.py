@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 @nnx.jit
-def nonlinear_cost_fn(z_c, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
+def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
     # Get computation graphs of the networks for lax scan
     r_graph, r_state = nnx.split(r_fn)
     f_graph, f_state = nnx.split(f_fn)

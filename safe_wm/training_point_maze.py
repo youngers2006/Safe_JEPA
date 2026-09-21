@@ -1,49 +1,17 @@
-import os
-import glob
+import ogbench
 import numpy as np
 import wandb
-import h5py
-import jax
 import flax.nnx as nnx
 import flax.serialization
 from tqdm import tqdm
 
-# FORBID JAX from hoarding GPU VRAM (Must be at the absolute top)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
 from World_Model.WorldModel import WorldModel
 
-def get_lazy_batches(h5_file_path: str, batch_size: int, chunk_size: int, key: np.random.Generator):
-    """
-    Reads data strictly from disk in chunks. RAM usage remains < 1GB.
-    """
-    with h5py.File(h5_file_path, 'r') as f:
-        total_steps = f['observations'].shape[0]
-        starts = np.arange(0, total_steps, chunk_size)
-        key.shuffle(starts)
-        
-        for start_idx in starts:
-            end_idx = min(start_idx + chunk_size, total_steps)
-            
-            obs_chunk = f['observations'][start_idx:end_idx]
-            next_obs_chunk = f['next_observations'][start_idx:end_idx]
-            actions_chunk = f['actions'][start_idx:end_idx]
-            rewards_chunk = f['rewards'][start_idx:end_idx]
-            masks_chunk = f['masks'][start_idx:end_idx]
-            
-            chunk_len = obs_chunk.shape[0]
-            indices = np.arange(chunk_len)
-            key.shuffle(indices)
-            
-            for i in range(0, chunk_len - batch_size + 1, batch_size):
-                batch_idx = indices[i:i + batch_size]
-                yield (
-                    obs_chunk[batch_idx],
-                    next_obs_chunk[batch_idx],
-                    actions_chunk[batch_idx],
-                    rewards_chunk[batch_idx],
-                    masks_chunk[batch_idx]
-                )
+def get_batches(dataset_size, batch_size, key: np.random.Generator):
+    indices = np.arange(dataset_size)
+    key.shuffle(indices)
+    for i in range(0, dataset_size - batch_size + 1, batch_size):
+        yield indices[i:i + batch_size]
 
 def train():
     Batch_Size = 128
@@ -51,62 +19,58 @@ def train():
     lr = 3e-4
     tau = 0.01
     seed = 20
-    chunk_size = 50000 
     dataset_name = 'visual-cube-single-play-singletask-task1-v0'
 
     wandb.init(project="scp-jepa-world-model", config={
         "batch_size": Batch_Size, "epochs": Epochs, "lr": lr, "tau": tau, "dataset": dataset_name
     })
 
-    # LOCATE THE DATASET MANUALLY
-    data_dir = os.path.expanduser("~/.ogbench/data")
-    if not os.path.exists(data_dir):
-        raise FileNotFoundError(f"Data directory not found. Run download.py first.")
-        
-    hdf5_files = glob.glob(os.path.join(data_dir, f"*{dataset_name}*.hdf5"))
-    if not hdf5_files:
-        raise FileNotFoundError(f"Dataset {dataset_name} not found. Run download.py first.")
-        
-    h5_file_path = hdf5_files[0]
-    print(f"Loading data securely from: {h5_file_path}")
-    
-    # EXTRACT DIMENSIONS DIRECTLY FROM HDF5 METADATA
-    with h5py.File(h5_file_path, 'r') as f:
-        dataset_size = f['observations'].shape[0]
-        action_dim = f['actions'].shape[-1]
-        
-    # Hardcoded input dimension for OGBench visual tasks (64x64x3)
-    dynamic_d_in = 64 * 64 * 3
+    print("Loading Dataset ...")
+    env, train_dataset, val_dataset = ogbench.make_env_and_datasets(dataset_name)
+
+    # Extract the 4D image tensor (N, 64, 64, 3)
+    obs_uint8 = train_dataset['observations'] 
+    next_obs_uint8 = train_dataset['next_observations']
+    actions = train_dataset['actions']
+    rewards = train_dataset['rewards']
+    done = 1.0 - train_dataset['masks']
+    safety_costs = (np.max(np.abs(actions), axis=-1) > 0.8).astype(np.float32)
+
+    dataset_size = obs_uint8.shape[0]
+
+    print("Dataset Loaded")
+
+    obs_shape = env.observation_space.shape
+    dynamic_d_in = int(np.prod(obs_shape))
 
     rngs = nnx.Rngs(seed)
     world_model = WorldModel(
         d_in_obs=dynamic_d_in,
         image_size=64, 
         d_latent=64, 
-        d_action=action_dim, 
+        d_action=actions.shape[-1], 
         lr=lr, 
         rngs=rngs
     )
     np_rng = np.random.default_rng(seed)
 
     print("Start Training ...")
-    total_batches = dataset_size // Batch_Size
-    
     for epoch in range(Epochs):
         epoch_metrics = {
             "loss_total": [], "loss_dyn": [], "loss_v": [], 
             "loss_r": [], "loss_safety": [], "loss_var": []
         }
 
-        batch_generator = get_lazy_batches(h5_file_path, Batch_Size, chunk_size, np_rng)
-
-        for batch_data in tqdm(batch_generator, total=total_batches, desc=f"Epoch {epoch+1}/{Epochs}"):
-            b_obs_uint, b_next_obs_uint, b_actions, b_rewards, b_masks = batch_data
-
+        for batch_idx in tqdm(get_batches(dataset_size, Batch_Size, np_rng), desc=f"In Epoch {epoch+1} / {Epochs}"):
+            b_obs_uint = obs_uint8[batch_idx]
+            b_next_obs_uint = next_obs_uint8[batch_idx]
             b_obs = (b_obs_uint.astype(np.float32) / 255.0) - 0.5
             b_next_obs = (b_next_obs_uint.astype(np.float32) / 255.0) - 0.5
-            b_done = 1.0 - b_masks
-            b_safety_costs = (np.max(np.abs(b_actions), axis=-1) > 0.8).astype(np.float32)
+
+            b_actions = actions[batch_idx]
+            b_rewards = rewards[batch_idx]
+            b_done = done[batch_idx]
+            b_safety_costs = safety_costs[batch_idx]
 
             metrics = world_model.train_step(
                 b_obs,
@@ -128,9 +92,14 @@ def train():
     wandb.finish()
     print("Training complete.")
 
+    print("Extracting and saving model state...")
     model_state = nnx.state(world_model)
+    bytes_data = flax.serialization.to_bytes(model_state)
+    
     with open("scp_world_model.msgpack", "wb") as f:
-        f.write(flax.serialization.to_bytes(model_state))
+        f.write(bytes_data)
         
+    print("Model weights successfully saved to scp_world_model.msgpack")
+
 if __name__ == "__main__":
     train()
