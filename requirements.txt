@@ -1,10 +1,10 @@
 # Standard dependencies
 numpy
 tqdm
-wandb
-ogbench
 flax
+dsrl
 
+# python 3.10
 # DO NOT ADD JAX HERE. 
 # Run command in the terminal to get the GPU drivers:
 # pip install -U "jax[cuda12]"
