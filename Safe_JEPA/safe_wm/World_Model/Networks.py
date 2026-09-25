@@ -34,6 +34,7 @@ class Encoder(nnx.Module):
 class SpectralStat(nnx.Variable):
     """Power-iteration state: derived from W, not learned, not data-dependent."""
     pass
+
 class SpectralNormLinear(nnx.Module):
     def __init__(self, d_in, d_out, rngs):
         self.network = nnx.Linear(d_in, d_out, rngs=rngs)

@@ -21,10 +21,10 @@ def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
         reward = nnx.merge(r_graph, r_state)(z_current, u_current, update_spectral_norm=False)
         q_mu, q_var = nnx.merge(Q_graph, Q_state).get_moments(z_current, u_current, update_spectral_norm=False)
         q_safe = q_mu + lambda_unc * q_var
-        return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_mu, q_var)
+        return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_safe)
 
     # Scan step function to run it in compiled form over a loop up to the horizon
-    z_terminal, (z_history, r_history, q_safe_history) = jax.lax.scan(scan_step, z_c, u)
+    z_terminal, (z_history, r_history, q_safe_history) = jax.lax.scan(scan_step, z, u)
 
     # Compute discount vector
     horizon = u.shape[0]
