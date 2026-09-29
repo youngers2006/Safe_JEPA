@@ -71,7 +71,11 @@ class SpectralStat(nnx.Variable):
     pass
 
 class SpectralNormLinear(nnx.Module):
-    def __init__(self, d_in, d_out, rngs):
+    def __init__(self, d_in, d_out, rngs: nnx.Rngs, c: float = 1.0):
+        # Bounded L <= c
+        self.c = c
+
+        # Linear network component
         self.network = nnx.Linear(d_in, d_out, rngs=rngs)
 
         # Largest singular value (define as variable to allow updates when jit)
@@ -110,7 +114,7 @@ class SpectralNormLinear(nnx.Module):
             self.power_iteration(W)
 
         # Normalise weight matrix
-        W_sn = W / self.sigma.value
+        W_sn = self.c * W / self.sigma.value
         y = x @ W_sn
 
         # Add bias if used
