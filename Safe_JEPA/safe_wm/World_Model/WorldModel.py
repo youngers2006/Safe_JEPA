@@ -249,7 +249,7 @@ class WorldModel(nnx.Module):
 
             # Calculate vireg variance loss with digonal terms
             std = jnp.sqrt(jnp.diagonal(cov_mat) + 1e-4)
-            loss_var = jnp.mean(jnp.max(0.0, self.gamma - std))
+            loss_var = jnp.mean(jnp.maximum(0.0, self.gamma - std))
 
             # Calculate vicreg covariance loss with off diagonal terms
             off_diag = cov_mat - jnp.diag(jnp.diagonal(cov_mat))
@@ -286,7 +286,8 @@ class WorldModel(nnx.Module):
                 "loss_dyn": loss_z,
                 "loss_v": loss_v,
                 "loss_safety": loss_s,
-                "loss_var": loss_vicreg,
+                "loss_var": loss_var,
+                "loss_cov": loss_cov,
                 "loss_r": loss_r
             }
             return total_loss, metrics
