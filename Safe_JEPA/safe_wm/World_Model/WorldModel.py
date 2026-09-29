@@ -24,15 +24,31 @@ class WorldModel(nnx.Module):
             lambda_r: float = 1.0,
             lambda_s: float = 1.0,
             lambda_var: float = 10.0,
+            lambda_cov: float = 10.0,
             *, 
             rngs: nnx.Rngs
         ):
+        # Add this all to config file and change this to read the config
+        # ==============================================================
         d = image_size
         d = (d - 3) // 2 + 1  # Conv1: Kernel 3, Stride 2
         d = d - 3 + 1         # Conv2: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv3: Kernel 3, Stride 1
         d = d - 3 + 1         # Conv4: Kernel 3, Stride 1
         flattened_dim = d * d * 32
+
+        self.lambda_dyn = lambda_dyn
+        self.lambda_v = lambda_v
+        self.lambda_r = lambda_r
+        self.lambda_s = lambda_s
+        self.lambda_var = lambda_var
+        self.lambda_cov = lambda_cov
+
+        self.discount = discount
+        self.gamma = gamma # VicReg variance threshold
+        self.cql_alpha = alpha # CQL penalty weight
+        self.rngs = rngs
+        # ==============================================================
 
         self.encoder = Encoder(
             in_channels=3,
@@ -105,17 +121,6 @@ class WorldModel(nnx.Module):
             [self.target_encoder, self.target_value_fn, self.target_safety_critic]
         )
         self.optimiser = nnx.Optimizer(self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param)
-
-        self.lambda_dyn = lambda_dyn
-        self.lambda_v = lambda_v
-        self.lambda_r = lambda_r
-        self.lambda_s = lambda_s
-        self.lambda_var = lambda_var
-
-        self.discount = discount
-        self.gamma = gamma # VicReg variance threshold
-        self.cql_alpha = alpha # CQL penalty weight
-        self.rngs = rngs
 
     @nnx.jit
     def update_target_encoder(self, tau: float = 0.01) -> None:
@@ -216,9 +221,20 @@ class WorldModel(nnx.Module):
             # Get value loss
             loss_v = jnp.mean((v_pred - target_v) ** 2)
 
-            # Get std.dev of data in batch and ensure it remains above threshold to prevent collapse
-            std = jnp.sqrt(jnp.var(z, axis=0) + 1e-4)
-            loss_vicreg = jnp.mean(jax.nn.relu(self.gamma - std))
+            # Obtain covariace matrix (d, d). Note rowvar=False is because the row dimension is what we want to get the cov of
+            cov_mat = jnp.cov(z, rowvar=False)
+            d = cov_mat.shape[0]
+
+            # Calculate vireg variance loss with digonal terms
+            std = jnp.sqrt(jnp.diagonal(cov_mat) + 1e-4)
+            loss_var = jnp.mean(jnp.max(0.0, self.gamma - std))
+
+            # Calculate vicreg covariance loss with off diagonal terms
+            off_diag = cov_mat - jnp.diag(jnp.diagonal(cov_mat))
+            loss_cov = jnp.sum(off_diag ** 2) / d
+
+            # Compute vicreg loss
+            loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
 
             loss_s = safety_Q.compute_loss(
                 self.target_safety_critic,
@@ -236,7 +252,7 @@ class WorldModel(nnx.Module):
 
             # Total world model loss
             total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
-                          self.lambda_var * loss_vicreg + self.lambda_s * loss_s + self.lambda_r * loss_r)
+                          loss_vicreg + self.lambda_s * loss_s + self.lambda_r * loss_r)
 
             metrics = {
                 "loss_total": total_loss,
