@@ -18,6 +18,10 @@ class WorldModel(nnx.Module):
             gamma: float = 1.0, 
             discount: float = 0.99, 
             alpha: float = 1.0,
+            lipschitz_bound_dyn: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
+            lipschitz_bound_rew: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
+            lipschitz_bound_val: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
+            lipschitz_bound_safe: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
             safety_ensemble_size: int = 5,
             lambda_dyn: float = 1.0,
             lambda_v: float = 0.1,
@@ -60,7 +64,8 @@ class WorldModel(nnx.Module):
         self.value_fn = ValueNet(
             d_in=d_latent,
             hidden_features=(256, 256),
-            d_out=1,
+            d_out=1, 
+            lipschitz_bound=lipschitz_bound_val,
             rngs=rngs
         )
 
@@ -75,6 +80,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent,
             hidden_features=(256, 256),
             d_out=1,
+            lipschitz_bound=lipschitz_bound_val,
             rngs=rngs
         )
 
@@ -83,6 +89,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
+            lipschitz_bound=lipschitz_bound_safe,
             rngs=rngs      
         )
         
@@ -91,6 +98,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
+            lipschitz_bound=lipschitz_bound_safe,
             rngs=rngs
         )
 
@@ -104,6 +112,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=d_latent,
+            lipschitz_bound=lipschitz_bound_dyn,
             rngs=rngs
         )
 
@@ -111,6 +120,7 @@ class WorldModel(nnx.Module):
             d_in=d_latent + d_action,
             hidden_features=(256, 256),
             d_out=1,
+            lipschitz_bound=lipschitz_bound_rew,
             rngs=rngs
         )
 
@@ -120,7 +130,9 @@ class WorldModel(nnx.Module):
         self.target_nodes = nnx.List(
             [self.target_encoder, self.target_value_fn, self.target_safety_critic]
         )
-        self.optimiser = nnx.Optimizer(self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param)
+        self.optimiser = nnx.Optimizer(
+            self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param
+        )
 
     @nnx.jit
     def update_target_encoder(self, tau: float = 0.01) -> None:
@@ -247,6 +259,8 @@ class WorldModel(nnx.Module):
             loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
             # ===============================================================
 
+            # Compute safety constraint loss
+            # ===============================================================
             loss_s = safety_Q.compute_loss(
                 self.target_safety_critic,
                 z,
@@ -260,6 +274,7 @@ class WorldModel(nnx.Module):
                 self.rngs,
                 Q_minima_samples
             )
+            # ===============================================================
 
             # Total world model loss
             total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 

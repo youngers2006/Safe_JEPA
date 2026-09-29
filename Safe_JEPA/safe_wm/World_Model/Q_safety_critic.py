@@ -6,7 +6,7 @@ import flax.nnx as nnx
 from World_Model.Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -14,7 +14,7 @@ class QSafetyCritic(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, rngs=rngs)
+                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             temp_layers.append(
                 nnx.LayerNorm(
@@ -23,7 +23,7 @@ class QSafetyCritic(nnx.Module):
             )
             current_dim = h
         self.layers = nnx.List(temp_layers)
-        self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
@@ -39,21 +39,21 @@ class QSafetyCritic(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class SafetyCriticEnsemble(nnx.Module):
-    def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
+    def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
         # Save enemble size
         self.ensemble_size = ensemble_size
 
         # Create vectorised ensemble with all networks in parrallel, initialised with separate keys
         VectorisedEnsemble = nnx.vmap(
             QSafetyCritic,
-            in_axes=(None, None, None, 0), # d_in, hf, d_out, rngs 
+            in_axes=(None, None, None, None, 0), # d_in, hf, d_out, lipschitz_bound, rngs 
             out_axes=0,
             axis_size=ensemble_size
         )
 
         # Instantiate ensemble, using keys array
         self.critic_ensemble = VectorisedEnsemble(
-            d_in, hidden_features, d_out, rngs.split(ensemble_size)
+            d_in, hidden_features, d_out, lipschitz_bound, rngs.split(ensemble_size)
         )
 
     @nnx.vmap(in_axes=(0, None, None, None), out_axes=0)
