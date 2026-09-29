@@ -180,7 +180,7 @@ class WorldModel(nnx.Module):
 
     @nnx.jit
     def train_step(
-        self, 
+        self,
         obs: jax.Array, 
         next_obs: jax.Array, 
         action: jax.Array, 
@@ -194,6 +194,8 @@ class WorldModel(nnx.Module):
             # Extract trainable networks
             enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
 
+            # Encoder and Dynamics Loss
+            # ===============================================================
             # Encode observations to latent space
             z = enc(obs)
 
@@ -206,12 +208,16 @@ class WorldModel(nnx.Module):
 
             # Get latent loss
             loss_z = jnp.mean((next_z - next_z_target) ** 2)
+            # ===============================================================
 
-            # Get reward loss
+            # Reward Loss
+            # ===============================================================
             r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze()
             loss_r = jnp.mean((r_pred - reward) ** 2)
+            # ===============================================================
 
-            # Get next value bellman target
+            # Value Loss
+            # ===============================================================
             next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False).squeeze()
             target_v = reward + self.discount * (1.0 - done) * next_v_target
 
@@ -220,8 +226,12 @@ class WorldModel(nnx.Module):
 
             # Get value loss
             loss_v = jnp.mean((v_pred - target_v) ** 2)
+            # ===============================================================
 
-            # Obtain covariace matrix (d, d). Note rowvar=False is because the row dimension is what we want to get the cov of
+            # VicReg Loss
+            # ===============================================================
+            # Obtain covariace matrix (d, d)
+            # Note rowvar=False is because the row dimension is what we want to get the cov of
             cov_mat = jnp.cov(z, rowvar=False)
             d = cov_mat.shape[0]
 
@@ -235,6 +245,7 @@ class WorldModel(nnx.Module):
 
             # Compute vicreg loss
             loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
+            # ===============================================================
 
             loss_s = safety_Q.compute_loss(
                 self.target_safety_critic,
@@ -254,6 +265,7 @@ class WorldModel(nnx.Module):
             total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
                           loss_vicreg + self.lambda_s * loss_s + self.lambda_r * loss_r)
 
+            # Record Metrics
             metrics = {
                 "loss_total": total_loss,
                 "loss_dyn": loss_z,
@@ -264,6 +276,7 @@ class WorldModel(nnx.Module):
             }
             return total_loss, metrics
 
+        # Calculate losses and 
         grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
         (loss, metrics), grad = grad_fn(self.trainable_nodes)
         self.optimiser.update(grad)

@@ -71,7 +71,7 @@ class SpectralStat(nnx.Variable):
     pass
 
 class SpectralNormLinear(nnx.Module):
-    def __init__(self, d_in, d_out, rngs: nnx.Rngs, c: float = 1.0):
+    def __init__(self, d_in, d_out, c: float, rngs: nnx.Rngs):
         # Bounded L <= c
         self.c = c
 
@@ -123,7 +123,7 @@ class SpectralNormLinear(nnx.Module):
         return y
     
 class DynamicsPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -131,7 +131,7 @@ class DynamicsPredictor(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, rngs=rngs)
+                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             temp_layers.append(
                 nnx.LayerNorm(
@@ -140,7 +140,7 @@ class DynamicsPredictor(nnx.Module):
             )
             current_dim = h
         self.layers = nnx.List(temp_layers)
-        self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
@@ -156,7 +156,7 @@ class DynamicsPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -164,7 +164,7 @@ class ValueNet(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                    SpectralNormLinear(current_dim, h, rngs=rngs)
+                    SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             temp_layers.append(
                 nnx.LayerNorm(
@@ -173,7 +173,7 @@ class ValueNet(nnx.Module):
             )
             current_dim = h
         self.layers = nnx.List(temp_layers)
-        self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
              
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         for l in range(0, len(self.layers), 2):
@@ -187,7 +187,7 @@ class ValueNet(nnx.Module):
         return self.output_layer(z, update_spectral_norm)
 
 class RewardPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, rngs: nnx.Rngs):
+    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound, rngs: nnx.Rngs):
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -195,7 +195,7 @@ class RewardPredictor(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, rngs=rngs)
+                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             temp_layers.append(
                 nnx.LayerNorm(
@@ -204,7 +204,7 @@ class RewardPredictor(nnx.Module):
             )
             current_dim = h
         self.layers = nnx.List(temp_layers)
-        self.output_layer = SpectralNormLinear(current_dim, d_out, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
