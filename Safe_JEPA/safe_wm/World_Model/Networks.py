@@ -1,10 +1,15 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
-from typing import Dict
 
+class NormStat(nnx.Variable):
+    """Non-trainable standardisation constant"""
+    pass
 class Encoder(nnx.Module):
-    def __init__(self, cfg, rngs: nnx.Rngs):
+    def __init__(self, cfg, mu, sigma, rngs: nnx.Rngs):
+        self.mu = NormStat(jnp.asarray(mu, dtype=jnp.float32))
+        self.sigma  = NormStat(jnp.asarray(sigma,  dtype=jnp.float32))
+
         if cfg.obs_type == "vision":
             self.stem = ConvStem(cfg.in_channels, rngs=rngs)
             feature_dim = cfg.flattened_dim
@@ -19,6 +24,13 @@ class Encoder(nnx.Module):
         self.layer_norm = nnx.LayerNorm(cfg.d_latent, use_scale=True, use_bias=True, epsilon=1e-5, rngs=rngs)
 
     def __call__(self, x: jax.Array) -> jax.Array:
+        # Standardisation constants
+        mu = jax.lax.stop_gradient(self.mu)
+        sigma = jax.lax.stop_gradient(self.sigma)
+
+        # Standardise observation
+        x = (x - mu) / sigma
+        
         # Run stem network
         x = self.stem(x)
         

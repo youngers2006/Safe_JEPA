@@ -1,13 +1,32 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+import orbax.checkpoint as ocp
 import numpy as np
 import h5py
 import yaml
 from functools import partial
 from tqdm import tqdm
+from pathlib import Path
+import csv
 
 from safe_wm.World_Model.WorldModel import WorldModel
+
+def write_metrics(history: list[list[dict]], path: str | Path) -> None:
+    """history[epoch][batch] -> dict of scalar metrics."""
+    history = jax.device_get(history)          # one sync for the whole tree
+
+    rows, step = [], 0
+    for e, epoch in enumerate(history):
+        for b, m in enumerate(epoch):
+            rows.append({"epoch": e, "batch": b, "step": step,
+                         **{k: float(v) for k, v in m.items()}})
+            step += 1
+
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
 
 @partial(jax.jit, static_argnames=("batch_size",))
 def _sample(data_dict, key, batch_size):
@@ -28,29 +47,50 @@ def main(cfg_filename):
     data_dict = {}
 
     # Load dataset (assume dataset has been processed)
-    with h5py.File(cfg['dataset_filename'], 'r') as f:
+    with h5py.File(cfg.dataset_filename, 'r') as f:
         for key in list(f.keys()):
             data_dict[key] = f[key][:]
 
+    # Create rng key
+    seed = cfg.seed
+    rngs = nnx.Rngs(seed)
+
     # Setup world model
     world_model = WorldModel(
-        1, 1, 1, 1, 0.1, rngs=1
+        cfg, rngs=rngs
     )
 
     # Run training loop
-    for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
-        for batch in tqdm(get_batches(data_dict, cfg["batch_size"], cfg["num_batches"], key), desc=f"Batches", leave=False):
+    print("Beginning Training Loop ... ")
+    metrics_log = []
+    for _ in tqdm(range(cfg.epochs), desc=f"Epochs", leave=True):
+        metrics_log_epoch = []
+        for batch in tqdm(get_batches(data_dict, cfg.batch_size, cfg.num_batches, key), desc=f"Batches", leave=False):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
             actions = batch["actions"]
             rewards = batch["rewards"]
             safety_costs = batch["costs"]
             terminals = batch["terminals"]
-            world_model.train_step(
+            metrics = world_model.train_step(
                 obs, next_obs, actions, rewards, safety_costs, terminals
             )
+            metrics_log_epoch.append(metrics)
+        metrics_log.append(metrics_log_epoch)
 
+    # Save training metrics
+    save_path_metrics = (Path(__file__).parent / f'SaveData/{cfg.data_dir}/Metrics').resolve()
+    save_path_metrics.mkdir(parents=True, exist_ok=True)
+    write_metrics(metrics_log, save_path_metrics / "metrics.csv")
+
+    # Save the trained model
+    _, state = nnx.split(world_model)
+    checkpointer = ocp.StandardCheckpointer()
+    save_path_model = (Path(__file__).parent / f'SaveData/{cfg.data_dir}/Model').resolve()
+    save_path_model.mkdir(parents=True, exist_ok=True)
+    checkpointer.save(save_path_model / 'state', state)
+    checkpointer.wait_until_finished()
     return 0
 
 if __name__ == "__main__":
-    main()
+    main("regularity_constrained_model.yaml")

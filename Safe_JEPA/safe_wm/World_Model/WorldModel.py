@@ -11,6 +11,8 @@ class WorldModel(nnx.Module):
     def __init__(
             self, 
             cfg,
+            obs_mean,
+            obs_std,
             *, 
             rngs: nnx.Rngs
         ):
@@ -22,6 +24,7 @@ class WorldModel(nnx.Module):
         self.lambda_s = cfg.lambda_s
         self.lambda_var = cfg.lambda_var
         self.lambda_cov = cfg.lambda_cov
+        self.tau = cfg.tau
 
         lr = cfg.lr
         self.discount = cfg.discount
@@ -32,11 +35,15 @@ class WorldModel(nnx.Module):
 
         self.encoder = Encoder(
             cfg=cfg.EncoderParams,
+            mu=obs_mean,
+            std=obs_std,
             rngs=rngs
         )
 
         self.target_encoder = Encoder(
             cfg=cfg.EncoderParams,
+            mu=obs_mean,
+            std=obs_std,
             rngs=rngs
         )
 
@@ -120,12 +127,6 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_value_fn, nnx.state(self.value_fn, SpectralStat))
 
     @nnx.jit
-    def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
-        self.update_target_encoder(tau_vals[0])
-        self.update_target_safety_critic(tau_vals[1])
-        self.update_target_value_fn(tau_vals[2])
-
-    @nnx.jit
     def update_target_safety_critic(self, tau: float = 0.01) -> None:
         # Extract both param sets
         online_params = nnx.state(self.safety_critic, nnx.Param)
@@ -143,6 +144,12 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
     @nnx.jit
+    def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
+        self.update_target_encoder(tau_vals[0])
+        self.update_target_safety_critic(tau_vals[1])
+        self.update_target_value_fn(tau_vals[2])
+
+    @nnx.jit
     def train_step(
         self,
         obs: jax.Array, 
@@ -153,7 +160,7 @@ class WorldModel(nnx.Module):
         terminal: jax.Array, 
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
-    ) -> jax.Array:
+    ) -> dict:
         def loss_fn(trainable_partition: nnx.List) -> dict:
             # Extract trainable networks
             enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
@@ -248,4 +255,7 @@ class WorldModel(nnx.Module):
         grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
         (loss, metrics), grad = grad_fn(self.trainable_nodes)
         self.optimiser.update(grad)
+
+        # Update target networks
+        self.update_target_networks(self.tau)
         return metrics
