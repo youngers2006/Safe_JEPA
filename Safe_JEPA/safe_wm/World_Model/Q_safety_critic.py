@@ -39,7 +39,14 @@ class QSafetyCritic(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class SafetyCriticEnsemble(nnx.Module):
-    def __init__(self, ensemble_size: int, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        # Unpack
+        ensemble_size = cfg.ensemble_size
+        d_in = cfg.d_in
+        hidden_features = cfg.hidden_features
+        d_out = cfg.d_out
+        lipschitz_bound = cfg.lipschitz_bound
+
         # Save enemble size
         self.ensemble_size = ensemble_size
 
@@ -79,7 +86,7 @@ class SafetyCriticEnsemble(nnx.Module):
             next_z_target: jax.Array, # (Batch, d_z)
             action: jax.Array, # (Batch, d_u)
             safety_cost: jax.Array, # (Batch,)
-            done: jax.Array, # (Batch,)
+            terminal: jax.Array, # (Batch,)
             discount: float, 
             cql_alpha: float, 
             action_bounds: tuple[float, float], 
@@ -134,11 +141,11 @@ class SafetyCriticEnsemble(nnx.Module):
 
         # Expand c and d into ensemble dimension to allow broadcast
         c = safety_cost[None, :]
-        d = done[None, :]
+        t = terminal[None, :]
 
         # Create safety target and calculate safety prediction mse loss
         q_target = jax.lax.stop_gradient(
-            c + discount * (1.0 - c) * (1.0 - d) * selected_target_q
+            c + discount * (1.0 - c) * (1.0 - t) * selected_target_q
         )
         loss_q_risk_mse = jnp.mean((q_risk_vals - q_target) ** 2, axis=1)
 

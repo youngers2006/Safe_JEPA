@@ -10,95 +10,53 @@ from World_Model.Q_safety_critic import SafetyCriticEnsemble
 class WorldModel(nnx.Module):
     def __init__(
             self, 
-            d_in_obs: int, 
-            image_size: int, 
-            d_latent: int, 
-            d_action: int, 
-            lr: float, 
-            gamma: float = 1.0, 
-            discount: float = 0.99, 
-            alpha: float = 1.0,
-            lipschitz_bound_dyn: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
-            lipschitz_bound_rew: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
-            lipschitz_bound_val: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
-            lipschitz_bound_safe: float = jnp.inf, # jnp.inf turns it off, 1 to 1.5 is where it should sit
-            safety_ensemble_size: int = 5,
-            lambda_dyn: float = 1.0,
-            lambda_v: float = 0.1,
-            lambda_r: float = 1.0,
-            lambda_s: float = 1.0,
-            lambda_var: float = 10.0,
-            lambda_cov: float = 10.0,
+            cfg,
             *, 
             rngs: nnx.Rngs
         ):
-        # Add this all to config file and change this to read the config
+        # Load params
         # ==============================================================
-        d = image_size
-        d = (d - 3) // 2 + 1  # Conv1: Kernel 3, Stride 2
-        d = d - 3 + 1         # Conv2: Kernel 3, Stride 1
-        d = d - 3 + 1         # Conv3: Kernel 3, Stride 1
-        d = d - 3 + 1         # Conv4: Kernel 3, Stride 1
-        flattened_dim = d * d * 32
+        self.lambda_dyn = cfg.lambda_dyn
+        self.lambda_v = cfg.lambda_v
+        self.lambda_r = cfg.lambda_r
+        self.lambda_s = cfg.lambda_s
+        self.lambda_var = cfg.lambda_var
+        self.lambda_cov = cfg.lambda_cov
 
-        self.lambda_dyn = lambda_dyn
-        self.lambda_v = lambda_v
-        self.lambda_r = lambda_r
-        self.lambda_s = lambda_s
-        self.lambda_var = lambda_var
-        self.lambda_cov = lambda_cov
-
-        self.discount = discount
-        self.gamma = gamma # VicReg variance threshold
-        self.cql_alpha = alpha # CQL penalty weight
+        lr = cfg.lr
+        self.discount = cfg.discount
+        self.gamma = cfg.gamma # VicReg variance threshold
+        self.cql_alpha = cfg.alpha # CQL penalty weight
         self.rngs = rngs
         # ==============================================================
 
         self.encoder = Encoder(
-            in_channels=3,
-            flattened_dim=flattened_dim,
-            d_latent=d_latent,
-            rngs=rngs
-        )
-
-        self.value_fn = ValueNet(
-            d_in=d_latent,
-            hidden_features=(256, 256),
-            d_out=1, 
-            lipschitz_bound=lipschitz_bound_val,
+            cfg=cfg.EncoderParams,
             rngs=rngs
         )
 
         self.target_encoder = Encoder(
-            in_channels=3,
-            flattened_dim=flattened_dim,
-            d_latent=d_latent,
+            cfg=cfg.EncoderParams,
+            rngs=rngs
+        )
+
+        self.value_fn = ValueNet(
+            cfg=cfg.ValueParams,
             rngs=rngs
         )
 
         self.target_value_fn = ValueNet(
-            d_in=d_latent,
-            hidden_features=(256, 256),
-            d_out=1,
-            lipschitz_bound=lipschitz_bound_val,
+            cfg=cfg.ValueParams,
             rngs=rngs
         )
 
         self.safety_critic = SafetyCriticEnsemble(
-            ensemble_size=safety_ensemble_size,
-            d_in=d_latent + d_action,
-            hidden_features=(256, 256),
-            d_out=1,
-            lipschitz_bound=lipschitz_bound_safe,
+            cfg=cfg.SafetyCriticParams,
             rngs=rngs      
         )
         
         self.target_safety_critic = SafetyCriticEnsemble(
-            ensemble_size=safety_ensemble_size,
-            d_in=d_latent + d_action,
-            hidden_features=(256, 256),
-            d_out=1,
-            lipschitz_bound=lipschitz_bound_safe,
+            cfg=cfg.SafetyCriticParams,
             rngs=rngs
         )
 
@@ -109,18 +67,12 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
         self.dynamics = DynamicsPredictor(
-            d_in=d_latent + d_action,
-            hidden_features=(256, 256),
-            d_out=d_latent,
-            lipschitz_bound=lipschitz_bound_dyn,
+            cfg=cfg.DynamicsParams,
             rngs=rngs
         )
 
         self.reward_fn = RewardPredictor(
-            d_in=d_latent + d_action,
-            hidden_features=(256, 256),
-            d_out=1,
-            lipschitz_bound=lipschitz_bound_rew,
+            cfg=cfg.DynamicsParams,
             rngs=rngs
         )
 
@@ -198,7 +150,7 @@ class WorldModel(nnx.Module):
         action: jax.Array, 
         reward: jax.Array, 
         safety_cost: jax.Array, 
-        done: jax.Array, 
+        terminal: jax.Array, 
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> jax.Array:
@@ -231,7 +183,7 @@ class WorldModel(nnx.Module):
             # Value Loss
             # ===============================================================
             next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False).squeeze()
-            target_v = reward + self.discount * (1.0 - done) * next_v_target
+            target_v = reward + self.discount * (1.0 - terminal) * next_v_target
 
             # Get value prediction
             v_pred = val_fn(z, update_spectral_norm=True).squeeze()
@@ -267,7 +219,7 @@ class WorldModel(nnx.Module):
                 next_z_target,
                 action,
                 safety_cost,
-                done,
+                terminal,
                 self.discount,
                 self.cql_alpha,
                 action_bounds,

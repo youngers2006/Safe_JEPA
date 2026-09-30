@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+from typing import Dict
 
 class Encoder(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
@@ -123,10 +124,13 @@ class SpectralNormLinear(nnx.Module):
         return y
     
 class DynamicsPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg.d_in
+        hidden_features = cfg.hidden_features
+        d_out = cfg.d_out 
+        lipschitz_bound = cfg.lipschitz_bound
         self.hidden_features = hidden_features
         temp_layers = []
-        
         current_dim = d_in
         
         for h in hidden_features:
@@ -156,7 +160,11 @@ class DynamicsPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg.d_in
+        hidden_features = cfg.hidden_features
+        d_out = cfg.d_out
+        lipschitz_bound = cfg.lipschitz_bound
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -187,7 +195,11 @@ class ValueNet(nnx.Module):
         return self.output_layer(z, update_spectral_norm)
 
 class RewardPredictor(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound, rngs: nnx.Rngs):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg.d_in
+        hidden_features = cfg.hidden_features
+        d_out = cfg.d_out
+        lipschitz_bound = cfg.lipschitz_bound
         self.hidden_features = hidden_features
         temp_layers = []
         
