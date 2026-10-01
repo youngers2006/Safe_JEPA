@@ -1,2 +1,54 @@
 # Dataset Name
 dataset_filename: "FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
+
+# ============================== run ==============================
+seed: 0
+dataset_filename: "Datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
+data_dir: "pointgoal1_c_inf"        # one subdir per sweep point
+obs_type: "state"
+val_frac: 0.1        # split by TRAJECTORY, not transition
+
+epochs: 100
+num_batches: 500        # ~= n_transitions / batch_size
+batch_size: 512
+lr: 3.0e-4
+
+# ============================ problem ============================
+d_latent: 32
+discount: 0.99
+action_bounds: [-1.0, 1.0]
+Q_minima_samples: 64
+
+# ========================== loss weights =========================
+lambda_dyn: 1.0
+lambda_v:   0.5
+lambda_r:   1.0
+lambda_s:   1.0
+lambda_var: 1.0
+lambda_cov: 0.04
+gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
+alpha: 1.0                         # CQL weight
+
+tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
+
+# ========================== sub-networks =========================
+EncoderParams:
+  d_hidden: 256
+  in_channels: 3                   # vision only
+
+DynamicsParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: .inf            # inf turns lipschitz bounding off
+
+ValueParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: .inf
+
+RewardParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: .inf
+
+SafetyCriticParams:
+  ensemble_size: 5
+  hidden_features: [256, 256]
+  lipschitz_bound: .inf

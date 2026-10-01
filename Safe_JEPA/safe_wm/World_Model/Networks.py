@@ -10,18 +10,18 @@ class Encoder(nnx.Module):
         self.mu = NormStat(jnp.asarray(mu, dtype=jnp.float32))
         self.sigma  = NormStat(jnp.asarray(sigma,  dtype=jnp.float32))
 
-        if cfg.obs_type == "vision":
-            self.stem = ConvStem(cfg.in_channels, rngs=rngs)
-            feature_dim = cfg.flattened_dim
-        elif cfg.obs_type == "state":
-            self.stem = MLPStem(cfg.obs_dim, cfg.d_hidden, rngs=rngs)
-            feature_dim = cfg.d_hidden
+        if cfg["obs_type"] == "vision":
+            self.stem = ConvStem(cfg["in_channels"], rngs=rngs)
+            feature_dim = cfg["flattened_dim"]
+        elif cfg["obs_type"] == "state":
+            self.stem = MLPStem(cfg["obs_dim"], cfg["d_hidden"], rngs=rngs)
+            feature_dim = cfg["d_hidden"]
         else:
-            raise ValueError(f"unknown obs_type: {cfg.obs_type}")
+            raise ValueError(f"unknown obs_type: {cfg["obs_type"]}")
 
         # Processing Network
-        self.linear_proj = nnx.Linear(feature_dim, cfg.d_latent, rngs=rngs)
-        self.layer_norm = nnx.LayerNorm(cfg.d_latent, use_scale=True, use_bias=True, epsilon=1e-5, rngs=rngs)
+        self.linear_proj = nnx.Linear(feature_dim, cfg["d_latent"], rngs=rngs)
+        self.layer_norm = nnx.LayerNorm(cfg["d_latent"], use_scale=True, use_bias=True, epsilon=1e-5, rngs=rngs)
 
     def __call__(self, x: jax.Array) -> jax.Array:
         # Standardisation constants
@@ -139,10 +139,10 @@ class SpectralNormLinear(nnx.Module):
     
 class DynamicsPredictor(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
-        d_in = cfg.d_in
-        hidden_features = cfg.hidden_features
-        d_out = cfg.d_out 
-        lipschitz_bound = cfg.lipschitz_bound
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
@@ -168,10 +168,10 @@ class DynamicsPredictor(nnx.Module):
 
 class ValueNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
-        d_in = cfg.d_in
-        hidden_features = cfg.hidden_features
-        d_out = cfg.d_out
-        lipschitz_bound = cfg.lipschitz_bound
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -186,7 +186,7 @@ class ValueNet(nnx.Module):
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
              
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        for l in range(0, len(self.layers), 2):
+        for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
 
             z = linear_layer(z, update_spectral_norm)
@@ -196,10 +196,10 @@ class ValueNet(nnx.Module):
 
 class RewardPredictor(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
-        d_in = cfg.d_in
-        hidden_features = cfg.hidden_features
-        d_out = cfg.d_out
-        lipschitz_bound = cfg.lipschitz_bound
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -216,7 +216,7 @@ class RewardPredictor(nnx.Module):
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
-        for l in range(0, len(self.layers), 2):
+        for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
 
             x = linear_layer(x, update_spectral_norm)

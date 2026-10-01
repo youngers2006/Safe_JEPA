@@ -32,7 +32,7 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
 def _sample(data_dict, key, batch_size):
     n = data_dict["observations"].shape[0]
     indices = jax.random.randint(key, (batch_size,), 0, n)
-    return {k: v[indices] for k, v in data_dict.items()}
+    return {k: jax.device_put(jnp.asarray(v[indices])) for k, v in data_dict.items()}
 
 def get_batches(data_dict, batch_size, N, key):
     for i in range(N):
@@ -47,25 +47,32 @@ def main(cfg_filename):
     data_dict = {}
 
     # Load dataset (assume dataset has been processed)
-    with h5py.File(cfg.dataset_filename, 'r') as f:
+    with h5py.File(cfg["dataset_filename"], 'r') as f:
         for key in list(f.keys()):
             data_dict[key] = f[key][:]
 
     # Create rng key
-    seed = cfg.seed
+    seed = cfg["seed"]
     rngs = nnx.Rngs(seed)
+
+    # Calculate observation distribution
+    obs_mean = jnp.mean(data_dict["observations"], axis=0)
+    obs_std = jnp.std(data_dict["observations"], axis=0)
 
     # Setup world model
     world_model = WorldModel(
-        cfg, rngs=rngs
+        cfg,
+        obs_mean,
+        obs_std,
+        rngs=rngs
     )
 
     # Run training loop
     print("Beginning Training Loop ... ")
     metrics_log = []
-    for _ in tqdm(range(cfg.epochs), desc=f"Epochs", leave=True):
+    for _ in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
-        for batch in tqdm(get_batches(data_dict, cfg.batch_size, cfg.num_batches, key), desc=f"Batches", leave=False):
+        for batch in tqdm(get_batches(data_dict, cfg["batch_size"], cfg["num_batches"], key), desc=f"Batches", leave=False):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
             actions = batch["actions"]
@@ -79,14 +86,14 @@ def main(cfg_filename):
         metrics_log.append(metrics_log_epoch)
 
     # Save training metrics
-    save_path_metrics = (Path(__file__).parent / f'SaveData/{cfg.data_dir}/Metrics').resolve()
+    save_path_metrics = (Path(__file__).parent / f'SaveData/{cfg["data_dir"]}/Metrics').resolve()
     save_path_metrics.mkdir(parents=True, exist_ok=True)
     write_metrics(metrics_log, save_path_metrics / "metrics.csv")
 
     # Save the trained model
     _, state = nnx.split(world_model)
     checkpointer = ocp.StandardCheckpointer()
-    save_path_model = (Path(__file__).parent / f'SaveData/{cfg.data_dir}/Model').resolve()
+    save_path_model = (Path(__file__).parent / f'SaveData/{cfg["data_dir"]}/Model').resolve()
     save_path_model.mkdir(parents=True, exist_ok=True)
     checkpointer.save(save_path_model / 'state', state)
     checkpointer.wait_until_finished()

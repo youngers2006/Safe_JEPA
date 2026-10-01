@@ -41,11 +41,11 @@ class QSafetyCritic(nnx.Module):
 class SafetyCriticEnsemble(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
         # Unpack
-        ensemble_size = cfg.ensemble_size
-        d_in = cfg.d_in
-        hidden_features = cfg.hidden_features
-        d_out = cfg.d_out
-        lipschitz_bound = cfg.lipschitz_bound
+        ensemble_size = cfg["ensemble_size"]
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
 
         # Save enemble size
         self.ensemble_size = ensemble_size

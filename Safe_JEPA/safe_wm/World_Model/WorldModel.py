@@ -5,7 +5,7 @@ import optax
 
 # import modules
 from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
-from World_Model.Q_safety_critic import SafetyCriticEnsemble
+from World_Model.Q_safety_critic import SafetyCriticEnsemble, QSafetyCritic
 
 class WorldModel(nnx.Module):
     def __init__(
@@ -18,52 +18,52 @@ class WorldModel(nnx.Module):
         ):
         # Load params
         # ==============================================================
-        self.lambda_dyn = cfg.lambda_dyn
-        self.lambda_v = cfg.lambda_v
-        self.lambda_r = cfg.lambda_r
-        self.lambda_s = cfg.lambda_s
-        self.lambda_var = cfg.lambda_var
-        self.lambda_cov = cfg.lambda_cov
-        self.tau = cfg.tau
+        self.lambda_dyn = cfg["lambda_dyn"]
+        self.lambda_v = cfg["lambda_v"]
+        self.lambda_r = cfg["lambda_r"]
+        self.lambda_s = cfg["lambda_s"]
+        self.lambda_var = cfg["lambda_var"]
+        self.lambda_cov = cfg["lambda_cov"]
+        self.tau = cfg["tau"]
 
-        lr = cfg.lr
-        self.discount = cfg.discount
-        self.gamma = cfg.gamma # VicReg variance threshold
-        self.cql_alpha = cfg.alpha # CQL penalty weight
+        lr = cfg["lr"]
+        self.discount = cfg["discount"]
+        self.gamma = cfg["gamma"] # VicReg variance threshold
+        self.cql_alpha = cfg["alpha"] # CQL penalty weight
         self.rngs = rngs
         # ==============================================================
 
         self.encoder = Encoder(
-            cfg=cfg.EncoderParams,
+            cfg=cfg["EncoderParams"],
             mu=obs_mean,
             std=obs_std,
             rngs=rngs
         )
 
         self.target_encoder = Encoder(
-            cfg=cfg.EncoderParams,
+            cfg=cfg["EncoderParams"],
             mu=obs_mean,
             std=obs_std,
             rngs=rngs
         )
 
         self.value_fn = ValueNet(
-            cfg=cfg.ValueParams,
+            cfg=cfg["ValueParams"],
             rngs=rngs
         )
 
         self.target_value_fn = ValueNet(
-            cfg=cfg.ValueParams,
+            cfg=cfg["ValueParams"],
             rngs=rngs
         )
 
         self.safety_critic = SafetyCriticEnsemble(
-            cfg=cfg.SafetyCriticParams,
+            cfg=cfg["SafetyCriticParams"],
             rngs=rngs      
         )
         
         self.target_safety_critic = SafetyCriticEnsemble(
-            cfg=cfg.SafetyCriticParams,
+            cfg=cfg["SafetyCriticParams"],
             rngs=rngs
         )
 
@@ -74,12 +74,12 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
         self.dynamics = DynamicsPredictor(
-            cfg=cfg.DynamicsParams,
+            cfg=cfg["DynamicsParams"],
             rngs=rngs
         )
 
         self.reward_fn = RewardPredictor(
-            cfg=cfg.DynamicsParams,
+            cfg=cfg["DynamicsParams"],
             rngs=rngs
         )
 
