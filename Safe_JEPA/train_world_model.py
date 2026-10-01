@@ -60,15 +60,15 @@ def main(cfg_filename):
     with open(cfg_filename, 'r') as f:
         cfg = yaml.load(f, Loader=yaml.FullLoader)
 
+    # Initialise datadict
+    data_dict = {}
+
     # Add additional data
     cfg = resolve_dims(
         cfg,
         data_dict["observations"].shape[-1],
         data_dict["actions"].shape[-1]
     )
-    
-    # Initialise datadict
-    data_dict = {}
 
     # Load dataset (assume dataset has been processed)
     with h5py.File(cfg["dataset_filename"], 'r') as f:
@@ -109,7 +109,7 @@ def main(cfg_filename):
             metrics = world_model.train_step(
                 obs, next_obs, actions, rewards, safety_costs, terminals
             )
-            metrics_log_epoch.append(metrics)
+            metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)
 
     # Save training metrics
