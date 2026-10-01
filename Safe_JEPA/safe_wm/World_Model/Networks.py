@@ -126,8 +126,10 @@ class SpectralNormLinear(nnx.Module):
         if update_spectral_norm:
             self.power_iteration(W)
 
-        # Normalise weight matrix
-        W_sn = self.c * W / self.sigma.value
+        # Apply projection function to rescale weights
+        # If scale < 1 the constraint isnt binding so the normalisation isnt needed
+        scale = jnp.minimum(1.0, jnp.maximum(self.c / self.sigma.value, 1e-8))
+        W_sn = W * scale
         y = x @ W_sn
 
         # Add bias if used
@@ -149,11 +151,6 @@ class DynamicsPredictor(nnx.Module):
             temp_layers.append(
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
-            temp_layers.append(
-                nnx.LayerNorm(
-                    h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
-                )
-            )
             current_dim = h
         self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
@@ -161,12 +158,10 @@ class DynamicsPredictor(nnx.Module):
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
-        for l in range(0, len(self.layers), 2):
+        for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
-            norm_layer = self.layers[l+1]
 
             x = linear_layer(x, update_spectral_norm)
-            x = norm_layer(x)
             x = nnx.silu(x)
         
         return self.output_layer(x, update_spectral_norm)
@@ -186,11 +181,6 @@ class ValueNet(nnx.Module):
             temp_layers.append(
                     SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
-            temp_layers.append(
-                nnx.LayerNorm(
-                    h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
-                )
-            )
             current_dim = h
         self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
@@ -198,10 +188,8 @@ class ValueNet(nnx.Module):
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         for l in range(0, len(self.layers), 2):
             linear_layer = self.layers[l]
-            norm_layer = self.layers[l+1]
 
             z = linear_layer(z, update_spectral_norm)
-            z = norm_layer(z)
             z = nnx.silu(z)
         
         return self.output_layer(z, update_spectral_norm)
@@ -221,11 +209,6 @@ class RewardPredictor(nnx.Module):
             temp_layers.append(
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
-            temp_layers.append(
-                nnx.LayerNorm(
-                    h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
-                )
-            )
             current_dim = h
         self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
@@ -235,10 +218,8 @@ class RewardPredictor(nnx.Module):
 
         for l in range(0, len(self.layers), 2):
             linear_layer = self.layers[l]
-            norm_layer = self.layers[l+1]
 
             x = linear_layer(x, update_spectral_norm)
-            x = norm_layer(x)
             x = nnx.silu(x)
         
         return self.output_layer(x, update_spectral_norm)
