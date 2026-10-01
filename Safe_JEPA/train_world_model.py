@@ -12,6 +12,23 @@ import csv
 
 from safe_wm.World_Model.WorldModel import WorldModel
 
+def resolve_dims(cfg, obs_dim, act_dim):
+    d_z = cfg["d_latent"]
+    cfg["EncoderParams"]["obs_type"]   = cfg["obs_type"]
+    cfg["EncoderParams"]["obs_dim"]    = obs_dim
+    cfg["EncoderParams"]["d_latent"]   = d_z
+    cfg["DynamicsParams"]["d_in"]      = d_z + act_dim
+    cfg["DynamicsParams"]["d_out"]     = d_z
+    cfg["RewardParams"]["d_in"]        = d_z + act_dim
+    cfg["RewardParams"]["d_out"]       = 1
+    cfg["ValueParams"]["d_in"]         = d_z
+    cfg["ValueParams"]["d_out"]        = 1
+    cfg["SafetyCriticParams"]["d_in"]  = d_z + act_dim
+    cfg["SafetyCriticParams"]["d_out"] = 1
+    for sub in ("DynamicsParams", "ValueParams", "RewardParams", "SafetyCriticParams"):
+        cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
+    return cfg
+
 def write_metrics(history: list[list[dict]], path: str | Path) -> None:
     """history[epoch][batch] -> dict of scalar metrics."""
     history = jax.device_get(history)          # one sync for the whole tree
@@ -32,28 +49,35 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
 def _sample(data_dict, key, batch_size):
     n = data_dict["observations"].shape[0]
     indices = jax.random.randint(key, (batch_size,), 0, n)
-    return {k: jax.device_put(jnp.asarray(v[indices])) for k, v in data_dict.items()}
+    return {k: jnp.asarray(v[indices]) for k, v in data_dict.items()}
 
-def get_batches(data_dict, batch_size, N, key):
+def get_batches(data_dict, batch_size, N, key, epoch):
     for i in range(N):
-        yield _sample(data_dict, jax.random.fold_in(key, i), batch_size)
+        yield _sample(data_dict, jax.random.fold_in(key, i + epoch * N), batch_size)
 
 def main(cfg_filename):
     # Load training config
     with open(cfg_filename, 'r') as f:
         cfg = yaml.load(f, Loader=yaml.FullLoader)
 
+    # Add additional data
+    cfg = resolve_dims(
+        cfg,
+        data_dict["observations"].shape[-1],
+        data_dict["actions"].shape[-1]
+    )
+    
     # Initialise datadict
     data_dict = {}
 
     # Load dataset (assume dataset has been processed)
     with h5py.File(cfg["dataset_filename"], 'r') as f:
-        for key in list(f.keys()):
-            data_dict[key] = f[key][:]
+        for k in list(f.keys()):
+            data_dict[k] = f[k][:]
 
     # Create rng key
-    seed = cfg["seed"]
-    rngs = nnx.Rngs(seed)
+    key = jax.random.key(cfg["seed"])
+    rngs = nnx.Rngs(cfg["seed"])
 
     # Calculate observation distribution
     obs_mean = jnp.mean(data_dict["observations"], axis=0)
@@ -67,12 +91,15 @@ def main(cfg_filename):
         rngs=rngs
     )
 
+    # Transfer data
+    data_dict = {k: jnp.asarray(v) for k, v in data_dict.items()}
+
     # Run training loop
     print("Beginning Training Loop ... ")
     metrics_log = []
-    for _ in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
+    for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
-        for batch in tqdm(get_batches(data_dict, cfg["batch_size"], cfg["num_batches"], key), desc=f"Batches", leave=False):
+        for batch in tqdm(get_batches(data_dict, cfg["batch_size"], cfg["num_batches"], key, epoch), desc=f"Batches", leave=False):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
             actions = batch["actions"]

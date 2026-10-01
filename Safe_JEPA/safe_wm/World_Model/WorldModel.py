@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import optax
+from functools import partial
 
 # import modules
 from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
@@ -36,14 +37,14 @@ class WorldModel(nnx.Module):
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
             mu=obs_mean,
-            std=obs_std,
+            sigma=obs_std,
             rngs=rngs
         )
 
         self.target_encoder = Encoder(
             cfg=cfg["EncoderParams"],
             mu=obs_mean,
-            std=obs_std,
+            sigma=obs_std,
             rngs=rngs
         )
 
@@ -79,7 +80,7 @@ class WorldModel(nnx.Module):
         )
 
         self.reward_fn = RewardPredictor(
-            cfg=cfg["DynamicsParams"],
+            cfg=cfg["RewardParams"],
             rngs=rngs
         )
 
@@ -149,7 +150,7 @@ class WorldModel(nnx.Module):
         self.update_target_safety_critic(tau_vals[1])
         self.update_target_value_fn(tau_vals[2])
 
-    @nnx.jit
+    @partial(nnx.jit, static_argnames=("Q_minima_samples", "action_bounds"))
     def train_step(
         self,
         obs: jax.Array, 

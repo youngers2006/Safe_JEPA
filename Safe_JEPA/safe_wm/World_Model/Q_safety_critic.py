@@ -16,11 +16,6 @@ class QSafetyCritic(nnx.Module):
             temp_layers.append(
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
-            temp_layers.append(
-                nnx.LayerNorm(
-                    h, use_scale=False, use_bias=False, epsilon=1e-5, rngs=rngs
-                )
-            )
             current_dim = h
         self.layers = nnx.List(temp_layers)
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
@@ -28,12 +23,10 @@ class QSafetyCritic(nnx.Module):
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
-        for l in range(0, len(self.layers), 2):
+        for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
-            norm_layer = self.layers[l+1]
 
             x = linear_layer(x, update_spectral_norm)
-            x = norm_layer(x)
             x = nnx.silu(x)
         
         return self.output_layer(x, update_spectral_norm)
@@ -119,7 +112,7 @@ class SafetyCriticEnsemble(nnx.Module):
         # Get safety value for each action sample, next_q: (Ensemble, Batch, action_samples)
         next_q = self(
             z_q, sampled_actions, update_spectral_norm=False
-        ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
+        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
         # Obtain action that minimises Q
         mean_next_q = jnp.mean(next_q, axis=0) # mean value across ensemble
@@ -128,7 +121,7 @@ class SafetyCriticEnsemble(nnx.Module):
         # Get target Q values
         target_next_q = target_ensemble(
             z_q, sampled_actions, update_spectral_norm=False
-        ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
+        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
         # Select the minima action for each transition in the batch
         indices_expanded = jnp.broadcast_to(
@@ -158,7 +151,7 @@ class SafetyCriticEnsemble(nnx.Module):
         # Calculate safety prediction at each action sample around state
         q_risk_ood = self(
             z_expanded, sampled_actions, update_spectral_norm=False
-        ).squeeze().reshape(self.ensemble_size, batch_size, Q_minima_samples)
+        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
         # Obtain mean risk prediction across the set of samples
         mean_q_risk_ood = jnp.mean(q_risk_ood, axis=-1) # (Ensemble, Batch)

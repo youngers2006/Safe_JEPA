@@ -17,7 +17,7 @@ class Encoder(nnx.Module):
             self.stem = MLPStem(cfg["obs_dim"], cfg["d_hidden"], rngs=rngs)
             feature_dim = cfg["d_hidden"]
         else:
-            raise ValueError(f"unknown obs_type: {cfg["obs_type"]}")
+            raise ValueError(f"unknown obs_type: {cfg['obs_type']}")
 
         # Processing Network
         self.linear_proj = nnx.Linear(feature_dim, cfg["d_latent"], rngs=rngs)
@@ -29,7 +29,7 @@ class Encoder(nnx.Module):
         sigma = jax.lax.stop_gradient(self.sigma)
 
         # Standardise observation
-        x = (x - mu) / sigma
+        x = (x - mu) / jnp.maximum(sigma, 1e-6)
         
         # Run stem network
         x = self.stem(x)
@@ -128,7 +128,7 @@ class SpectralNormLinear(nnx.Module):
 
         # Apply projection function to rescale weights
         # If scale < 1 the constraint isnt binding so the normalisation isnt needed
-        scale = jnp.minimum(1.0, jnp.maximum(self.c / self.sigma.value, 1e-8))
+        scale = jnp.minimum(1.0, self.c / jnp.maximum(self.sigma.value, 1e-12))
         W_sn = W * scale
         y = x @ W_sn
 
