@@ -130,3 +130,4 @@ def main(cfg_filename):
 
 if __name__ == "__main__":
     main("TrainingConfigs/wmTraining/standard_model.yaml")
+    main("TrainingConfigs/wmTraining/regularity_constrained_model.yaml")

@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "Datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "pointgoal1_c_inf"        # one subdir per sweep point
+data_dir: "pointgoal1_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
