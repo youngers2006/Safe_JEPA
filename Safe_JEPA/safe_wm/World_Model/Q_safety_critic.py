@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 # Import files
-from World_Model.Networks import SpectralNormLinear
+from .Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
     def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
@@ -17,7 +17,7 @@ class QSafetyCritic(nnx.Module):
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             current_dim = h
-        self.layers = nnx.List(temp_layers)
+        self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
@@ -43,28 +43,25 @@ class SafetyCriticEnsemble(nnx.Module):
         # Save enemble size
         self.ensemble_size = ensemble_size
 
-        # Create vectorised ensemble with all networks in parrallel, initialised with separate keys
-        VectorisedEnsemble = nnx.vmap(
-            QSafetyCritic,
-            in_axes=(None, None, None, None, 0), # d_in, hf, d_out, lipschitz_bound, rngs 
-            out_axes=0,
-            axis_size=ensemble_size
-        )
+        # ensemble maker function
+        @nnx.split_rngs(splits=ensemble_size)
+        @nnx.vmap
+        def make_critic(member_rngs: nnx.Rngs):
+            return QSafetyCritic(
+                d_in, hidden_features, d_out, lipschitz_bound, rngs=member_rngs
+            )
 
-        # Instantiate ensemble, using keys array
-        self.critic_ensemble = VectorisedEnsemble(
-            d_in, hidden_features, d_out, lipschitz_bound, rngs.split(ensemble_size)
-        )
+        self.critic_ensemble = make_critic(rngs)
 
     @nnx.vmap(in_axes=(0, None, None, None), out_axes=0)
     def forward_pass(model, z_in, u_in, update_sn):
         return model(z_in, u_in, update_sn)
 
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        return nnx.vmap(
-            lambda model, input_z, input_u, spectral_norm: model(input_z, input_u, spectral_norm), 
-            in_axes=(0, None, None, None)
-        )(self.critic_ensemble, z, u, update_spectral_norm)
+        @nnx.vmap(in_axes=(0, None, None), out_axes=0)
+        def forward(model, input_z, input_u):
+            return model(input_z, input_u, update_spectral_norm)
+        return forward(self.critic_ensemble, z, u)
 
     def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> tuple[jax.Array, jax.Array]:
         Q_vals = self(z, u, update_spectral_norm)
@@ -72,74 +69,61 @@ class SafetyCriticEnsemble(nnx.Module):
         var = jnp.var(Q_vals, axis=0)
         return mu, jnp.sqrt(var + 1e-6)
 
+    def compute_targets(
+        self,
+        target_ensemble: "SafetyCriticEnsemble",
+        next_z_target: jax.Array,     # (B, d_z)
+        sampled_actions: jax.Array,   # (B*K, d_u)
+        safety_cost: jax.Array,       # (B,)
+        terminal: jax.Array,          # (B,)
+        discount: float,
+        Q_minima_samples: int
+    ) -> jax.Array:
+        batch_size = next_z_target.shape[0]
+        E = self.ensemble_size
+
+        z_q = jnp.repeat(
+            next_z_target[:, None, :], Q_minima_samples, axis=1
+        ).reshape(-1, next_z_target.shape[-1])
+
+        # Online critic selects the minimising action. Index only -- argmin
+        # is not differentiable, so nothing flows back through this.
+        next_q = self(
+            z_q, sampled_actions, update_spectral_norm=False
+        ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
+        best_idx = jnp.argmin(jnp.mean(next_q, axis=0), axis=-1)
+
+        # Target critic evaluates it.
+        target_next_q = target_ensemble(
+            z_q, sampled_actions, update_spectral_norm=False
+        ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
+
+        selected = jnp.take_along_axis(
+            target_next_q,
+            jnp.broadcast_to(best_idx[None, :, None], (E, batch_size, 1)),
+            axis=-1,
+        ).squeeze(axis=-1)
+
+        c, t = safety_cost[None, :], terminal[None, :]
+        return jax.lax.stop_gradient(c + discount * (1.0 - c) * (1.0 - t) * selected)
+
     def compute_loss(
             self, 
-            target_ensemble: "SafetyCriticEnsemble", 
             z: jax.Array, # (Batch, d_z)
-            next_z_target: jax.Array, # (Batch, d_z)
             action: jax.Array, # (Batch, d_u)
-            safety_cost: jax.Array, # (Batch,)
-            terminal: jax.Array, # (Batch,)
-            discount: float, 
-            cql_alpha: float, 
-            action_bounds: tuple[float, float], 
-            rng_key: nnx.Rngs,
+            q_target: jax.Array,
+            sampled_actions: jax.Array,
+            cql_alpha: float,
             Q_minima_samples: int = 64
         ):
+        batch_size = z.shape[0]
+
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
         # q_risk: (M, B). Score safety of actions taken
         q_risk_vals = self(
             z, action, update_spectral_norm=True
         ).squeeze(axis=-1)
 
-        # Sample actions from actions space to approximate min
-        # Build the action candidate set
-        batch_size = z.shape[0]
-        random_key = rng_key.default()
-        sampled_actions = jax.random.uniform(
-            random_key, 
-            shape=(batch_size, Q_minima_samples, action.shape[-1]), 
-            minval=action_bounds[0], 
-            maxval=action_bounds[1]
-        ).reshape(-1, action.shape[-1])
-
-        # Expand dimension of next z from (Batch, d_u) -> (Batch, action_samples, d_u)
-        # Then flatten to (Batch * action_samples, d_z) for NN processing
-        z_q = jnp.repeat(
-            jnp.expand_dims(next_z_target, axis=1), Q_minima_samples, axis=1
-        ).reshape(-1, next_z_target.shape[-1])
-
-        # Get safety value for each action sample, next_q: (Ensemble, Batch, action_samples)
-        next_q = self(
-            z_q, sampled_actions, update_spectral_norm=False
-        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
-
-        # Obtain action that minimises Q
-        mean_next_q = jnp.mean(next_q, axis=0) # mean value across ensemble
-        best_action_indices = jnp.argmin(mean_next_q, axis=-1)
-
-        # Get target Q values
-        target_next_q = target_ensemble(
-            z_q, sampled_actions, update_spectral_norm=False
-        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
-
-        # Select the minima action for each transition in the batch
-        indices_expanded = jnp.broadcast_to(
-            best_action_indices[None, :, None],
-            (self.ensemble_size, batch_size, 1)
-        )
-        selected_target_q = jnp.take_along_axis(
-            target_next_q, indices_expanded, axis=-1
-        ).squeeze(axis=-1)
-
-        # Expand c and d into ensemble dimension to allow broadcast
-        c = safety_cost[None, :]
-        t = terminal[None, :]
-
-        # Create safety target and calculate safety prediction mse loss
-        q_target = jax.lax.stop_gradient(
-            c + discount * (1.0 - c) * (1.0 - t) * selected_target_q
-        )
         loss_q_risk_mse = jnp.mean((q_risk_vals - q_target) ** 2, axis=1)
 
         # CQL q loss, pushes up ood actions up

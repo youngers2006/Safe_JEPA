@@ -152,7 +152,7 @@ class DynamicsPredictor(nnx.Module):
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             current_dim = h
-        self.layers = nnx.List(temp_layers)
+        self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
@@ -182,7 +182,7 @@ class ValueNet(nnx.Module):
                     SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             current_dim = h
-        self.layers = nnx.List(temp_layers)
+        self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
              
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
@@ -210,7 +210,7 @@ class RewardPredictor(nnx.Module):
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
             )
             current_dim = h
-        self.layers = nnx.List(temp_layers)
+        self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:

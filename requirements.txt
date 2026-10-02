@@ -3,6 +3,8 @@ numpy
 tqdm
 flax
 dsrl
+orbax
+
 
 # python 3.10
 # DO NOT ADD JAX HERE. 

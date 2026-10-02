@@ -5,8 +5,8 @@ import optax
 from functools import partial
 
 # import modules
-from World_Model.Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
-from World_Model.Q_safety_critic import SafetyCriticEnsemble, QSafetyCritic
+from .Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
+from .Q_safety_critic import SafetyCriticEnsemble, QSafetyCritic
 
 class WorldModel(nnx.Module):
     def __init__(
@@ -31,7 +31,6 @@ class WorldModel(nnx.Module):
         self.discount = cfg["discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
-        self.rngs = rngs
         # ==============================================================
 
         self.encoder = Encoder(
@@ -84,12 +83,12 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.trainable_nodes = nnx.List(
-            [self.encoder, self.dynamics, self.value_fn, self.safety_critic, self.reward_fn]
-        )
-        self.target_nodes = nnx.List(
-            [self.target_encoder, self.target_value_fn, self.target_safety_critic]
-        )
+        self.trainable_nodes = [
+            self.encoder, self.dynamics, self.value_fn, self.safety_critic, self.reward_fn
+        ]
+        self.target_nodes = [
+            self.target_encoder, self.target_value_fn, self.target_safety_critic
+        ]
         self.optimiser = nnx.Optimizer(
             self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param
         )
@@ -158,11 +157,38 @@ class WorldModel(nnx.Module):
         action: jax.Array, 
         reward: jax.Array, 
         safety_cost: jax.Array, 
-        terminal: jax.Array, 
+        terminal: jax.Array,
+        key: jax.Array,
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> dict:
-        def loss_fn(trainable_partition: nnx.List) -> dict:
+        # Create z targets
+        # ===============================================================
+        next_z_target = self.target_encoder(next_obs)
+        next_z_target = jax.lax.stop_gradient(next_z_target)
+        # ===============================================================
+
+        # Create value targets
+        # ===============================================================
+        next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False).squeeze()
+        target_v = jax.lax.stop_gradient(reward + self.discount * (1.0 - terminal) * next_v_target).squeeze(axis=-1)
+        # ===============================================================
+
+        # Create safety targets
+        # ===============================================================
+        sampled_actions = jax.random.uniform(
+            key,
+            shape=(obs.shape[0], Q_minima_samples, action.shape[-1]),
+            minval=action_bounds[0], maxval=action_bounds[1],
+        ).reshape(-1, action.shape[-1])
+
+        q_target = self.safety_critic.compute_target(
+            self.target_safety_critic, next_z_target, sampled_actions,
+            safety_cost, terminal, self.discount, Q_minima_samples,
+        )
+        # ===============================================================
+
+        def loss_fn(trainable_partition) -> dict:
             # Extract trainable networks
             enc, dyn, val_fn, safety_Q, rew_fn = trainable_partition
 
@@ -170,10 +196,6 @@ class WorldModel(nnx.Module):
             # ===============================================================
             # Encode observations to latent space
             z = enc(obs)
-
-            # create z targets
-            next_z_target = self.target_encoder(next_obs)
-            next_z_target = jax.lax.stop_gradient(next_z_target)
 
             # Get next z prediction
             next_z = dyn(z, action, update_spectral_norm=True)
@@ -190,9 +212,6 @@ class WorldModel(nnx.Module):
 
             # Value Loss
             # ===============================================================
-            next_v_target = self.target_value_fn(next_z_target, update_spectral_norm=False).squeeze()
-            target_v = reward + self.discount * (1.0 - terminal) * next_v_target
-
             # Get value prediction
             v_pred = val_fn(z, update_spectral_norm=True).squeeze()
 
@@ -222,16 +241,11 @@ class WorldModel(nnx.Module):
             # Compute safety constraint loss
             # ===============================================================
             loss_s = safety_Q.compute_loss(
-                self.target_safety_critic,
                 z,
-                next_z_target,
                 action,
-                safety_cost,
-                terminal,
-                self.discount,
+                q_target,
+                sampled_actions,
                 self.cql_alpha,
-                action_bounds,
-                self.rngs,
                 Q_minima_samples
             )
             # ===============================================================
