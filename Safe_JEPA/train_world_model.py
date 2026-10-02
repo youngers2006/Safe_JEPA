@@ -31,7 +31,7 @@ def resolve_dims(cfg, obs_dim, act_dim):
 
 def write_metrics(history: list[list[dict]], path: str | Path) -> None:
     """history[epoch][batch] -> dict of scalar metrics."""
-    history = jax.device_get(history)          # one sync for the whole tree
+    history = jax.device_get(history)
 
     rows, step = [], 0
     for e, epoch in enumerate(history):

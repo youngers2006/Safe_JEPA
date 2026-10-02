@@ -5,7 +5,6 @@ flax
 dsrl
 orbax
 
-
 # python 3.10
 # DO NOT ADD JAX HERE. 
 # Run command in the terminal to get the GPU drivers:
