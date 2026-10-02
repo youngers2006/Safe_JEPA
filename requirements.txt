@@ -4,6 +4,12 @@ tqdm
 flax
 dsrl
 orbax
+h5py
+PyYAML
+tqdm
+gymnasium
+safety-gymnasium
+mujoco
 
 # python 3.10
 # DO NOT ADD JAX HERE. 
