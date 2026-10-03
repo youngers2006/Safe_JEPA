@@ -49,7 +49,7 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
 def _sample(data_dict, key, batch_size):
     n = data_dict["observations"].shape[0]
     indices = jax.random.randint(key, (batch_size,), 0, n)
-    return {k: jnp.asarray(v[indices]) for k, v in data_dict.items()}
+    return {k: jnp.asarray(v[indices]) for k, v in data_dict.items()}, indices
 
 def get_batches(data_dict, batch_size, N, key, epoch):
     for i in range(N):
@@ -76,12 +76,20 @@ def main(cfg_filename):
     )
 
     # Create rng key
-    data_key, train_key = jax.random.split(jax.random.key(cfg["seed"]))
+    mask_key, data_key, train_key = jax.random.split(jax.random.key(cfg["seed"]), 3)
     rngs = nnx.Rngs(cfg["seed"])
 
     # Calculate observation distribution
     obs_mean = jnp.mean(data_dict["observations"], axis=0)
     obs_std = jnp.std(data_dict["observations"], axis=0)
+
+    # Create mask for ensemble training
+    # =====================================================================
+    E = cfg["SafetyCriticParams"]["ensemble_size"]
+    n = data_dict["observations"].shape[0]
+
+    ens_mask = (jax.random.uniform(mask_key, (E, n)) < data_dict["bootstrap_frac"]).astype(jnp.float32)
+    # =====================================================================
 
     # Setup world model
     world_model = WorldModel(
@@ -97,11 +105,10 @@ def main(cfg_filename):
     # Run training loop
     print("Beginning Training Loop ... ")
     metrics_log = []
-    i = 0
     for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
-        for batch in tqdm(get_batches(data_dict, cfg["batch_size"], cfg["num_batches"], data_key, epoch), desc=f"Batches", leave=False):
-            i += 1
+        for i, (batch, idx) in enumerate(tqdm(get_batches(data_dict, cfg["batch_size"], 
+                cfg["num_batches"], data_key, epoch), total=cfg["num_batches"], desc=f"Batches", leave=False)):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
             actions = batch["actions"]
@@ -109,7 +116,8 @@ def main(cfg_filename):
             safety_costs = batch["costs"]
             terminals = batch["terminals"]
             metrics = world_model.train_step(
-                obs, next_obs, actions, rewards, safety_costs, terminals, jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i)
+                obs, next_obs, actions, rewards, safety_costs, terminals, 
+                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i), ens_mask[:, idx]
             )
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)

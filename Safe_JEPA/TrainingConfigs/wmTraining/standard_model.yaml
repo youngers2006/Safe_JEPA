@@ -9,6 +9,7 @@ epochs: 100
 num_batches: 500        # ~= n_transitions / batch_size
 batch_size: 512
 lr: 3.0e-4
+bootstrap_frac: 0.5 # masking for ensemble critic
 
 # problem 
 d_latent: 32

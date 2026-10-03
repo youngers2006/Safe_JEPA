@@ -178,6 +178,7 @@ class WorldModel(nnx.Module):
         safety_cost: jax.Array, 
         terminal: jax.Array,
         key: jax.Array,
+        ens_mask: jax.Array,
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> dict:
@@ -275,6 +276,7 @@ class WorldModel(nnx.Module):
                 q_target,
                 sampled_actions,
                 action_bounds,
+                ens_mask,
                 self.cql_alpha,
                 Q_minima_samples
             )

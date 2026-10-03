@@ -116,13 +116,16 @@ class SafetyCriticEnsemble(nnx.Module):
             self, 
             z: jax.Array, # (Batch, d_z)
             action: jax.Array, # (Batch, d_u)
-            q_target: jax.Array,
+            q_target: jax.Array, # (Batch, )
             sampled_actions: jax.Array,
             action_bounds: tuple[float, float],
+            ens_mask,
             cql_alpha: float,
             Q_minima_samples: int = 64
         ):
+        # Obtain batch size and the number of members of each batch is seen per ensemble member
         batch_size = z.shape[0]
+        denom = jnp.maximum(jnp.sum(ens_mask, axis=1), 1.0)
 
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
         # =================================================================================
@@ -132,7 +135,8 @@ class SafetyCriticEnsemble(nnx.Module):
         ).squeeze(axis=-1)
 
         # Compute the bellman recursion error
-        loss_q_risk_mse = jnp.mean((q_risk_id - q_target) ** 2, axis=1)
+        se = (q_risk_id - q_target) ** 2
+        loss_q_risk_mse = jnp.sum(se * ens_mask, axis=1) / denom
         # =================================================================================
 
         # CQL q loss, pushes up ood actions up
@@ -151,7 +155,7 @@ class SafetyCriticEnsemble(nnx.Module):
         q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
 
         # Get CQL loss, pushes seen actions down and unseen actions up
-        cql_risk_loss = jnp.mean(q_risk_ood + q_risk_id, axis=1)
+        cql_risk_loss = jnp.sum((q_risk_ood + q_risk_id) * ens_mask, axis=1) / denom
         # =================================================================================
 
         # total safety Q loss for each ensemble member then combine into a single loss
