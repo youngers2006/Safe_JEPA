@@ -274,6 +274,7 @@ class WorldModel(nnx.Module):
                 action,
                 q_target,
                 sampled_actions,
+                action_bounds,
                 self.cql_alpha,
                 Q_minima_samples
             )

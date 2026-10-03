@@ -113,12 +113,16 @@ def main(cfg_filename):
             )
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)
+    print("Training Loop Completed.")
 
+    print("Saving Metrics")
     # Save training metrics
     save_path_metrics = (Path(__file__).parent / f'SaveData/{cfg["data_dir"]}/Metrics').resolve()
     save_path_metrics.mkdir(parents=True, exist_ok=True)
     write_metrics(metrics_log, save_path_metrics / "metrics.csv")
+    print("Metrics Saved")
 
+    print("Saving Model")
     # Save the trained model
     _, state = nnx.split(world_model)
     checkpointer = ocp.StandardCheckpointer()
@@ -126,6 +130,9 @@ def main(cfg_filename):
     save_path_model.mkdir(parents=True, exist_ok=True)
     checkpointer.save(save_path_model / 'state', state)
     checkpointer.wait_until_finished()
+    print("Model Saved")
+
+    print(f"Training Complete")
     return 0
 
 if __name__ == "__main__":

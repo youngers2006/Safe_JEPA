@@ -79,32 +79,37 @@ class SafetyCriticEnsemble(nnx.Module):
         discount: float,
         Q_minima_samples: int
     ) -> jax.Array:
+        # Get batch and ensemble size
         batch_size = next_z_target.shape[0]
         E = self.ensemble_size
 
+        # Extend z target in action sample axis to allow computation
         z_q = jnp.repeat(
             next_z_target[:, None, :], Q_minima_samples, axis=1
         ).reshape(-1, next_z_target.shape[-1])
 
-        # Online critic selects the minimising action. Index only -- argmin
-        # is not differentiable, so nothing flows back through this.
+        # Online critic selects the minimising action. Approximate this by sampling 
+        # actions from the critic then selecting the minima
         next_q = self(
             z_q, sampled_actions, update_spectral_norm=False
         ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
         best_idx = jnp.argmin(jnp.mean(next_q, axis=0), axis=-1)
 
-        # Target critic evaluates it.
+        # Create target by passing this optima into the target network
         target_next_q = target_ensemble(
             z_q, sampled_actions, update_spectral_norm=False
         ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
 
+        # Reshape target
         selected = jnp.take_along_axis(
             target_next_q,
             jnp.broadcast_to(best_idx[None, :, None], (E, batch_size, 1)),
             axis=-1,
         ).squeeze(axis=-1)
 
-        c, t = safety_cost[None, :], terminal[None, :]
+        # Compute Bellman recursion target
+        c = safety_cost[None, :]
+        t = terminal[None, :]
         return jax.lax.stop_gradient(c + discount * (1.0 - c) * (1.0 - t) * selected)
 
     def compute_loss(
@@ -113,35 +118,41 @@ class SafetyCriticEnsemble(nnx.Module):
             action: jax.Array, # (Batch, d_u)
             q_target: jax.Array,
             sampled_actions: jax.Array,
+            action_bounds: tuple[float, float],
             cql_alpha: float,
             Q_minima_samples: int = 64
         ):
         batch_size = z.shape[0]
 
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
+        # =================================================================================
         # q_risk: (M, B). Score safety of actions taken
-        q_risk_vals = self(
+        q_risk_id = self(
             z, action, update_spectral_norm=True
         ).squeeze(axis=-1)
 
-        loss_q_risk_mse = jnp.mean((q_risk_vals - q_target) ** 2, axis=1)
+        # Compute the bellman recursion error
+        loss_q_risk_mse = jnp.mean((q_risk_id - q_target) ** 2, axis=1)
+        # =================================================================================
 
         # CQL q loss, pushes up ood actions up
+        # =================================================================================
         # expand z dims in action sample dims
         z_expanded = jnp.repeat(
             jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
         ).reshape(-1, z.shape[-1])
 
-        # Calculate safety prediction at each action sample around state
-        q_risk_ood = self(
+        # Calculate safety prediction at each action sample 
+        q_risk_sampled = self(
             z_expanded, sampled_actions, update_spectral_norm=False
         ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
-        # Obtain mean risk prediction across the set of samples
-        mean_q_risk_ood = jnp.mean(q_risk_ood, axis=-1) # (Ensemble, Batch)
+        log_vol = jnp.sum(jnp.log(action_bounds[1] - action_bounds[0]))
+        q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
 
         # Get CQL loss, pushes seen actions down and unseen actions up
-        cql_risk_loss = jnp.mean(q_risk_vals - mean_q_risk_ood, axis=1)
+        cql_risk_loss = jnp.mean(q_risk_ood + q_risk_id, axis=1)
+        # =================================================================================
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss) # (Ensemble,)
