@@ -269,7 +269,7 @@ class WorldModel(nnx.Module):
 
             # Compute safety constraint loss
             # ===============================================================
-            loss_s = safety_Q.compute_loss(
+            loss_s, q_aux = safety_Q.compute_loss(
                 z,
                 action,
                 q_target,
@@ -292,7 +292,11 @@ class WorldModel(nnx.Module):
                 "loss_safety": loss_s,
                 "loss_var": loss_var,
                 "loss_cov": loss_cov,
-                "loss_r": loss_r
+                "loss_r": loss_r,
+                **q_aux,
+                "q_target_min": jnp.min(q_target),
+                "q_target_max": jnp.max(q_target),
+                "sigma_dyn_0":  dyn.layers[0].sigma.value
             }
             return total_loss, metrics
 

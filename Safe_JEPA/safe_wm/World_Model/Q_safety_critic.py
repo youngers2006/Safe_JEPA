@@ -156,4 +156,11 @@ class SafetyCriticEnsemble(nnx.Module):
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss) # (Ensemble,)
-        return jnp.mean(loss_s)
+        return jnp.mean(loss_s), {
+            "mse_term": jnp.mean(loss_q_risk_mse),
+            "cql_term": jnp.mean(cql_risk_loss),
+            "q_pred_min": jnp.min(q_risk_id),
+            "q_pred_max": jnp.max(q_risk_id),
+            "sigma_q_data": jnp.mean(jnp.std(q_risk_id, axis=0)),
+            "sigma_q_ood": jnp.mean(jnp.std(q_risk_ood,  axis=0))
+        }
