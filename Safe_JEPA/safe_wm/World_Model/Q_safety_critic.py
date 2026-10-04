@@ -110,7 +110,9 @@ class SafetyCriticEnsemble(nnx.Module):
         # Compute Bellman recursion target
         c = safety_cost[None, :]
         t = terminal[None, :]
-        return jax.lax.stop_gradient(c + discount * (1.0 - c) * (1.0 - t) * selected)
+        return jax.lax.stop_gradient(
+            jnp.clip(c + discount * (1.0 - c) * (1.0 - t) * selected, 0.0, 1.0)
+        )
 
     def compute_loss(
             self, 
@@ -151,7 +153,8 @@ class SafetyCriticEnsemble(nnx.Module):
             z_expanded, sampled_actions, update_spectral_norm=False
         ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
 
-        log_vol = jnp.sum(jnp.log(action_bounds[1] - action_bounds[0]))
+        d_u = sampled_actions.shape[-1]
+        log_vol = d_u * jnp.log(action_bounds[1] - action_bounds[0])
         q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
 
         # Get CQL loss, pushes seen actions down and unseen actions up

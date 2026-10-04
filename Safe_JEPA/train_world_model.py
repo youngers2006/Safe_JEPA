@@ -88,7 +88,7 @@ def main(cfg_filename):
     E = cfg["SafetyCriticParams"]["ensemble_size"]
     n = data_dict["observations"].shape[0]
 
-    ens_mask = (jax.random.uniform(mask_key, (E, n)) < data_dict["bootstrap_frac"]).astype(jnp.float32)
+    ens_mask = (jax.random.uniform(mask_key, (E, n)) < cfg["bootstrap_frac"]).astype(jnp.float32)
     # =====================================================================
 
     # Setup world model
