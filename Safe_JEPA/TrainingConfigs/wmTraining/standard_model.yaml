@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "Datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "T1_pointgoal1_c_inf_seed_0"        # one subdir per sweep point
+data_dir: "T5_pointgoal1_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
@@ -25,7 +25,7 @@ lambda_s: 1.0
 lambda_var: 1.0
 lambda_cov: 0.04
 gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
-alpha: 1.0                         # CQL weight
+alpha: 0.025  # 0.05 when no bce 0.025 when bce    # CQL weight
 
 tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
 
@@ -50,3 +50,4 @@ SafetyCriticParams:
   ensemble_size: 1
   hidden_features: [256, 256]
   lipschitz_bound: .inf
+  use_bce: true

@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+import optax
 
 # Import files
 from .Networks import SpectralNormLinear
@@ -20,7 +21,7 @@ class QSafetyCritic(nnx.Module):
         self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False, probs: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
         for l in range(0, len(self.layers)):
@@ -28,8 +29,8 @@ class QSafetyCritic(nnx.Module):
 
             x = linear_layer(x, update_spectral_norm)
             x = nnx.silu(x)
-        
-        return self.output_layer(x, update_spectral_norm)
+        g = self.output_layer(x, update_spectral_norm)
+        return nnx.sigmoid(g) if probs else g
 
 class SafetyCriticEnsemble(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
@@ -39,6 +40,7 @@ class SafetyCriticEnsemble(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        self.use_bce = cfg["use_bce"]
 
         # Save enemble size
         self.ensemble_size = ensemble_size
@@ -53,18 +55,14 @@ class SafetyCriticEnsemble(nnx.Module):
 
         self.critic_ensemble = make_critic(rngs)
 
-    @nnx.vmap(in_axes=(0, None, None, None), out_axes=0)
-    def forward_pass(model, z_in, u_in, update_sn):
-        return model(z_in, u_in, update_sn)
-
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False, probs: bool = False) -> jax.Array:
         @nnx.vmap(in_axes=(0, None, None), out_axes=0)
         def forward(model, input_z, input_u):
-            return model(input_z, input_u, update_spectral_norm)
+            return model(input_z, input_u, update_spectral_norm, probs)
         return forward(self.critic_ensemble, z, u)
 
     def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> tuple[jax.Array, jax.Array]:
-        Q_vals = self(z, u, update_spectral_norm)
+        Q_vals = self(z, u, update_spectral_norm, self.use_bce)
         mu = jnp.mean(Q_vals, axis=0)
         var = jnp.var(Q_vals, axis=0)
         return mu, jnp.sqrt(var + 1e-6)
@@ -91,13 +89,13 @@ class SafetyCriticEnsemble(nnx.Module):
         # Online critic selects the minimising action. Approximate this by sampling 
         # actions from the critic then selecting the minima
         next_q = self(
-            z_q, sampled_actions, update_spectral_norm=False
+            z_q, sampled_actions, update_spectral_norm=False, probs=self.use_bce
         ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
         best_idx = jnp.argmin(jnp.mean(next_q, axis=0), axis=-1)
 
         # Create target by passing this optima into the target network
         target_next_q = target_ensemble(
-            z_q, sampled_actions, update_spectral_norm=False
+            z_q, sampled_actions, update_spectral_norm=False, probs=self.use_bce
         ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
 
         # Reshape target
@@ -137,7 +135,7 @@ class SafetyCriticEnsemble(nnx.Module):
         ).squeeze(axis=-1)
 
         # Compute the bellman recursion error
-        se = (q_risk_id - q_target) ** 2
+        se = optax.sigmoid_binary_cross_entropy(q_risk_id, q_target) if self.use_bce else (q_risk_id - q_target) ** 2
         loss_q_risk_mse = jnp.sum(se * ens_mask, axis=1) / denom
         # =================================================================================
 
@@ -163,11 +161,15 @@ class SafetyCriticEnsemble(nnx.Module):
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss) # (Ensemble,)
+        p_id = nnx.sigmoid(q_risk_id)      if self.use_bce else q_risk_id
+        p_sampled = nnx.sigmoid(q_risk_sampled) if self.use_bce else q_risk_sampled
         return jnp.mean(loss_s), {
-            "mse_term": jnp.mean(loss_q_risk_mse),
-            "cql_term": jnp.mean(cql_risk_loss),
-            "q_pred_min": jnp.min(q_risk_id),
-            "q_pred_max": jnp.max(q_risk_id),
-            "sigma_q_data": jnp.mean(jnp.std(q_risk_id, axis=0)),
-            "sigma_q_ood": jnp.mean(jnp.std(q_risk_ood,  axis=0))
+            "mse_term":     jnp.mean(loss_q_risk_mse),
+            "cql_term":     jnp.mean(cql_risk_loss),
+            "q_prob_data":  jnp.mean(p_id),
+            "q_prob_ood":   jnp.mean(p_sampled),
+            "q_pred_min":   jnp.min(p_id),
+            "q_pred_max":   jnp.max(p_id),
+            "sigma_q_data": jnp.mean(jnp.std(p_id, axis=0)),
+            "sigma_q_ood":  jnp.mean(jnp.std(p_sampled, axis=0)),
         }
