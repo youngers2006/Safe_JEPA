@@ -211,7 +211,7 @@ class ValueQNet(nnx.Module):
         self.output_layer = nnx.Linear(current_dim, d_out, rngs=rngs)
 
     def __call__(self, z: jax.Array, u: jax.Array):
-        x = jnp.append([z, u], axis=-1)
+        x = jnp.concatenate([z, u], axis=-1)
         for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
 
