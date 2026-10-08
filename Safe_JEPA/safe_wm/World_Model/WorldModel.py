@@ -327,8 +327,8 @@ class WorldModel(nnx.Module):
             return total_loss, metrics
 
         # Calculate losses and 
-        grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-        (loss, metrics), grad = grad_fn(self.trainable_nodes)
+        grad_fn = nnx.value_and_grad(loss_fn, argnums=0, has_aux=True)
+        (loss, metrics), grad = grad_fn(self.trainable_nodes, self.target_nodes)
         self.optimiser.update(grad)
 
         # Update target networks
