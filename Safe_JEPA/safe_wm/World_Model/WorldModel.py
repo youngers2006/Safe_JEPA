@@ -5,22 +5,26 @@ import optax
 from functools import partial
 
 # import modules
-from .Networks import ValueNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
+from .Networks import ValueNet, ValueQNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
 from .Q_safety_critic import SafetyCriticEnsemble, QSafetyCritic
 
 class TrainableBundle(nnx.Module):
-    def __init__(self, encoder, dynamics, value_fn, safety_critic, reward_fn):
+    def __init__(self, encoder, dynamics, value_fn, value_Q, safety_critic, reward_fn):
         self.encoder = encoder
         self.dynamics = dynamics
         self.value_fn = value_fn
+        self.value_Q = value_Q
         self.safety_critic = safety_critic
         self.reward_fn = reward_fn
 
 class TargetBundle(nnx.Module):
-    def __init__(self, encoder, value_fn, safety_critic):
-        self.encoder       = encoder
-        self.value_fn      = value_fn
+    def __init__(self, encoder, value_Q, safety_critic):
+        self.encoder = encoder
+        self.value_Q = value_Q
         self.safety_critic = safety_critic
+
+def expectile_regression_loss(u, tau):
+    return jnp.where(u > 0, tau, 1 - tau) * (u **2)
 
 class WorldModel(nnx.Module):
     def __init__(
@@ -45,6 +49,7 @@ class WorldModel(nnx.Module):
         self.discount = cfg["discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
+        self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
         # ==============================================================
 
         self.encoder = Encoder(
@@ -61,13 +66,13 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.value_fn = ValueNet(
-            cfg=cfg["ValueParams"],
+        self.value_Q = ValueQNet(
+            cfg=cfg["ValueQParams"],
             rngs=rngs
         )
 
-        self.target_value_fn = ValueNet(
-            cfg=cfg["ValueParams"],
+        self.target_value_Q = ValueQNet(
+            cfg=cfg["ValueQParams"],
             rngs=rngs
         )
 
@@ -82,8 +87,8 @@ class WorldModel(nnx.Module):
         )
 
         nnx.update(self.target_encoder, nnx.state(self.encoder, nnx.Param))
-        nnx.update(self.target_value_fn, nnx.state(self.value_fn, nnx.Param))
-        nnx.update(self.target_value_fn, nnx.state(self.value_fn, SpectralStat))
+        nnx.update(self.target_value_Q, nnx.state(self.value_Q, nnx.Param))
+        nnx.update(self.target_value_Q, nnx.state(self.value_Q, SpectralStat))
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, nnx.Param))
         nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
@@ -96,16 +101,23 @@ class WorldModel(nnx.Module):
             cfg=cfg["RewardParams"],
             rngs=rngs
         )
+
+        self.value_fn = ValueNet(
+            cfg=cfg["ValueParams"],
+            rngs=rngs
+        )
+
         self.trainable_nodes = TrainableBundle(
             self.encoder, 
             self.dynamics, 
             self.value_fn,
+            self.value_Q,
             self.safety_critic, 
             self.reward_fn
         )
         self.target_nodes = TargetBundle(
             self.target_encoder, 
-            self.target_value_fn, 
+            self.target_value_Q, 
             self.target_safety_critic
         )
         self.optimiser = nnx.Optimizer(
@@ -129,10 +141,10 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_encoder, new_target_params)
 
     @nnx.jit
-    def update_target_value_fn(self, tau: float = 0.01) -> None:
+    def update_target_value_Q(self, tau: float = 0.01) -> None:
         # Extract both param sets
-        online_params = nnx.state(self.value_fn, nnx.Param)
-        target_params = nnx.state(self.target_value_fn, nnx.Param)
+        online_params = nnx.state(self.value_Q, nnx.Param)
+        target_params = nnx.state(self.target_value_Q, nnx.Param)
 
         # Use moving average to update target encoder
         new_target_params = optax.incremental_update(
@@ -142,8 +154,8 @@ class WorldModel(nnx.Module):
         )
 
         # Update the target encoder state
-        nnx.update(self.target_value_fn, new_target_params)
-        nnx.update(self.target_value_fn, nnx.state(self.value_fn, SpectralStat))
+        nnx.update(self.target_value_Q, new_target_params)
+        nnx.update(self.target_value_Q, nnx.state(self.value_Q, SpectralStat))
 
     @nnx.jit
     def update_target_safety_critic(self, tau: float = 0.01) -> None:
@@ -166,7 +178,7 @@ class WorldModel(nnx.Module):
     def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
         self.update_target_encoder(tau_vals[0])
         self.update_target_safety_critic(tau_vals[1])
-        self.update_target_value_fn(tau_vals[2])
+        self.update_target_value_Q(tau_vals[2])
 
     @partial(nnx.jit, static_argnames=("Q_minima_samples", "action_bounds"))
     def train_step(
@@ -190,13 +202,10 @@ class WorldModel(nnx.Module):
         )
         # ===============================================================
 
-        # Create value targets
+        # Create value target
         # ===============================================================
-        next_v_target = self.target_value_fn(
-            next_z_target, update_spectral_norm=False
-        ).squeeze(axis=-1)
-        target_v = jax.lax.stop_gradient(
-            reward + self.discount * (1.0 - terminal) * next_v_target
+        next_value_Q_target = jax.lax.stop_gradient(
+            reward + self.discount * (1.0 - terminal) * self.value_fn(next_z_target).squeeze(axis=-1)
         )
         # ===============================================================
 
@@ -214,13 +223,17 @@ class WorldModel(nnx.Module):
         )
         # ===============================================================
 
-        def loss_fn(trainable_partition: TrainableBundle) -> dict:
+        def loss_fn(trainable_partition: TrainableBundle, target_partition: TargetBundle) -> dict:
             # Extract trainable networks
             enc = trainable_partition.encoder
             dyn = trainable_partition.dynamics
             val_fn = trainable_partition.value_fn
+            val_fn_Q = trainable_partition.value_Q
             safety_Q = trainable_partition.safety_critic
             rew_fn = trainable_partition.reward_fn
+
+            # Extract target networks
+            target_val_fn_Q = target_partition.value_Q
 
             # Encoder and Dynamics Loss
             # ===============================================================
@@ -236,17 +249,28 @@ class WorldModel(nnx.Module):
 
             # Reward Loss
             # ===============================================================
-            r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze()
+            r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze(axis=-1)
             loss_r = jnp.mean((r_pred - reward) ** 2)
             # ===============================================================
 
             # Value Loss
             # ===============================================================
             # Get value prediction
-            v_pred = val_fn(z, update_spectral_norm=True).squeeze()
+            v_pred = val_fn(z, update_spectral_norm=True).squeeze(axis=-1)
 
             # Get value loss
-            loss_v = jnp.mean((v_pred - target_v) ** 2)
+            next_value_target = jax.lax.stop_gradient(
+                target_val_fn_Q(z, action)
+            ).squeeze(axis=-1)
+            
+            loss_v_v = jnp.mean(
+                expectile_regression_loss(next_value_target - v_pred, self.ER_tau)
+            )
+
+            q_pred = val_fn_Q(z, action).squeeze(axis=-1)
+            loss_v_q = jnp.mean((next_value_Q_target - q_pred) ** 2)
+
+            loss_v = loss_v_q + loss_v_v
             # ===============================================================
 
             # VicReg Loss

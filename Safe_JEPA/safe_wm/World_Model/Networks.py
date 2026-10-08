@@ -199,27 +199,26 @@ class ValueQNet(nnx.Module):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
-        lipschitz_bound = cfg["lipschitz_bound"]
         temp_layers = []
 
         current_dim = d_in
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+                nnx.Linear(current_dim, h, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
-        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        self.output_layer = nnx.Linear(current_dim, d_out, rngs=rngs)
 
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False):
+    def __call__(self, z: jax.Array, u: jax.Array):
         x = jnp.append([z, u], axis=-1)
         for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
 
-            x = linear_layer(x, update_spectral_norm)
+            x = linear_layer(x)
             x = nnx.silu(x)
 
-        return self.output_layer(x, update_spectral_norm)
+        return self.output_layer(x)
 
 class RewardPredictor(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):

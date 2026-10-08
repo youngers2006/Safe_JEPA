@@ -23,9 +23,11 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["RewardParams"]["d_out"] = 1
     cfg["ValueParams"]["d_in"] = d_z
     cfg["ValueParams"]["d_out"] = 1
+    cfg["ValueQParams"]["d_in"] = d_z
+    cfg["ValueQParams"]["d_out"] = 1
     cfg["SafetyCriticParams"]["d_in"] = d_z + act_dim
     cfg["SafetyCriticParams"]["d_out"] = 1
-    for sub in ("DynamicsParams", "ValueParams", "RewardParams", "SafetyCriticParams"):
+    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "SafetyCriticParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
 
