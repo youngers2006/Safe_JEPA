@@ -1,10 +1,121 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
-import optax
 
-# Import files
-from .Networks import SpectralNormLinear
+from .layers import SpectralNormLinear
+
+class DynamicsPredictor(nnx.Module):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
+        self.hidden_features = hidden_features
+        temp_layers = []
+        current_dim = d_in
+        
+        for h in hidden_features:
+            temp_layers.append(
+                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+            )
+            current_dim = h
+        self.layers = temp_layers
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        x = jnp.concatenate([z, u], axis=-1)
+
+        for l in range(0, len(self.layers)):
+            linear_layer = self.layers[l]
+
+            x = linear_layer(x, update_spectral_norm)
+            x = nnx.silu(x)
+        
+        return self.output_layer(x, update_spectral_norm)
+
+class ValueNet(nnx.Module):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
+        self.hidden_features = hidden_features
+        temp_layers = []
+            
+        current_dim = d_in
+        
+        for h in hidden_features:
+            temp_layers.append(
+                    SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+            )
+            current_dim = h
+        self.layers = temp_layers
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+             
+    def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        for l in range(0, len(self.layers)):
+            linear_layer = self.layers[l]
+
+            z = linear_layer(z, update_spectral_norm)
+            z = nnx.silu(z)
+        
+        return self.output_layer(z, update_spectral_norm)
+
+class ValueQNet(nnx.Module):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        temp_layers = []
+
+        current_dim = d_in
+        for h in hidden_features:
+            temp_layers.append(
+                nnx.Linear(current_dim, h, rngs=rngs)
+            )
+            current_dim = h
+        self.layers = temp_layers
+        self.output_layer = nnx.Linear(current_dim, d_out, rngs=rngs)
+
+    def __call__(self, z: jax.Array, u: jax.Array):
+        x = jnp.concatenate([z, u], axis=-1)
+        for l in range(0, len(self.layers)):
+            linear_layer = self.layers[l]
+
+            x = linear_layer(x)
+            x = nnx.silu(x)
+
+        return self.output_layer(x)
+
+class RewardPredictor(nnx.Module):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
+        self.hidden_features = hidden_features
+        temp_layers = []
+        
+        current_dim = d_in
+        
+        for h in hidden_features:
+            temp_layers.append(
+                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+            )
+            current_dim = h
+        self.layers = temp_layers
+        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        x = jnp.concatenate([z, u], axis=-1)
+
+        for l in range(0, len(self.layers)):
+            linear_layer = self.layers[l]
+
+            x = linear_layer(x, update_spectral_norm)
+            x = nnx.silu(x)
+        
+        return self.output_layer(x, update_spectral_norm)
 
 class QSafetyCritic(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
