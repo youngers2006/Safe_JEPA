@@ -7,12 +7,19 @@ import optax
 from .Networks import SpectralNormLinear
 
 class QSafetyCritic(nnx.Module):
-    def __init__(self, d_in: int, hidden_features: tuple[int, ...], d_out: int, lipschitz_bound: float, rngs: nnx.Rngs):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        # Unpack
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
+
+        # Networks layers
         self.hidden_features = hidden_features
         temp_layers = []
-        
         current_dim = d_in
-        
+
+        # Create network
         for h in hidden_features:
             temp_layers.append(
                 SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
@@ -21,55 +28,18 @@ class QSafetyCritic(nnx.Module):
         self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
         
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False, probs: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
         for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
-
             x = linear_layer(x, update_spectral_norm)
             x = nnx.silu(x)
-        g = self.output_layer(x, update_spectral_norm)
-        return nnx.sigmoid(g) if probs else g
-
-class SafetyCriticEnsemble(nnx.Module):
-    def __init__(self, cfg, rngs: nnx.Rngs):
-        # Unpack
-        ensemble_size = cfg["ensemble_size"]
-        d_in = cfg["d_in"]
-        hidden_features = cfg["hidden_features"]
-        d_out = cfg["d_out"]
-        lipschitz_bound = cfg["lipschitz_bound"]
-        self.use_bce = cfg["use_bce"]
-
-        # Save enemble size
-        self.ensemble_size = ensemble_size
-
-        # ensemble maker function
-        @nnx.split_rngs(splits=ensemble_size)
-        @nnx.vmap
-        def make_critic(member_rngs: nnx.Rngs):
-            return QSafetyCritic(
-                d_in, hidden_features, d_out, lipschitz_bound, rngs=member_rngs
-            )
-
-        self.critic_ensemble = make_critic(rngs)
-
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False, probs: bool = False) -> jax.Array:
-        @nnx.vmap(in_axes=(0, None, None), out_axes=0)
-        def forward(model, input_z, input_u):
-            return model(input_z, input_u, update_spectral_norm, probs)
-        return forward(self.critic_ensemble, z, u)
-
-    def get_moments(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> tuple[jax.Array, jax.Array]:
-        Q_vals = self(z, u, update_spectral_norm, self.use_bce)
-        mu = jnp.mean(Q_vals, axis=0)
-        var = jnp.var(Q_vals, axis=0)
-        return mu, jnp.sqrt(var + 1e-6)
+        return self.output_layer(x, update_spectral_norm)
 
     def compute_targets(
         self,
-        target_ensemble: "SafetyCriticEnsemble",
+        target_Q: "QSafetyCritic",
         next_z_target: jax.Array,     # (B, d_z)
         sampled_actions: jax.Array,   # (B*K, d_u)
         safety_cost: jax.Array,       # (B,)
@@ -77,66 +47,48 @@ class SafetyCriticEnsemble(nnx.Module):
         discount: float,
         Q_minima_samples: int
     ) -> jax.Array:
-        # Get batch and ensemble size
-        batch_size = next_z_target.shape[0]
-        E = self.ensemble_size
+        # Get batch and z size
+        B, d_z = next_z_target.shape
 
         # Extend z target in action sample axis to allow computation
+        # Must be flattened (B, K, d_z) -> (B*K, d_z)
         z_q = jnp.repeat(
             next_z_target[:, None, :], Q_minima_samples, axis=1
-        ).reshape(-1, next_z_target.shape[-1])
+        ).reshape(B * Q_minima_samples, d_z)
 
-        # Online critic selects the minimising action. Approximate this by sampling 
-        # actions from the critic then selecting the minima
-        next_q = self(
-            z_q, sampled_actions, update_spectral_norm=False, probs=self.use_bce
-        ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
-        best_idx = jnp.argmin(jnp.mean(next_q, axis=0), axis=-1)
-
-        # Create target by passing this optima into the target network
-        target_next_q = target_ensemble(
-            z_q, sampled_actions, update_spectral_norm=False, probs=self.use_bce
-        ).squeeze(axis=-1).reshape(E, batch_size, Q_minima_samples)
-
-        # Reshape target
-        selected = jnp.take_along_axis(
-            target_next_q,
-            jnp.broadcast_to(best_idx[None, :, None], (E, batch_size, 1)),
-            axis=-1,
-        ).squeeze(axis=-1)
+        # Target critic selects the minimising action. Approximate this by sampling 
+        target_next_q = target_Q(
+            z_q, sampled_actions, update_spectral_norm=False
+        ).squeeze(axis=-1).reshape(B, Q_minima_samples)
+        target_q_min = jnp.min(target_next_q, axis=-1) # (B,)
 
         # Compute Bellman recursion target
-        c = safety_cost[None, :]
-        t = terminal[None, :]
         return jax.lax.stop_gradient(
-            jnp.clip(c + discount * (1.0 - c) * (1.0 - t) * selected, 0.0, 1.0)
+            jnp.clip(safety_cost + discount * (1.0 - safety_cost) * (1.0 - terminal) * target_q_min, 0.0, 1.0)
         )
 
     def compute_loss(
             self, 
-            z: jax.Array, # (Batch, d_z)
-            action: jax.Array, # (Batch, d_u)
-            q_target: jax.Array, # (Batch, )
+            z: jax.Array, # (B, d_z)
+            action: jax.Array, # (B, d_u)
+            q_target: jax.Array, # (B, )
             sampled_actions: jax.Array,
             action_bounds: tuple[float, float],
-            ens_mask,
             cql_alpha: float,
             Q_minima_samples: int = 64
         ):
         # Obtain batch size and the number of members of each batch is seen per ensemble member
         batch_size = z.shape[0]
-        denom = jnp.maximum(jnp.sum(ens_mask, axis=1), 1.0)
 
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
         # =================================================================================
-        # q_risk: (M, B). Score safety of actions taken
+        # q_risk_id: (B, ). Score safety of actions taken
         q_risk_id = self(
             z, action, update_spectral_norm=True
         ).squeeze(axis=-1)
 
         # Compute the bellman recursion error
-        se = optax.sigmoid_binary_cross_entropy(q_risk_id, q_target) if self.use_bce else (q_risk_id - q_target) ** 2
-        loss_q_risk_mse = jnp.sum(se * ens_mask, axis=1) / denom
+        bellman_risk_loss = jnp.mean((q_risk_id - q_target) ** 2)
         # =================================================================================
 
         # CQL q loss, pushes up ood actions up
@@ -149,27 +101,25 @@ class SafetyCriticEnsemble(nnx.Module):
         # Calculate safety prediction at each action sample 
         q_risk_sampled = self(
             z_expanded, sampled_actions, update_spectral_norm=False
-        ).squeeze(axis=-1).reshape(self.ensemble_size, batch_size, Q_minima_samples)
+        ).squeeze(axis=-1).reshape(batch_size, Q_minima_samples)
 
         d_u = sampled_actions.shape[-1]
         log_vol = d_u * jnp.log(action_bounds[1] - action_bounds[0])
         q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
 
         # Get CQL loss, pushes seen actions down and unseen actions up
-        cql_risk_loss = jnp.sum((q_risk_ood + q_risk_id) * ens_mask, axis=1) / denom
+        cql_risk_loss = jnp.mean(
+            q_risk_ood + q_risk_id
+        )
         # =================================================================================
 
         # total safety Q loss for each ensemble member then combine into a single loss
-        loss_s = loss_q_risk_mse + (cql_alpha * cql_risk_loss) # (Ensemble,)
-        p_id = nnx.sigmoid(q_risk_id)      if self.use_bce else q_risk_id
-        p_sampled = nnx.sigmoid(q_risk_sampled) if self.use_bce else q_risk_sampled
-        return jnp.mean(loss_s), {
-            "mse_term":     jnp.mean(loss_q_risk_mse),
-            "cql_term":     jnp.mean(cql_risk_loss),
-            "q_prob_data":  jnp.mean(p_id),
-            "q_prob_ood":   jnp.mean(p_sampled),
-            "q_pred_min":   jnp.min(p_id),
-            "q_pred_max":   jnp.max(p_id),
-            "sigma_q_data": jnp.mean(jnp.std(p_id, axis=0)),
-            "sigma_q_ood":  jnp.mean(jnp.std(p_sampled, axis=0)),
+        loss_s = bellman_risk_loss + (cql_alpha * cql_risk_loss)
+        return loss_s, {
+            "bellman_recursion_term":     bellman_risk_loss,
+            "cql_term":     cql_risk_loss,
+            "q_prob_data":  jnp.mean(q_risk_id),
+            "q_prob_ood":   jnp.mean(q_risk_sampled),
+            "q_pred_min":   jnp.min(q_risk_id),
+            "q_pred_max":   jnp.max(q_risk_id)
         }

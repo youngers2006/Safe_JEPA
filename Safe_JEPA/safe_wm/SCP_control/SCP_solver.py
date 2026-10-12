@@ -50,15 +50,17 @@ class ScpSolver():
 
         for h in range(self.horizon):
             # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n
-            constraints.append(self.z[h+1] == 
-                self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h])
+            constraints.append(
+                self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h]
+            )
 
             # Safety constraint: C_k z_k + D_k u_k - nu_k <= tau - r'_k
             constraints.append(self.C[h] @ self.z[h] + self.D[h] @ self.u[h] - self.nu[h] <= 
                 self.tau - self.r_prime[h])
 
             # Action bounding
-            constraints.append(self.u[h] <= u_max) ; constraints.append(self.u[h] >= u_min)
+            constraints.append(self.u[h] <= u_max)
+            constraints.append(self.u[h] >= u_min)
 
             # Epigraph condition: moved action magnitude cost to conditions with epigraph to allow otpimisation
             constraints.append(self.rho_u * cp.sum_squares(self.u[h]) - self.t[h] <= 0)

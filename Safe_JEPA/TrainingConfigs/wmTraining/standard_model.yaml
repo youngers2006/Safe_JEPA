@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "Datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "T8_pointgoal1_c_inf_seed_0"        # one subdir per sweep point
+data_dir: "T1_pointgoal1_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
@@ -9,7 +9,6 @@ epochs: 100
 num_batches: 500        # ~= n_transitions / batch_size
 batch_size: 512
 lr: 3.0e-4
-bootstrap_frac: 1.0 # masking for ensemble critic
 
 # problem 
 d_latent: 32
@@ -51,7 +50,5 @@ RewardParams:
   lipschitz_bound: .inf
 
 SafetyCriticParams:
-  ensemble_size: 1
   hidden_features: [256, 256]
   lipschitz_bound: .inf
-  use_bce: true

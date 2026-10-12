@@ -85,14 +85,6 @@ def main(cfg_filename):
     obs_mean = jnp.mean(data_dict["observations"], axis=0)
     obs_std = jnp.std(data_dict["observations"], axis=0)
 
-    # Create mask for ensemble training
-    # =====================================================================
-    E = cfg["SafetyCriticParams"]["ensemble_size"]
-    n = data_dict["observations"].shape[0]
-
-    ens_mask = (jax.random.uniform(mask_key, (E, n)) < cfg["bootstrap_frac"]).astype(jnp.float32)
-    # =====================================================================
-
     # Setup world model
     world_model = WorldModel(
         cfg,
@@ -109,7 +101,7 @@ def main(cfg_filename):
     metrics_log = []
     for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
-        for i, (batch, idx) in enumerate(tqdm(get_batches(data_dict, cfg["batch_size"], 
+        for i, (batch, _) in enumerate(tqdm(get_batches(data_dict, cfg["batch_size"], 
                 cfg["num_batches"], data_key, epoch), total=cfg["num_batches"], desc=f"Batches", leave=False)):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
@@ -119,7 +111,7 @@ def main(cfg_filename):
             terminals = batch["terminals"]
             metrics = world_model.train_step(
                 obs, next_obs, actions, rewards, safety_costs, terminals, 
-                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i), ens_mask[:, idx]
+                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i)
             )
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)

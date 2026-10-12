@@ -6,7 +6,7 @@ from functools import partial
 
 # import modules
 from .Networks import ValueNet, ValueQNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
-from .Q_safety_critic import SafetyCriticEnsemble, QSafetyCritic
+from .Q_safety_critic import QSafetyCritic
 
 class TrainableBundle(nnx.Module):
     def __init__(self, encoder, dynamics, value_fn, value_Q, safety_critic, reward_fn):
@@ -76,12 +76,12 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.safety_critic = SafetyCriticEnsemble(
+        self.safety_critic = QSafetyCritic(
             cfg=cfg["SafetyCriticParams"],
             rngs=rngs      
         )
         
-        self.target_safety_critic = SafetyCriticEnsemble(
+        self.target_safety_critic = QSafetyCritic(
             cfg=cfg["SafetyCriticParams"],
             rngs=rngs
         )
@@ -190,7 +190,6 @@ class WorldModel(nnx.Module):
         safety_cost: jax.Array, 
         terminal: jax.Array,
         key: jax.Array,
-        ens_mask: jax.Array,
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> dict:
@@ -217,7 +216,7 @@ class WorldModel(nnx.Module):
             minval=action_bounds[0], maxval=action_bounds[1],
         ).reshape(-1, action.shape[-1])
 
-        q_target = self.safety_critic.compute_targets(
+        q_target = self.target_safety_critic.compute_targets(
             self.target_safety_critic, next_z_target, sampled_actions,
             safety_cost, terminal, self.discount, Q_minima_samples,
         )
@@ -300,7 +299,6 @@ class WorldModel(nnx.Module):
                 q_target,
                 sampled_actions,
                 action_bounds,
-                ens_mask,
                 self.cql_alpha,
                 Q_minima_samples
             )
