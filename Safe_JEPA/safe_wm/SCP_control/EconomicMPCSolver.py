@@ -178,6 +178,7 @@ class EconomicSCPSolver():
             dJ_predicted = linear_cost_old - linear_cost_new
             rho = dJ_actual / (dJ_predicted + 1e-8)
 
+            # Trust region resizing based on error
             if rho < self.rho_lower: # Reject u* and decrease TR size
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
             else:

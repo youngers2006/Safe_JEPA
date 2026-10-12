@@ -17,10 +17,15 @@ def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
     lambda_unc = hyperparams['lambda_unc']
 
     def scan_step(z_current, u_current):
-        z_next = nnx.merge(f_graph, f_state)(z_current, u_current, update_spectral_norm=False)
-        reward = nnx.merge(r_graph, r_state)(z_current, u_current, update_spectral_norm=False)
-        q_mu, q_var = nnx.merge(Q_graph, Q_state).get_moments(z_current, u_current, update_spectral_norm=False)
-        q_safe = q_mu + lambda_unc * q_var
+        z_next = nnx.merge(f_graph, f_state)(
+            z_current, u_current, update_spectral_norm=False
+        )
+        reward = nnx.merge(r_graph, r_state)(
+            z_current, u_current, update_spectral_norm=False
+        )
+        q_safe = nnx.merge(Q_graph, Q_state)(
+            z_current, u_current, update_spectral_norm=False
+        )
         return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_safe)
 
     # Scan step function to run it in compiled form over a loop up to the horizon

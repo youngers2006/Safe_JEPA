@@ -110,6 +110,7 @@ class ScpSolver():
             self.Jr_u[h].value = Jr_u_np[h]
 
         try:
+            # Solve optimisation problem with SOCP solver CLARABEL
             self.problem.solve(solver=cp.CLARABEL, warm_start=True)
             status = self.problem.status
 
@@ -121,7 +122,7 @@ class ScpSolver():
             else: # Failed for other reason
                 print(f"Solver Error: Solver exited with status {status}")
                 return self.u_ref.value, self.z_ref.value
-            
+        # If solver crashes then return the reference value and report the crash to the command line
         except cp.SolverError as e:
             print(f"C++ Backend Crashed: {e}")
             return self.u_ref.value, self.z_ref.value
