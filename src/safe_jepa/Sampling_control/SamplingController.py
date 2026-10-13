@@ -2,7 +2,8 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 import numpy as np
-from evaluate_sequences import evaluate_sequences
+
+from evaluate_sequences import evaluate_sequences, _evaluate_sequences
 
 class SamplingController():
     def __init__(self, cfg):
@@ -15,6 +16,7 @@ class SamplingController():
         self.top_k = cfg["top_k"]
         self.temperature = cfg["temperature"]
         self.safety_threshold = cfg["safety_threshold"]
+        self.discount = cfg["discount"]
         self.horizon = cfg["horizon"]
         self.d_u = cfg["d_u"]
         self.u_bounds = cfg["action_bounds"]
@@ -22,7 +24,7 @@ class SamplingController():
         self.var_min = cfg["var_min"]
         self.var_max = cfg["var_max"]
 
-    def sample_sequences(self, q, num_seqs, key):
+    def sample_sequences(self, q: dict, num_seqs: int, key):
         eps = jax.random.normal(key, (num_seqs, *q["mean"].shape))
         seqs = q["mean"] + eps * jnp.sqrt(q["variance"])
         return jnp.clip(seqs, self.u_bounds[0], self.u_bounds[1])
@@ -47,7 +49,11 @@ class SamplingController():
 
         return elite_idx, w, any_feas
 
-    def weight_fn(self, values):
+    def weight_fn(self, values, temperature):
+        # MPPI: exponential weighting of elites by score
+        if self.sample_method == "MPPI":
+            return jnp.exp((values - jnp.max(values)) / temperature)
+        # CEM: uniform weighting
         return jnp.ones(shape=values.shape, dtype=values.dtype)
 
     def init_params(self):
@@ -59,7 +65,7 @@ class SamplingController():
 
     def shift_q(self, q):
         return {
-            "mean": jnp.concatenate([q["mean"][1:], q["mean"][-1]], axis=0),
+            "mean": jnp.concatenate([q["mean"][1:], q["mean"][-1:]], axis=0),
             "variance": jnp.full_like(q["variance"], self.var_init)
         }
 
@@ -67,7 +73,7 @@ class SamplingController():
         elites = u_seqs[elite_idx] # (k, N, d_u)
         wk = w[:, None, None] # (k, 1, 1)
         mean = jnp.sum(wk * elites, axis=0) # (N, d_u)
-        var = jnp.sum(wk * jnp.square(elites - q["mean"]), axis=0) # (N, d_u)
+        var = jnp.sum(wk * jnp.square(elites - mean), axis=0) # (N, d_u)
         return {"mean": mean, "variance": jnp.clip(var, self.var_min, self.var_max)}
 
     def step(self, z_c, wm_networks, key, q_prev = None) -> jax.Array:
@@ -77,12 +83,12 @@ class SamplingController():
             q, key = carry
             key, sub = jax.random.split(key)
 
-            action_seqs = self.sample_sequences(q, self.num_seqs)
+            action_seqs = self.sample_sequences(q, self.num_seqs, sub)
             seq_reward, seq_feasible, seq_viols = evaluate_sequences(
-                z_c, action_seqs, *wm_networks, self.safety_threshold
+                z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount
             )
             elite_idx, weights, any_feas = self.rank_policies(
-                action_seqs, seq_reward, seq_feasible, seq_viols, self.top_k
+                seq_reward, seq_feasible, seq_viols, self.top_k
             )
             q = self.update_params(
                 q, action_seqs, elite_idx, weights
@@ -93,43 +99,10 @@ class SamplingController():
             scan_step, (q0, key), None, length=self.optimisation_iters 
         )
 
-        _, mean_feas, _ = evaluate_sequences(
-            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold
+        _, mean_feas, _ = _evaluate_sequences(
+            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount
         )
         mean_ok = mean_feas[0]
         u_seq = jnp.where(mean_ok, q_best["mean"], best_hist[-1])
 
         return u_seq[0], q_best, {"any_feasible": feasibility_history[-1], "mean_feasible": mean_ok}
-
-@nnx.jit
-def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold):
-    # Get computation graphs of the networks for lax scan
-    r_graph, r_state = nnx.split(r_fn)
-    f_graph, f_state = nnx.split(f_fn)
-    Q_graph, Q_state = nnx.split(Q_fn)
-
-    # setup lax scan
-    def scan_step(z_current, u_current):
-        z_next = nnx.merge(f_graph, f_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        reward = nnx.merge(r_graph, r_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        q_safe = nnx.merge(Q_graph, Q_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        return z_next, (z_next, reward, q_safe)
-
-    # Scan the function and rollout trajectory in the world model
-    z_terminal, (z_traj, rewards, q_safe) = lax.scan(scan_step, z0, u_seq) # (leaves us with J sequences)
-
-    # Total reward for each trajectory
-    traj_reward = jnp.sum(rewards, axis=0)
-
-    # Total Feasibility
-    violations = (q_safe > safety_threshold)
-    traj_violations = jnp.sum(violations, axis=-1)
-    traj_feasibility = (traj_violations == 0.0)
-
-    return traj_reward, traj_feasibility, violations

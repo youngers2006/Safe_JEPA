@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 
-from nn.layers import SpectralNormLinear, NormStat, SpectralStat
-from nn.stems import ConvStem, MLPStem
+from ..nn.variables import NormStat
+from ..nn.stems import ConvStem, MLPStem
 
 class Encoder(nnx.Module):
     def __init__(self, cfg, mu, sigma, rngs: nnx.Rngs):

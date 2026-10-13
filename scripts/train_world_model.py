@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import orbax.checkpoint as ocp
-import numpy as np
 import h5py
 import yaml
 from functools import partial
@@ -10,7 +9,7 @@ from tqdm import tqdm
 from pathlib import Path
 import csv
 
-from safe_wm.World_Model.WorldModel import WorldModel
+from ..src.safe_jepa.world_model.world_model import WorldModel
 
 def resolve_dims(cfg, obs_dim, act_dim):
     d_z = cfg["d_latent"]

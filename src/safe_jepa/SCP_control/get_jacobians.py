@@ -4,8 +4,7 @@ import flax.nnx as nnx
 import cvxpy as cp
 import numpy as np
 
-from World_Model.Networks import RewardPredictor, DynamicsPredictor, ValueNet
-from World_Model.Q_safety_critic import QSafetyCritic
+from ..nn.mlp import RewardPredictor, DynamicsPredictor, ValueNet, QSafetyCritic
 
 @nnx.jit
 def get_jacobians(

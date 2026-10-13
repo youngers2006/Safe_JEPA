@@ -5,8 +5,9 @@ import optax
 from functools import partial
 
 # import modules
-from .Networks import ValueNet, ValueQNet, Encoder, DynamicsPredictor, RewardPredictor, SpectralStat
-from .Q_safety_critic import QSafetyCritic
+from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor, QSafetyCritic
+from ..nn.variables import SpectralStat
+from .encoder import Encoder
 
 class TrainableBundle(nnx.Module):
     def __init__(self, encoder, dynamics, value_fn, value_Q, safety_critic, reward_fn):

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 
 @nnx.jit
-def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
+def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams: dict) -> jax.Array:
     # Get computation graphs of the networks for lax scan
     r_graph, r_state = nnx.split(r_fn)
     f_graph, f_state = nnx.split(f_fn)
@@ -14,9 +14,8 @@ def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
     w_slack = hyperparams['w_slack']
     rho_u = hyperparams['rho_u']
     gamma = hyperparams['discount']
-    lambda_unc = hyperparams['lambda_unc']
 
-    def scan_step(z_current, u_current):
+    def scan_step(z_current: jax.Array, u_current: jax.Array) -> tuple[jax.Array, tuple[jax.Array, ...]]:
         z_next = nnx.merge(f_graph, f_state)(
             z_current, u_current, update_spectral_norm=False
         )
@@ -29,14 +28,14 @@ def nonlinear_cost_fn(z, u, r_fn, v_fn, f_fn, Q_fn, hyperparams):
         return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_safe)
 
     # Scan step function to run it in compiled form over a loop up to the horizon
-    z_terminal, (z_history, r_history, q_safe_history) = jax.lax.scan(scan_step, z, u)
+    z_terminal, (z_history, r_history, q_safe_history) = jax.lax.scan(scan_step, z[0], u)
 
     # Compute discount vector
     horizon = u.shape[0]
     discount_vec = gamma ** jnp.arange(horizon)
 
     # Reward cost
-    discounted_reward = jnp.sum(discount_vec * r_history)
+    discounted_reward = jnp.sum(discount_vec * r_history.squeeze(-1))
 
     # Safety cost
     safe_errors = jnp.maximum(0.0, q_safe_history - tau)

@@ -1,5 +1,4 @@
 import jax
-import jax.numpy as jnp
 import flax.nnx as nnx
 
 class ConvStem(nnx.Module):
@@ -30,14 +29,6 @@ class MLPStem(nnx.Module):
         self.layer_norm2 = nnx.LayerNorm(d_hidden, use_scale=True, use_bias=True, epsilon=1e-5, rngs=rngs)
 
     def __call__(self, x: jax.Array) -> jax.Array:
-        x = nnx.silu(
-            self.layer_norm1(
-                self.layer1(x)
-            )
-        )
-        x = nnx.silu(
-            self.layer_norm2(
-                self.layer2(x)
-            )
-        )
+        x = nnx.silu(self.layer_norm1(self.layer1(x)))
+        x = nnx.silu(self.layer_norm2(self.layer2(x)))
         return x

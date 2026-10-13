@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
 
-from SCP_control.SCP_solver import SCPSolver
-from SCP_control.get_jacobians import get_jacobians
-from SCP_control.nonlinear_cost_fn import nonlinear_cost_fn
+from .SCP_solver import SCPSolver
+from .get_jacobians import get_jacobians
+from .nonlinear_cost_fn import nonlinear_cost_fn
 
 class SCPController():
     def __init__(
@@ -29,7 +29,7 @@ class SCPController():
         # Solver parameters
         self.SCP_solver = SCP_solver
         self.horizon = horizon
-        self.hyperparams = hyperparams
+        self.hyperparams = dict(hyperparams) # create copy so original dict is not effected
         self.scp_iters = scp_iters
         self.tol = tol
 
@@ -107,27 +107,20 @@ class SCPController():
         if self.is_first_step:
             # Initial u is zeros
             u_ref = self.u_prev
-
-            # Initialise trajectory
-            z_ref_list = [z_c]
-            z_curr = z_c
-            for i in range(self.horizon):
-                z_curr = f_fn(z_curr, jnp.array(u_ref[i, :]), update_spectral_norm=False)
-                z_ref_list.append(z_curr)
-
-            z_ref = np.asarray(jnp.stack(z_ref_list))
             self.is_first_step = False
         else:
             # Shift actions by 1 and set last action to 0
             u_ref = np.roll(self.u_prev, shift=-1, axis=0)
             u_ref[-1, :] = 0.0
 
-            # Shift states forward by 1 and set last state to the same as previous
-            z_ref = np.roll(self.z_prev, shift=-1, axis=0)
-            z_ref[-1, :] = z_ref[-2, :]
+        # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
+        z_ref_list = [z_c]
+        z_curr = z_c
+        for i in range(self.horizon):
+            z_curr = f_fn(z_curr, jnp.array(u_ref[i, :]), update_spectral_norm=False)
+            z_ref_list.append(z_curr)
 
-            # Anchor states to observation
-            z_ref[0, :] = z_c
+        z_ref = np.asarray(jnp.stack(z_ref_list))
 
         rho = -np.inf
         for _ in range(self.scp_iters):
@@ -138,8 +131,7 @@ class SCPController():
                 r_fn=r_fn,
                 v_fn=v_fn,
                 f_fn=f_fn,
-                Q_fn=Q_fn,
-                lambda_unc=self.hyperparams["lambda_unc"]
+                Q_fn=Q_fn
             )
 
             # Conversion to numpy
