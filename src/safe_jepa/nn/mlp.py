@@ -1,3 +1,4 @@
+from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
@@ -150,7 +151,7 @@ class QSafetyCritic(nnx.Module):
 
     def compute_targets(
         self,
-        target_Q: "QSafetyCritic",
+        target_Q: QSafetyCritic,
         next_z_target: jax.Array,     # (B, d_z)
         sampled_actions: jax.Array,   # (B*K, d_u)
         safety_cost: jax.Array,       # (B,)

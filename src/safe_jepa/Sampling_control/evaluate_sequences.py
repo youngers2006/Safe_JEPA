@@ -36,5 +36,3 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold):
     traj_feasibility = (traj_violations == 0.0)
 
     return traj_reward, traj_feasibility, violations
-
-

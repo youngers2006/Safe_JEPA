@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
 
-class ScpSolver():
+class SCPSolver():
     def __init__(self, horizon: int, d_z: int, d_u: int, u_min:float = -1.0, u_max: float = 1.0):
         # Constants
         self.horizon = horizon

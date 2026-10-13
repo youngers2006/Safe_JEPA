@@ -3,16 +3,16 @@ import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
 
-from SCP_control.SCP_solver import ScpSolver
+from SCP_control.SCP_solver import SCPSolver
 from SCP_control.get_jacobians import get_jacobians
 from SCP_control.nonlinear_cost_fn import nonlinear_cost_fn
 
-class EconomicSCPSolver():
+class SCPController():
     def __init__(
             self, 
             jax_extractor_fn: get_jacobians, # Jit compiled function
             nonlinear_cost_fn: nonlinear_cost_fn, # Jit compiled function
-            SCP_solver: ScpSolver, 
+            SCP_solver: SCPSolver, 
             horizon: int, 
             d_z: int, 
             d_u: int, 
