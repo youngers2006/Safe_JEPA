@@ -9,7 +9,7 @@ from tqdm import tqdm
 from pathlib import Path
 import csv
 
-from ..safe_jepa.world_model.world_model import WorldModel
+from safe_jepa.world_model.world_model import WorldModel
 
 def resolve_dims(cfg, obs_dim, act_dim):
     d_z = cfg["d_latent"]
