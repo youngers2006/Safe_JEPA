@@ -9,7 +9,7 @@ from tqdm import tqdm
 from pathlib import Path
 import csv
 
-from safe_jepa.world_model.world_model import WorldModel
+from ..src.safe_jepa.world_model.world_model import WorldModel
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -139,5 +139,5 @@ def main(cfg_filename):
     return 0
 
 if __name__ == "__main__":
-    main(ROOT / "configs/wmTraining/standard_model.yaml")
-    main(ROOT / "configs/wmTraining/regularity_constrained_model.yaml")
+    main("configs/wmTraining/standard_model.yaml")
+    main("configs/wmTraining/regularity_constrained_model.yaml")
