@@ -1,0 +1,3 @@
+horizon: 10 # planning horizon (steps)
+d_u: 2 # action dimension (2 for PointGoal)
+safety_threshold: 0.1 # Safety probability threshold              

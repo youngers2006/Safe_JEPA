@@ -1,0 +1,8 @@
+controller: "MPPI"
+opt_iters: 6 # optimisation iterations per step
+num_seqs: 512 # action sequences sampled per iteration
+top_k: 64 # elites used to refit the sampling distribution
+temperature: 0.5 # elite weights are exp((score - best) / temperature)
+init_std_frac: 0.5 # initial std as a fraction of the action range
+var_min: 0.0025 # variance (not std) bounds: 0.0025 is std 0.05
+var_max: 1.0
