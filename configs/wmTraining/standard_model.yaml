@@ -5,7 +5,7 @@ data_dir: "T1_pointgoal1_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
-epochs: 100
+epochs: 150
 num_batches: 500        # ~= n_transitions / batch_size
 batch_size: 512
 lr: 3.0e-4
@@ -24,7 +24,7 @@ lambda_s: 1.0
 lambda_var: 1.0
 lambda_cov: 0.04
 gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
-alpha: 0.025  # 0.05 when no bce 0.025 when bce    # CQL weight
+alpha: 0.05   # CQL weight
 ER_tau: 0.7
 
 tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
