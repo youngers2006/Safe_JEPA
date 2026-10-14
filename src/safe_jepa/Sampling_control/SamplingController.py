@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from jax import lax
 import numpy as np
 
-from evaluate_sequences import evaluate_sequences, _evaluate_sequences
+from .evaluate_sequences import evaluate_sequences, _evaluate_sequences
 
 class SamplingController():
     def __init__(self, cfg: dict):
