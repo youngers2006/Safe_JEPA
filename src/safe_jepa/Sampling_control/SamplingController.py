@@ -6,20 +6,28 @@ import numpy as np
 from evaluate_sequences import evaluate_sequences, _evaluate_sequences
 
 class SamplingController():
-    def __init__(self, cfg):
-        if cfg["sample_method"] != "CEM" and cfg["sample_method"] != "MPPI":
+    def __init__(self, cfg: dict):
+        # Sampling method
+        if cfg["controller"] not in ("CEM", "MPPI"):
             raise ValueError(f"No sampling methods of type: {cfg['sample_method']}")
+        self.sample_method = cfg["controller"]
 
-        self.sample_method = cfg["sample_method"]
-        self.optimisation_iters = cfg["opt_iters"]
-        self.num_seqs = cfg["num_seqs"]
-        self.top_k = cfg["top_k"]
-        self.temperature = cfg["temperature"]
-        self.safety_threshold = cfg["safety_threshold"]
-        self.discount = cfg["discount"]
+        # Problem dimensions
         self.horizon = cfg["horizon"]
         self.d_u = cfg["d_u"]
         self.u_bounds = cfg["action_bounds"]
+
+        # Objective
+        self.safety_threshold = cfg["safety_threshold"]
+        self.discount = cfg["discount"]
+
+        # Optimisation loop settings
+        self.top_k = cfg["top_k"]
+        self.temperature = cfg["temperature"]
+        self.optimisation_iters = cfg["opt_iters"]
+        self.num_seqs = cfg["num_seqs"]
+
+        # Sampling distribution variance
         self.var_init = (cfg["init_std_frac"] * (self.u_bounds[1] - self.u_bounds[0])) ** 2
         self.var_min = cfg["var_min"]
         self.var_max = cfg["var_max"]

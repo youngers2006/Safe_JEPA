@@ -3,46 +3,54 @@ import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
 
-from .SCP_solver import SCPSolver
+from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn
 
 class SCPController():
-    def __init__(
-            self, 
-            jax_extractor_fn: get_jacobians, # Jit compiled function
-            nonlinear_cost_fn: nonlinear_cost_fn, # Jit compiled function
-            SCP_solver: SCPSolver, 
-            horizon: int, 
-            d_z: int, 
-            d_u: int, 
-            hyperparams: dict, 
-            scp_iters: int = 3, 
-            rho_lower: float = 0.25,
-            rho_upper: float = 0.75,
-            tol: float = 1e-3
-        ):
+    def __init__(self, cfg: dict):
+        # Problem dimensions
+        self.horizon = cfg["horizon"]
+        self.d_z = cfg["d_z"]
+        self.d_u = cfg["d_u"]
+        self.u_bounds = cfg["action_bounds"]
+
+        # Objective weights, stored as a dict
+        self.hyperparams = {
+            "discount": cfg["discount"],
+            "tau": cfg["safety_threshold"],
+            "rho_u": cfg["rho_u"],
+            "w_slack": cfg["w_slack"],
+            "w_prox": cfg["w_prox"]
+        }
+
+        # SCP loop settings
+        self.scp_iters = cfg["scp_iters"]
+        self.tol = cfg["tol"]
+
         # Jitted function objects
-        self.jax_extractor_fn = jax_extractor_fn
+        self.jac_extractor_fn = get_jacobians
         self.nonlinear_cost_fn = nonlinear_cost_fn
 
         # Solver parameters
-        self.SCP_solver = SCP_solver
-        self.horizon = horizon
-        self.hyperparams = dict(hyperparams) # create copy so original dict is not effected
-        self.scp_iters = scp_iters
-        self.tol = tol
+        self.SCP_solver = SCPSolver(
+            self.horizon, 
+            self.d_z, 
+            self.d_u, 
+            self.u_bounds[0], 
+            self.u_bounds[1]
+        )
 
         # Flag to trigger initial warm start
         self.is_first_step = True
 
         # TR dynamic resizing trigger bounds
-        self.rho_lower = rho_lower
-        self.rho_upper = rho_upper
+        self.rho_lower = cfg["rho_lower"]
+        self.rho_upper = cfg["rho_upper"]
         
         # Memory buffer for trajectories to use in warm starting
-        self.u_prev = np.zeros((horizon, d_u))
-        self.z_prev = np.zeros((horizon + 1, d_z))
+        self.u_prev = np.zeros((self.horizon, self.d_u))
+        self.z_prev = np.zeros((self.horizon + 1, self.d_z))
 
     def linear_cost_fn(self, system_matrices: tuple[np.ndarray, ...], z: np.ndarray, u: np.ndarray) -> np.ndarray:
         # Extract system matrices
@@ -125,7 +133,7 @@ class SCPController():
         rho = -np.inf
         for _ in range(self.scp_iters):
             # Extract matrices from world model
-            jax_matrices = self.jax_extractor_fn(
+            jax_matrices = self.jac_extractor_fn(
                 z_ref=jnp.array(z_ref), 
                 u_ref=jnp.array(u_ref),
                 r_fn=r_fn,
