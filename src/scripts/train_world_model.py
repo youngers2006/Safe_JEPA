@@ -8,6 +8,12 @@ from functools import partial
 from tqdm import tqdm
 from pathlib import Path
 import csv
+import sys
+
+# Repo root (this file is src/scripts/train_world_model.py), config/dataset/save paths are relative to it
+# Putting src/ on the path lets safe_jepa be imported no matter where the script is launched from
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
 
 from safe_jepa.world_model.world_model import WorldModel
 
@@ -58,14 +64,14 @@ def get_batches(data_dict, batch_size, N, key, epoch):
 
 def main(cfg_filename):
     # Load training config
-    with open(cfg_filename, 'r') as f:
+    with open(ROOT / cfg_filename, 'r') as f:
         cfg = yaml.load(f, Loader=yaml.FullLoader)
 
     # Initialise datadict
     data_dict = {}
 
     # Load dataset (assume dataset has been processed)
-    with h5py.File(cfg["dataset_filename"], 'r') as f:
+    with h5py.File(ROOT / cfg["dataset_filename"], 'r') as f:
         for k in list(f.keys()):
             data_dict[k] = f[k][:]
 
@@ -118,7 +124,7 @@ def main(cfg_filename):
 
     print("Saving Metrics")
     # Save training metrics
-    save_path_metrics = (Path(__file__).parent / f'SaveData/{cfg["data_dir"]}/Metrics').resolve()
+    save_path_metrics = ROOT / "src/save_data" / cfg["data_dir"] / "Metrics"
     save_path_metrics.mkdir(parents=True, exist_ok=True)
     write_metrics(metrics_log, save_path_metrics / "metrics.csv")
     print("Metrics Saved")
@@ -127,7 +133,7 @@ def main(cfg_filename):
     # Save the trained model
     _, state = nnx.split(world_model)
     checkpointer = ocp.StandardCheckpointer()
-    save_path_model = (Path(__file__).parent / f'SaveData/{cfg["data_dir"]}/Model').resolve()
+    save_path_model = ROOT / "src/save_data" / cfg["data_dir"] / "Model"
     save_path_model.mkdir(parents=True, exist_ok=True)
     checkpointer.save(save_path_model / 'state', state)
     checkpointer.wait_until_finished()
