@@ -11,8 +11,6 @@ import csv
 
 from ..src.safe_jepa.world_model.world_model import WorldModel
 
-ROOT = Path(__file__).resolve().parents[1]
-
 def resolve_dims(cfg, obs_dim, act_dim):
     d_z = cfg["d_latent"]
     cfg["EncoderParams"]["obs_type"] = cfg["obs_type"]
@@ -67,7 +65,7 @@ def main(cfg_filename):
     data_dict = {}
 
     # Load dataset (assume dataset has been processed)
-    with h5py.File(ROOT / cfg["dataset_filename"], 'r') as f:
+    with h5py.File(cfg["dataset_filename"], 'r') as f:
         for k in list(f.keys()):
             data_dict[k] = f[k][:]
 
