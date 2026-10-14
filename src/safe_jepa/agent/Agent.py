@@ -9,14 +9,14 @@ from ..SCP_control.SCPController import SCPController
 from ..Sampling_control.SamplingController import SamplingController
 
 class SafeJEPAAgent:
-    def __init__(self, cfg: dict, obs_mean: jax.Array, obs_std: jax.Array, rngs: nnx.Rngs):
+    def __init__(self, cfg: dict, obs_mean: jax.Array, obs_std: jax.Array, *, rngs: nnx.Rngs):
         # Controller choice
         if cfg["controller"] not in ("CEM", "SCP", "MPPI"):
             raise ValueError(f"No controller of type {cfg['controller']}")
         self.controller_type = cfg["controller"]
 
         # Instantiate world model
-        self.world_model = WorldModel(cfg, obs_mean, obs_std, rngs)
+        self.world_model = WorldModel(cfg, obs_mean, obs_std, rngs=rngs)
 
         # Store tuple of references to wm networks
         self.wm_networks = (
