@@ -74,12 +74,12 @@ class SCPSolver():
             constraints.append(self.rho_u * cp.sum_squares(self.u[h]) - self.t[h] <= 0)
 
             # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
-            objective_terms.append(self.t[h] - (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
+            objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
                     + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
-        objective_terms.append(-(self.Jv_z @ self.z[self.horizon]))
+        objective_terms.append(-(self.discount ** (self.horizon)) * (self.Jv_z @ self.z[self.horizon]))
 
         # Setup problem with cvxpy
         self.problem = cp.Problem(cp.Minimize(cp.sum(objective_terms)), constraints)
