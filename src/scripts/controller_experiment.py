@@ -10,13 +10,14 @@ import numpy as np
 import yaml
 import orbax.checkpoint as ocp
 import safety_gymnasium as sgym
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from safe_jepa.agent.Agent import SafeJEPAAgent
-from .train_world_model import resolve_dims
+from train_world_model import resolve_dims
 
 def load_cfg(*paths):
     # Merge YAMLs in order; refuse a key defined in more than one file so nothing is silently overridden
@@ -64,7 +65,7 @@ def run_sim(agent: SafeJEPAAgent, env: str, seed: int, max_steps: int) -> dict:
     next_obs_log = []
     done_log = []
     
-    for t in range(max_steps):
+    for t in tqdm(range(max_steps), desc="Episode Timesteps", leave=False):
         # Time action selection for analysis
         start = time.perf_counter()
         u = agent.act(obs)
@@ -135,7 +136,7 @@ def run_experiment(
         yaml.safe_dump(cfg, f, sort_keys=False)
 
     rows = []
-    for seed in seeds:
+    for seed in tqdm(seeds, desc="Experiment Number", leave=True):
         summary, trajectory = run_sim(agent, env, seed, cfg["sim_max_steps"])
         rows.append({"world_model": cfg["data_dir"], "controller": cfg["controller"], **summary})
         print(rows[-1], flush=True)
@@ -152,7 +153,21 @@ if __name__ == "__main__":
     run_experiment(
         seeds=list(range(20)),
         wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        controller_cfg_filename="configs/Planner/scp.yaml",
+        common_cfg_filename="configs/Planner/common.yaml",
+        env_name="SafetyPointGoal1-v0"
+    )
+    run_experiment(
+        seeds=list(range(20)),
+        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
         controller_cfg_filename="configs/Planner/cem.yaml",
+        common_cfg_filename="configs/Planner/common.yaml",
+        env_name="SafetyPointGoal1-v0"
+    )
+    run_experiment(
+        seeds=list(range(20)),
+        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        controller_cfg_filename="configs/Planner/mppi.yaml",
         common_cfg_filename="configs/Planner/common.yaml",
         env_name="SafetyPointGoal1-v0"
     )
