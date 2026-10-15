@@ -110,6 +110,15 @@ class SCPController():
         )
         return np.asarray(cost_jax)
 
+    def rollout(self, z_c: jax.Array, u: np.ndarray, f_fn):
+        # Initialise the trajectory
+        z_list = [z_c]
+
+        # Roll the action sequence through the world model
+        for i in range(self.horizon):
+            z_list.append(f_fn(z_list[-1], jnp.array(u[i, :]), update_spectral_norm=False))
+        return np.asarray(jnp.stack(z_list))
+
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
@@ -127,13 +136,7 @@ class SCPController():
             u_ref[-1, :] = 0.0
 
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
-        z_ref_list = [z_c]
-        z_curr = z_c
-        for i in range(self.horizon):
-            z_curr = f_fn(z_curr, jnp.array(u_ref[i, :]), update_spectral_norm=False)
-            z_ref_list.append(z_curr)
-
-        z_ref = np.asarray(jnp.stack(z_ref_list))
+        z_ref = self.rollout(z_c, u_ref, f_fn)
 
         rho = -np.inf
         for _ in range(self.scp_iters):
@@ -190,9 +193,9 @@ class SCPController():
                 # Calculate change in u
                 delta_u = np.max(np.abs(u_opt - u_ref))
 
-                # Update reference
+                # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
-                z_ref = z_opt
+                z_ref = self.rollout(z_c, u_ref, f_fn)
 
                 # Check if TR must be resized
                 if rho > self.rho_upper:

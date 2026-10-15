@@ -79,7 +79,7 @@ class SCPSolver():
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
-        objective_terms.append(-(self.discount ** (self.horizon)) * (self.Jv_z @ self.z[self.horizon]))
+        objective_terms.append(-(self.discount ** self.horizon) * (self.Jv_z @ self.z[self.horizon]))
 
         # Setup problem with cvxpy
         self.problem = cp.Problem(cp.Minimize(cp.sum(objective_terms)), constraints)
@@ -135,6 +135,6 @@ class SCPSolver():
                 print(f"Solver Error: Solver exited with status {status}")
                 return self.u_ref.value, self.z_ref.value
         # If solver crashes then return the reference value and report the crash to the command line
-        except cp.SolverError as e:
+        except Exception as e:
             print(f"C++ Backend Crashed: {e}")
             return self.u_ref.value, self.z_ref.value
