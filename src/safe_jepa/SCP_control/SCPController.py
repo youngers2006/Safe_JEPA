@@ -35,9 +35,10 @@ class SCPController():
 
         # Solver parameters
         self.SCP_solver = SCPSolver(
-            self.horizon, 
+            self.horizon,
             self.d_z, 
             self.d_u, 
+            self.hyperparams['discount'],
             self.u_bounds[0], 
             self.u_bounds[1]
         )
