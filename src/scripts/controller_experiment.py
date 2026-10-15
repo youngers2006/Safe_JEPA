@@ -1,7 +1,6 @@
 import sys
 import csv
 import time
-import argparse
 from pathlib import Path
 
 import jax
@@ -14,6 +13,7 @@ import safety_gymnasium as sgym
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from ..safe_jepa.agent.Agent import SafeJEPAAgent
 from .train_world_model import resolve_dims
@@ -36,7 +36,7 @@ def make_agent(wm_cfg: str, common_cfg: str, planner_cfg: str, obs_dim: int):
     cfg = resolve_dims(cfg, obs_dim, cfg["d_u"])
 
     # Placeholder obs stats are fine: restoring the checkpoint overwrites them with the saved ones
-    agent = SafeJEPAAgent(cfg, jnp.zeros(obs_dim), jnp.ones(obs_dim), nnx.Rngs(cfg["seed"]))
+    agent = SafeJEPAAgent(cfg, jnp.zeros(obs_dim), jnp.ones(obs_dim), rngs=nnx.Rngs(cfg["seed"]))
 
     # Load the trained world model saved by train_world_model.py
     ckpt_path = ROOT / "src/save_data" / cfg["data_dir"] / "Model/state"
@@ -90,24 +90,36 @@ def run_sim(agent: SafeJEPAAgent, env: str, seed: int, max_steps: int) -> dict:
         else:
             obs = next_obs
 
-    return {
-        "actions": actions,
-        "obs": obs_log,
-        "next_obs": next_obs_log,
-        "violations": viols,
-        "safety_costs": safety_costs,
-        "rewards": rewards,
+    summary = {
+        "seed": seed,
+        "steps": t + 1,
         "return": float(ep_return),
-        "plan_times": plan_times,
-        "done_log": done_log
+        "violated": bool(viols[-1]),
+        "plan_time_s": float(np.median(plan_times))
     }
 
-def run_experiment(seeds, wm_cfg_filename, controller_cfg_filename, common_cfg_filename, env_name: str, render_mode: str = None):
+    trajectory =  {
+        "actions": np.array(actions),
+        "obs": np.array(obs_log),
+        "next_obs": np.array(next_obs_log),
+        "violations": np.array(viols),
+        "safety_costs": np.array(safety_costs),
+        "rewards": np.array(rewards),
+        "plan_times": np.array(plan_times),
+        "done_log": np.array(done_log)
+    }
+    return summary, trajectory
+
+def run_experiment(
+        seeds, 
+        wm_cfg_filename, 
+        controller_cfg_filename, 
+        common_cfg_filename, 
+        env_name: str, 
+        render_mode: str = None
+    ):
     # Setup env and agent
-    if render_mode is not None:
-        env = sgym.make(env_name, render_mode)
-    else:
-        env = sgym.make(env_name)
+    env = sgym.make(env_name, render_mode=render_mode)
 
     # Setup agent
     agent, cfg = make_agent(wm_cfg_filename, common_cfg_filename, controller_cfg_filename, env.observation_space.shape[0])
@@ -115,16 +127,19 @@ def run_experiment(seeds, wm_cfg_filename, controller_cfg_filename, common_cfg_f
     # Setup directories
     out_dir = ROOT / "src/save_data/experiments" / cfg["data_dir"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"{cfg["controller"]}_seeds_{seeds[0]}-{seeds[-1]}.csv"
+    out_file = out_dir / f"{cfg['controller']}_seeds_{seeds[0]}-{seeds[-1]}.csv"
 
     # Save the exact merged config next to the results
-    with open(out_dir / f"{cfg["controller"]}_config.yaml", "w") as f:
+    with open(out_dir / f"{cfg['controller']}_config.yaml", "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
 
     rows = []
-    for seed in range(len(seeds)):
-        rows.append({"world_model": cfg["data_dir"], "controller": cfg["controller"], **run_sim(agent, env, seed, cfg["sim_max_steps"])})
+    for seed in seeds:
+        summary, trajectory = run_sim(agent, env, seed, cfg["sim_max_steps"])
+        rows.append({"world_model": cfg["data_dir"], "controller": cfg["controller"], **summary})
         print(rows[-1], flush=True)
+
+        np.savez_compressed(out_dir / f"{cfg['controller']}_seed_{seed}.npz", **trajectory)
 
         # Rewrite after every episode so a killed job keeps the episodes it finished
         with open(out_file, "w", newline="") as f:
@@ -133,11 +148,10 @@ def run_experiment(seeds, wm_cfg_filename, controller_cfg_filename, common_cfg_f
             writer.writerows(rows)
 
 if __name__ == "__main__":
-    wm_cfg_filename = ""
-    common_cfg_filename = ""
-    planner_cfg_filename = ""
-    env_name = ""
-    render_mode = ""
-
-    seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    run_experiment(seeds, wm_cfg_filename, common_cfg_filename, planner_cfg_filename, env_name, render_mode)
+    run_experiment(
+        seeds=list(range(20)),
+        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        controller_cfg_filename="configs/Planner/cem.yaml",
+        common_cfg_filename="configs/Planner/common.yaml",
+        env_name="SafetyPointGoal1-v0"
+    )
