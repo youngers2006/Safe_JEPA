@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
-from ..safe_jepa.agent.Agent import SafeJEPAAgent
+from safe_jepa.agent.Agent import SafeJEPAAgent
 from .train_world_model import resolve_dims
 
 def load_cfg(*paths):
@@ -78,6 +78,7 @@ def run_sim(agent: SafeJEPAAgent, env: str, seed: int, max_steps: int) -> dict:
         # Log results
         rewards.append(reward)
         viols.append(viol)
+        done_log.append((done or viol))
         safety_costs.append(cost)
         actions.append(u)
         obs_log.append(obs)
