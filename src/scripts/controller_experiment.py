@@ -152,21 +152,21 @@ def run_experiment(
 if __name__ == "__main__":
     run_experiment(
         seeds=list(range(20)),
-        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        wm_cfg_filename="configs/wmTraining/regularity_constrained_model.yaml",
         controller_cfg_filename="configs/Planner/scp.yaml",
         common_cfg_filename="configs/Planner/common.yaml",
         env_name="SafetyPointGoal1-v0"
     )
     run_experiment(
         seeds=list(range(20)),
-        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        wm_cfg_filename="configs/wmTraining/regularity_constrained_model.yaml",
         controller_cfg_filename="configs/Planner/cem.yaml",
         common_cfg_filename="configs/Planner/common.yaml",
         env_name="SafetyPointGoal1-v0"
     )
     run_experiment(
         seeds=list(range(20)),
-        wm_cfg_filename="configs/wmTraining/standard_model.yaml",
+        wm_cfg_filename="configs/wmTraining/regularity_constrained_model.yaml",
         controller_cfg_filename="configs/Planner/mppi.yaml",
         common_cfg_filename="configs/Planner/common.yaml",
         env_name="SafetyPointGoal1-v0"

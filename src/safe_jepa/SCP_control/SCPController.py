@@ -23,6 +23,7 @@ class SCPController():
             "w_slack": cfg["w_slack"],
             "w_prox": cfg["w_prox"]
         }
+        self.w_prox_init = cfg["w_prox"]
 
         # SCP loop settings
         self.scp_iters = cfg["scp_iters"]
@@ -111,6 +112,9 @@ class SCPController():
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
+
+        # Reset w_prox to prevent it becoming too extreme
+        self.hyperparams['w_prox'] = self.w_prox_init
 
         if self.is_first_step:
             # Initial u is zeros
