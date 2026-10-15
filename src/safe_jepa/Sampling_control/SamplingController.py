@@ -20,6 +20,7 @@ class SamplingController():
         # Objective
         self.safety_threshold = cfg["safety_threshold"]
         self.discount = cfg["discount"]
+        self.rho_u = cfg["rho_u"]
 
         # Optimisation loop settings
         self.top_k = cfg["top_k"]
@@ -93,7 +94,7 @@ class SamplingController():
 
             action_seqs = self.sample_sequences(q, self.num_seqs, sub)
             seq_reward, seq_feasible, seq_viols = evaluate_sequences(
-                z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount
+                z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount, self.rho_u
             )
             elite_idx, weights, any_feas = self.rank_policies(
                 seq_reward, seq_feasible, seq_viols, self.top_k
@@ -108,7 +109,7 @@ class SamplingController():
         )
 
         _, mean_feas, _ = _evaluate_sequences(
-            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount
+            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount, self.rho_u
         )
         mean_ok = mean_feas[0]
         u_seq = jnp.where(mean_ok, q_best["mean"], best_hist[-1])
