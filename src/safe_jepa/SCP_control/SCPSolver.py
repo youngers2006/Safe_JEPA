@@ -113,7 +113,7 @@ class SCPSolver():
 
         try:
             # Solve optimisation problem with SOCP solver CLARABEL
-            self.problem.solve(solver=cp.CLARABEL, warm_start=True)
+            self.problem.solve(solver=cp.CLARABEL) # Warm start turned off for now, msut convert this to DDP
             status = self.problem.status
 
             if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]: # Success
