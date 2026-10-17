@@ -19,7 +19,7 @@ def compare_results(experiment, controllers, seeds):
 def load_data(experiment, controllers, seeds):
     data = {}
     for controller in controllers:
-        controller_data = pd.read_csv(RESULTS_PATH / experiment / f"{controller}_seeds_{seeds[0]}-{seeds[-1]}")
+        controller_data = pd.read_csv(RESULTS_PATH / experiment / f"{controller}_seeds_{seeds[0]}-{seeds[-1]}.csv")
         data[controller] = controller_data
     return data
 
