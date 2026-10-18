@@ -11,9 +11,12 @@ def print_results(experiment, controllers, seeds):
     data = load_data(experiment, controllers, seeds)
     for i in range(len(data)):
         avg_steps = data[controllers[i]]["steps"].mean()
+        var_steps = data[controllers[i]]["steps"].var()
         avg_return = data[controllers[i]]["return"].mean()
+        var_return = data[controllers[i]]["return"].var()
         avg_plan_time = data[controllers[i]]["plan_time_s"].mean()
-        print(f"Controller: {controllers[i]}, Mean Steps: {avg_steps}, Mean Return: {avg_return}, Mean Plan Time: {avg_plan_time}")
+        var_plan_time = data[controllers[i]]["plan_time_s"].var()
+        print(f"Controller: {controllers[i]}, Mean Steps: {avg_steps} (var: {var_steps}), Mean Return: {avg_return} (var: {var_return}), Mean Plan Time: {avg_plan_time} (var: {var_plan_time})")
 
 def return_results(experiment, controllers, seeds):
     data = load_data(experiment, controllers, seeds)
