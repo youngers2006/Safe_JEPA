@@ -5,23 +5,29 @@ import flax.nnx as nnx
 
 from .layers import SpectralNormLinear
 
+SILU_LIPSCHITZ = 1.09984
+
+def per_layer_bound(network_bound: float, n_hidden: int) -> float:
+    return (network_bound / SILU_LIPSCHITZ ** n_hidden) ** (1 / (n_hidden + 1))
+
 class DynamicsPredictor(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
         
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+                SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
-        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
@@ -40,6 +46,7 @@ class ValueNet(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -47,11 +54,11 @@ class ValueNet(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                    SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+                    SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
-        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
              
     def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         for l in range(0, len(self.layers)):
@@ -94,6 +101,7 @@ class RewardPredictor(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -101,11 +109,11 @@ class RewardPredictor(nnx.Module):
         
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+                SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
-        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
@@ -125,6 +133,7 @@ class QSafetyCritic(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
 
         # Networks layers
         self.hidden_features = hidden_features
@@ -134,11 +143,11 @@ class QSafetyCritic(nnx.Module):
         # Create network
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, lipschitz_bound, rngs=rngs)
+                SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
-        self.output_layer = SpectralNormLinear(current_dim, d_out, lipschitz_bound, rngs=rngs)
+        self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
         
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
@@ -193,7 +202,6 @@ class QSafetyCritic(nnx.Module):
         batch_size = z.shape[0]
 
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
-        # =================================================================================
         # q_risk_id: (B, ). Score safety of actions taken
         q_risk_id = self(
             z, action, update_spectral_norm=True
@@ -201,10 +209,8 @@ class QSafetyCritic(nnx.Module):
 
         # Compute the bellman recursion error
         bellman_risk_loss = jnp.mean((q_risk_id - q_target) ** 2)
-        # =================================================================================
 
         # CQL q loss, pushes up ood actions up
-        # =================================================================================
         # expand z dims in action sample dims
         z_expanded = jnp.repeat(
             jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
@@ -223,7 +229,6 @@ class QSafetyCritic(nnx.Module):
         cql_risk_loss = jnp.mean(
             q_risk_ood + q_risk_id
         )
-        # =================================================================================
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = bellman_risk_loss + (cql_alpha * cql_risk_loss)
