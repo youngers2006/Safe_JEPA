@@ -39,7 +39,7 @@ ValueQParams:
 
 DynamicsParams:
   hidden_features: [256, 256]
-  lipschitz_bound: .inf            # inf turns lipschitz bounding off
+  lipschitz_bound: .inf            # Lipschitz bound of the whole network (not per layer), inf turns bounding off
 
 ValueParams:
   hidden_features: [256, 256]
