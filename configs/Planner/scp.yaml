@@ -1,8 +1,7 @@
 controller: "SCP"
-rho_u: 0.01 # action magnitude penalty
-w_slack: 100.0 # penalty on dynamics and safety slack
+w_slack: 10000.0 # penalty on dynamics and safety slack
 w_prox: 1.0 # initial trust region weight
-scp_iters: 3 # scp max iters per timestep
+scp_iters: 6 # scp max iters per timestep
 tol: 1.0e-3 # early stopping criteria
 rho_lower: 0.25 # reject and tighten trust region threshold
 rho_upper: 0.75 # loosen traust region threshold

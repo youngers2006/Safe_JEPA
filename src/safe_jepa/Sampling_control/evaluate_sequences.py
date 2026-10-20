@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from jax import lax
 import flax.nnx as nnx
 
-def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount=1.0):
+def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount=1.0, rho_u=0.0):
     # Get computation graphs of the networks for lax scan
     r_graph, r_state = nnx.split(r_fn)
     f_graph, f_state = nnx.split(f_fn)
@@ -31,6 +31,7 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     discount_vec = discount ** jnp.arange(horizon)
     traj_reward = jnp.sum(discount_vec[:, None] * rewards.squeeze(axis=-1), axis=0)
     traj_reward = traj_reward + (discount ** horizon) * v_fn(z_terminal, update_spectral_norm=False).squeeze(axis=-1)
+    traj_reward = traj_reward - rho_u * jnp.sum(u_seq ** 2, axis=(1, 2))
 
     # Total Feasibility
     violations = (q_safe.squeeze(axis=-1) > safety_threshold).T # (J, N)
@@ -40,5 +41,5 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     return traj_reward, traj_feasibility, violations
 
 @nnx.jit
-def _evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount=1.0):
-    return evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount)
+def _evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount=1.0, rho_u=0.0):
+    return evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, discount, rho_u)

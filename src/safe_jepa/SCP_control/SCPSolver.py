@@ -4,11 +4,12 @@ import numpy as np
 import cvxpy as cp
 
 class SCPSolver():
-    def __init__(self, horizon: int, d_z: int, d_u: int, u_min:float = -1.0, u_max: float = 1.0):
+    def __init__(self, horizon: int, d_z: int, d_u: int, discount: float, u_min: float = -1.0, u_max: float = 1.0):
         # Constants
         self.horizon = horizon
         self.d_z = d_z
         self.d_u = d_u
+        self.discount = discount
 
         # Optimisation variables (real and slack)
         self.z = cp.Variable((horizon + 1, d_z))
@@ -17,6 +18,10 @@ class SCPSolver():
         self.mu_p = cp.Variable((horizon, d_z), nonneg=True)
         self.mu_n = cp.Variable((horizon, d_z), nonneg=True)
         self.nu = cp.Variable(horizon, nonneg=True)
+
+        # Deviation from reference
+        self.dz = cp.Variable((horizon, d_z))
+        self.du = cp.Variable((horizon, d_u))
 
         # Reference path
         self.z_ref = cp.Parameter((horizon + 1, d_z))
@@ -42,7 +47,6 @@ class SCPSolver():
         self.rho_u = cp.Parameter(nonneg=True)
         self.w_slack = cp.Parameter(nonneg=True)
         self.w_prox = cp.Parameter(nonneg=True)
-        self.discount = cp.Parameter(nonneg=True)
 
         # Initialise problem store
         constraints = [self.z[0, :] == self.z_c]
@@ -58,6 +62,10 @@ class SCPSolver():
             constraints.append(self.C[h] @ self.z[h] + self.D[h] @ self.u[h] - self.nu[h] <= 
                 self.tau - self.r_prime[h])
 
+            # Trust region deviation from the reference path
+            constraints.append(self.dz[h] == self.z[h] - self.z_ref[h])
+            constraints.append(self.du[h] == self.u[h] - self.u_ref[h])
+
             # Action bounding
             constraints.append(self.u[h] <= u_max)
             constraints.append(self.u[h] >= u_min)
@@ -67,14 +75,17 @@ class SCPSolver():
 
             # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
             objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                        + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
-                        self.w_prox * (cp.sum_squares(self.z[h] - self.z_ref[h]) + cp.sum_squares(self.u[h] - self.u_ref[h])))
+                    + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
+                    self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
-        objective_terms.append(-(self.discount ** (self.horizon)) * (self.Jv_z @ self.z[self.horizon]))
+        objective_terms.append(-(self.discount ** self.horizon) * (self.Jv_z @ self.z[self.horizon]))
 
         # Setup problem with cvxpy
         self.problem = cp.Problem(cp.Minimize(cp.sum(objective_terms)), constraints)
+
+        # Ensure problem is DPP
+        assert self.problem.is_dpp(), "Warning: SCP problem is not DPP"
 
     def solve_problem(
             self, 
@@ -86,7 +97,7 @@ class SCPSolver():
         ):
         # Extract matrices from tuple
         Jr_z_np, Jr_u_np, Jv_z_np, A_np, B_np, r_np, C_np, D_np, r_prime_np = system_matrices
-        
+
         # Setup static values
         self.z_c.value = z_c
         self.z_ref.value = z_ref
@@ -98,7 +109,6 @@ class SCPSolver():
         self.rho_u.value = float(hyperparams['rho_u'])
         self.w_slack.value = float(hyperparams['w_slack'])
         self.w_prox.value = float(hyperparams['w_prox'])
-        self.discount.value = float(hyperparams['discount'])
 
         # Setup time varying values
         for h in range(self.horizon):
@@ -113,7 +123,7 @@ class SCPSolver():
 
         try:
             # Solve optimisation problem with SOCP solver CLARABEL
-            self.problem.solve(solver=cp.CLARABEL, warm_start=True)
+            self.problem.solve(solver=cp.CLARABEL, warm_start=True) # Warm start turned off for now, msut convert this to DDP
             status = self.problem.status
 
             if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]: # Success
@@ -125,6 +135,6 @@ class SCPSolver():
                 print(f"Solver Error: Solver exited with status {status}")
                 return self.u_ref.value, self.z_ref.value
         # If solver crashes then return the reference value and report the crash to the command line
-        except cp.SolverError as e:
+        except Exception as e:
             print(f"C++ Backend Crashed: {e}")
             return self.u_ref.value, self.z_ref.value

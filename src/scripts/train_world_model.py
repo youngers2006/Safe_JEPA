@@ -10,8 +10,6 @@ from pathlib import Path
 import csv
 import sys
 
-# Repo root (this file is src/scripts/train_world_model.py), config/dataset/save paths are relative to it
-# Putting src/ on the path lets safe_jepa be imported no matter where the script is launched from
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 

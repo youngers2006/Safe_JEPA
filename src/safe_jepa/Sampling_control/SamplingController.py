@@ -2,6 +2,8 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 import numpy as np
+import flax.nnx as nnx
+from functools import partial
 
 from .evaluate_sequences import evaluate_sequences, _evaluate_sequences
 
@@ -20,6 +22,7 @@ class SamplingController():
         # Objective
         self.safety_threshold = cfg["safety_threshold"]
         self.discount = cfg["discount"]
+        self.rho_u = cfg["rho_u"]
 
         # Optimisation loop settings
         self.top_k = cfg["top_k"]
@@ -86,14 +89,17 @@ class SamplingController():
 
     def step(self, z_c, wm_networks, key, q_prev = None) -> jax.Array:
         q0 = self.init_params() if q_prev is None else self.shift_q(q_prev)
+        return self.plan(z_c, wm_networks, key, q0)
 
+    @partial(nnx.jit, static_argnums=0)
+    def plan(self, z_c, wm_networks, key, q0):
         def scan_step(carry, _):
             q, key = carry
             key, sub = jax.random.split(key)
 
             action_seqs = self.sample_sequences(q, self.num_seqs, sub)
             seq_reward, seq_feasible, seq_viols = evaluate_sequences(
-                z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount
+                z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount, self.rho_u
             )
             elite_idx, weights, any_feas = self.rank_policies(
                 seq_reward, seq_feasible, seq_viols, self.top_k
@@ -108,9 +114,10 @@ class SamplingController():
         )
 
         _, mean_feas, _ = _evaluate_sequences(
-            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount
+            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount, self.rho_u
         )
         mean_ok = mean_feas[0]
         u_seq = jnp.where(mean_ok, q_best["mean"], best_hist[-1])
 
         return u_seq[0], q_best, {"any_feasible": feasibility_history[-1], "mean_feasible": mean_ok}
+        
