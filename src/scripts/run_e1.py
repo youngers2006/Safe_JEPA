@@ -13,7 +13,7 @@ PLANNERS = ["configs/Planner/cem.yaml",
             "configs/Planner/mppi.yaml",
             "configs/Planner/scp.yaml"]
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(100))
+SEEDS = list(range(30))
 THRESHOLDS = [0.5, 0.3, 0.2, 0.1, 0.05, 0.02]
 
 def main():
