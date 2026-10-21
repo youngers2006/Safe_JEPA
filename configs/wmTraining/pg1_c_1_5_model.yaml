@@ -25,7 +25,7 @@ lambda_var: 1.0
 lambda_cov: 0.04
 gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
 alpha: 0.05    # CQL weight
-violation_weight: 50    # Bellman weight on high-risk targets
+violation_weight: 80    # Bellman weight on high-risk targets
 ER_tau: 0.7
 
 tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
