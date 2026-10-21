@@ -47,9 +47,16 @@ class SpectralNormLinear(nnx.Module):
         if update_spectral_norm:
             self.power_iteration(W)
 
+        # Differentiable estimate sigma = v^T W u with the singular vectors held constant (Miyato et al. 2018), so the
+        # gradient sees the rescale. With the stored sigma the rescale is hidden and the raw weights grow without limit
+        u = jax.lax.stop_gradient(self.u.value)
+        v = W @ u
+        v = jax.lax.stop_gradient(v / (jnp.linalg.norm(v) + 1e-8))
+        sigma = v @ W @ u
+
         # Apply projection function to rescale weights
         # If scale < 1 the constraint isnt binding so the normalisation isnt needed
-        scale = jnp.minimum(1.0, self.c / jnp.maximum(self.sigma.value, 1e-12))
+        scale = jnp.minimum(1.0, self.c / jnp.maximum(sigma, 1e-12))
         W_sn = W * scale
         y = x @ W_sn
 
