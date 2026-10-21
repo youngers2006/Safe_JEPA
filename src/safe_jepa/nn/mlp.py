@@ -196,7 +196,8 @@ class QSafetyCritic(nnx.Module):
             sampled_actions: jax.Array,
             action_bounds: tuple[float, float],
             cql_alpha: float,
-            Q_minima_samples: int = 64
+            Q_minima_samples: int = 64,
+            violation_weight: float = 1.0
         ):
         # Obtain batch size and the number of members of each batch is seen per ensemble member
         batch_size = z.shape[0]
@@ -207,8 +208,9 @@ class QSafetyCritic(nnx.Module):
             z, action, update_spectral_norm=True
         ).squeeze(axis=-1)
 
-        # Compute the bellman recursion error
-        bellman_risk_loss = jnp.mean((q_risk_id - q_target) ** 2)
+        # Compute the bellman recursion error (weight high risk more due to sparsity in the data)
+        w = 1.0 + (violation_weight - 1.0) * q_target
+        bellman_risk_loss = jnp.sum(w * (q_risk_id - q_target) ** 2) / jnp.sum(w)
 
         # CQL q loss, pushes up ood actions up
         # expand z dims in action sample dims

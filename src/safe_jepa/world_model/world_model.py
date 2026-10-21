@@ -37,7 +37,6 @@ class WorldModel(nnx.Module):
             rngs: nnx.Rngs
         ):
         # Load params
-        # ==============================================================
         self.lambda_dyn = cfg["lambda_dyn"]
         self.lambda_v = cfg["lambda_v"]
         self.lambda_r = cfg["lambda_r"]
@@ -50,8 +49,8 @@ class WorldModel(nnx.Module):
         self.discount = cfg["discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
+        self.violation_weight = cfg["violation_weight"]
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
-        # ==============================================================
 
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
@@ -195,22 +194,17 @@ class WorldModel(nnx.Module):
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> dict:
         # Create z targets
-        # ===============================================================
         next_z_target = self.target_encoder(next_obs)
         next_z_target = jax.lax.stop_gradient(
             next_z_target
         )
-        # ===============================================================
 
         # Create value target
-        # ===============================================================
         next_value_Q_target = jax.lax.stop_gradient(
             reward + self.discount * (1.0 - terminal) * self.value_fn(next_z_target).squeeze(axis=-1)
         )
-        # ===============================================================
 
         # Create safety targets
-        # ===============================================================
         sampled_actions = jax.random.uniform(
             key,
             shape=(obs.shape[0], Q_minima_samples, action.shape[-1]),
@@ -221,7 +215,6 @@ class WorldModel(nnx.Module):
             self.target_safety_critic, next_z_target, sampled_actions,
             safety_cost, terminal, self.discount, Q_minima_samples,
         )
-        # ===============================================================
 
         def loss_fn(trainable_partition: TrainableBundle, target_partition: TargetBundle) -> dict:
             # Extract trainable networks
@@ -236,7 +229,6 @@ class WorldModel(nnx.Module):
             target_val_fn_Q = target_partition.value_Q
 
             # Encoder and Dynamics Loss
-            # ===============================================================
             # Encode observations to latent space
             z = enc(obs)
 
@@ -245,16 +237,12 @@ class WorldModel(nnx.Module):
 
             # Get latent loss
             loss_z = jnp.mean((next_z - next_z_target) ** 2)
-            # ===============================================================
 
             # Reward Loss
-            # ===============================================================
             r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze(axis=-1)
             loss_r = jnp.mean((r_pred - reward) ** 2)
-            # ===============================================================
 
             # Value Loss
-            # ===============================================================
             # Get value prediction
             v_pred = val_fn(z, update_spectral_norm=True).squeeze(axis=-1)
 
@@ -271,10 +259,8 @@ class WorldModel(nnx.Module):
             loss_v_q = jnp.mean((next_value_Q_target - q_pred) ** 2)
 
             loss_v = loss_v_q + loss_v_v
-            # ===============================================================
 
             # VicReg Loss
-            # ===============================================================
             # Obtain covariace matrix (d, d)
             # Note rowvar=False is because the row dimension is what we want to get the cov of
             cov_mat = jnp.cov(z, rowvar=False)
@@ -290,10 +276,8 @@ class WorldModel(nnx.Module):
 
             # Compute vicreg loss
             loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
-            # ===============================================================
 
             # Compute safety constraint loss
-            # ===============================================================
             loss_s, q_aux = safety_Q.compute_loss(
                 z,
                 action,
@@ -301,9 +285,9 @@ class WorldModel(nnx.Module):
                 sampled_actions,
                 action_bounds,
                 self.cql_alpha,
-                Q_minima_samples
+                Q_minima_samples,
+                self.violation_weight
             )
-            # ===============================================================
 
             # Total world model loss
             total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
