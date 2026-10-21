@@ -42,6 +42,12 @@ class SpectralNormLinear(nnx.Module):
         self.u.value = u
         self.v.value = v
 
+    def set_exact_uv(self) -> None:
+        # Exact top singular vectors from one SVD, so sigma = v^T W u is the true spectral norm (use before saving)
+        U, _, Vt = jnp.linalg.svd(self.network.kernel.value, full_matrices=False)
+        self.v.value = U[:, 0]
+        self.u.value = Vt[0]
+
     def spectral_norm(self, W: jax.Array) -> jax.Array:
         u = jax.lax.stop_gradient(self.u.value)
         v = jax.lax.stop_gradient(self.v.value)

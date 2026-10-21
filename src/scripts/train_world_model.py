@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from safe_jepa.world_model.world_model import WorldModel
+from safe_jepa.nn.layers import SpectralNormLinear
 
 def resolve_dims(cfg, obs_dim, act_dim):
     d_z = cfg["d_latent"]
@@ -129,6 +130,9 @@ def main(cfg_filename):
 
     print("Saving Model")
     # Save the trained model
+    for _, node in nnx.iter_graph(world_model):
+        if isinstance(node, SpectralNormLinear):
+            node.set_exact_uv()
     _, state = nnx.split(world_model)
     checkpointer = ocp.StandardCheckpointer()
     save_path_model = ROOT / "src/save_data" / cfg["data_dir"] / "Model"
