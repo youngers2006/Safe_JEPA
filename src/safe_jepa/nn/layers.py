@@ -63,7 +63,9 @@ class SpectralNormLinear(nnx.Module):
 
         # Compute spectral norm from current W
         sigma = self.spectral_norm(W)
-        self.sigma.value = jax.lax.stop_gradient(sigma)
+
+        if update_spectral_norm:
+            self.sigma.value = jax.lax.stop_gradient(sigma)
 
         # Rescale only when sigma > c (scale < 1 means the constraint is binding)
         if self.c == float("inf"):
