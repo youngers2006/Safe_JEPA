@@ -56,7 +56,8 @@ class SpectralNormLinear(nnx.Module):
 
         # Apply projection function to rescale weights
         # If scale < 1 the constraint isnt binding so the normalisation isnt needed
-        scale = jnp.minimum(1.0, self.c / jnp.maximum(sigma, 1e-12))
+        # An unbounded layer skips it: differentiating inf / sigma would give 0 * inf = nan gradients
+        scale = 1.0 if self.c == float("inf") else jnp.minimum(1.0, self.c / jnp.maximum(sigma, 1e-12))
         W_sn = W * scale
         y = x @ W_sn
 
