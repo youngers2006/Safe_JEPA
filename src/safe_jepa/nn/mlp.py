@@ -5,12 +5,9 @@ import flax.nnx as nnx
 
 from .layers import SpectralNormLinear
 
-# Lipschitz constant of SiLU: max |silu'(x)| = 1.0998393 at x ~ 2.3994, rounded up so the bound stays guaranteed
 SILU_LIPSCHITZ = 1.09984
 
 def per_layer_bound(network_bound: float, n_hidden: int) -> float:
-    # Lipschitz constants multiply through the network: n_hidden + 1 linear layers each bounded by c with a SiLU
-    # between each pair gives L <= c^(n_hidden + 1) * SILU_LIPSCHITZ^n_hidden, so solve for c with L = network_bound
     return (network_bound / SILU_LIPSCHITZ ** n_hidden) ** (1 / (n_hidden + 1))
 
 class DynamicsPredictor(nnx.Module):
@@ -18,7 +15,8 @@ class DynamicsPredictor(nnx.Module):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
-        layer_bound = per_layer_bound(cfg["lipschitz_bound"], len(hidden_features))
+        lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
@@ -47,7 +45,8 @@ class ValueNet(nnx.Module):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
-        layer_bound = per_layer_bound(cfg["lipschitz_bound"], len(hidden_features))
+        lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
             
@@ -101,7 +100,8 @@ class RewardPredictor(nnx.Module):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
-        layer_bound = per_layer_bound(cfg["lipschitz_bound"], len(hidden_features))
+        lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         
@@ -132,7 +132,8 @@ class QSafetyCritic(nnx.Module):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
-        layer_bound = per_layer_bound(cfg["lipschitz_bound"], len(hidden_features))
+        lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
 
         # Networks layers
         self.hidden_features = hidden_features
@@ -201,7 +202,6 @@ class QSafetyCritic(nnx.Module):
         batch_size = z.shape[0]
 
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
-        # =================================================================================
         # q_risk_id: (B, ). Score safety of actions taken
         q_risk_id = self(
             z, action, update_spectral_norm=True
@@ -209,10 +209,8 @@ class QSafetyCritic(nnx.Module):
 
         # Compute the bellman recursion error
         bellman_risk_loss = jnp.mean((q_risk_id - q_target) ** 2)
-        # =================================================================================
 
         # CQL q loss, pushes up ood actions up
-        # =================================================================================
         # expand z dims in action sample dims
         z_expanded = jnp.repeat(
             jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
@@ -231,7 +229,6 @@ class QSafetyCritic(nnx.Module):
         cql_risk_loss = jnp.mean(
             q_risk_ood + q_risk_id
         )
-        # =================================================================================
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = bellman_risk_loss + (cql_alpha * cql_risk_loss)

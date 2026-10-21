@@ -1,12 +1,12 @@
 #  run
 seed: 0
-dataset_filename: "src/datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "T1_pointgoal1_c_1_5_seed_0"        # one subdir per sweep point
+dataset_filename: "src/datasets/FilteredSafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
+data_dir: "T2_pointgoal2_c_1_5_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
 epochs: 150
-num_batches: 500        # ~= n_transitions / batch_size
+num_batches: 1000        # ~= n_transitions / batch_size
 batch_size: 512
 lr: 3.0e-4
 
@@ -36,7 +36,7 @@ EncoderParams:
 
 DynamicsParams:
   hidden_features: [256, 256]
-  lipschitz_bound: 1.5            # Lipschitz bound of the whole network (not per layer), inf turns bounding off
+  lipschitz_bound: 1.5            # inf turns lipschitz bounding off
 
 ValueParams:
   hidden_features: [256, 256]
