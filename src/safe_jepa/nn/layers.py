@@ -4,6 +4,9 @@ import flax.nnx as nnx
 
 from .variables import NormStat, SpectralStat
 
+def l2_normalise(x: jax.Array, eps: float = 1e-12) -> jax.Array:
+    return x / (jnp.linalg.norm(x) + eps)
+
 class SpectralNormLinear(nnx.Module):
     def __init__(self, d_in, d_out, c: float, rngs: nnx.Rngs):
         # Bounded L <= c
@@ -12,53 +15,56 @@ class SpectralNormLinear(nnx.Module):
         # Linear network component
         self.network = nnx.Linear(d_in, d_out, rngs=rngs)
 
+        # Direction vector for power iteration
+        u_init = jax.random.normal(rngs.params(), (d_out,))
+        self.u = SpectralStat(l2_normalise(u_init))
+        self.v = SpectralStat(l2_normalise(self.network.kernel.value @ u_init))
+
         # Largest singular value (define as variable to allow updates when jit)
         self.sigma = SpectralStat(jnp.ones(()))
 
-        # Direction vector for power iteration
-        u_init = jax.random.normal(rngs.params(), (d_out,))
-        u_init = u_init / (jnp.linalg.norm(u_init) + 1e-8)
-        self.u = SpectralStat(u_init)
+        # Warm start u so the first forward pass already has a good sigma estimate
+        self.update_uv(self.network.kernel.value, n_iter=20)
 
-    def power_iteration(self, W: jax.Array) -> None:
+    def update_uv(self, W: jax.Array, n_iter: int) -> None:
         # Extract direction vector
-        u_val = self.u.value
+        u = self.u.value
+
+        # Stop gradient flow through W here
+        W = jax.lax.stop_gradient(W)
 
         # Compute transformed unit vector
-        v = W @ u_val
-        v = v / (jnp.linalg.norm(v) + 1e-8)
+        for _ in range(n_iter):
+            v = l2_normalise(W @ u)
+            u = l2_normalise(v @ W)
 
-        # Recompute rotated direction vector
-        u_val = v @ W
-        u_val = u_val / (jnp.linalg.norm(u_val) + 1e-8)
+        # Save data
+        self.u.value = u
+        self.v.value = v
 
-        # Use Raleigh quotient to obtain largest singular value
-        sigma_val = jnp.dot(u_val, v @ W)
-
-        # Stop gradients to make sure neither variable is updated but GD
-        self.u.value = jax.lax.stop_gradient(u_val)
-        self.sigma.value = jax.lax.stop_gradient(sigma_val)
-
+    def spectral_norm(self, W: jax.Array) -> jax.Array:
+        u = jax.lax.stop_gradient(self.u.value)
+        v = jax.lax.stop_gradient(self.v.value)
+        return v @ W @ u
+    
     def __call__(self, x: jax.Array, update_spectral_norm: bool = True) -> jax.Array:
         # Extract weight matrix (d_in, d_out)
         W = self.network.kernel.value
 
         # Use power iteration to update spectral norm
         if update_spectral_norm:
-            self.power_iteration(W)
+            self.update_uv(W, n_iter=1)
 
-        # Differentiable estimate sigma = v^T W u with the singular vectors held constant (Miyato et al. 2018), so the
-        # gradient sees the rescale. With the stored sigma the rescale is hidden and the raw weights grow without limit
-        u = jax.lax.stop_gradient(self.u.value)
-        v = W @ u
-        v = jax.lax.stop_gradient(v / (jnp.linalg.norm(v) + 1e-8))
-        sigma = v @ W @ u
+        # Compute spectral norm from current W
+        sigma = self.spectral_norm(W)
+        self.sigma.value = jax.lax.stop_gradient(sigma)
 
-        # Apply projection function to rescale weights
-        # If scale < 1 the constraint isnt binding so the normalisation isnt needed
-        # An unbounded layer skips it: differentiating inf / sigma would give 0 * inf = nan gradients
-        scale = 1.0 if self.c == float("inf") else jnp.minimum(1.0, self.c / jnp.maximum(sigma, 1e-12))
-        W_sn = W * scale
+        # Rescale only when sigma > c (scale < 1 means the constraint is binding)
+        if self.c == float("inf"):
+            W_sn = W
+        else:
+            scale = jnp.minimum(1.0, self.c / jnp.maximum(sigma, 1e-12))
+            W_sn = W * scale
         y = x @ W_sn
 
         # Add bias if used
