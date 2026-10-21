@@ -141,5 +141,5 @@ def main(cfg_filename):
     return 0
 
 if __name__ == "__main__":
-    main("configs/wmTraining/standard_model.yaml")
-    main("configs/wmTraining/regularity_constrained_model.yaml")
+    main("configs/wmTraining/pg1_c_1_5_model.yaml")
+    main("configs/wmTraining/pg1_c_inf_model.yaml")
