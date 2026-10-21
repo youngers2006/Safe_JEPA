@@ -16,14 +16,11 @@ class DynamicsPredictor(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
-        # The MLP predicts the change in z (next_z = z + g(z, u)), so Lip <= 1 + Lip(g) and g gets the bound minus 1
-        if lipschitz_bound < 1.0:
-            raise ValueError(f"Dynamics lipschitz_bound must be >= 1 for next_z = z + g(z, u), got {lipschitz_bound}")
-        layer_bound = per_layer_bound(lipschitz_bound - 1.0, len(hidden_features))
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
-
+        
         for h in hidden_features:
             temp_layers.append(
                 SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
@@ -40,8 +37,8 @@ class DynamicsPredictor(nnx.Module):
 
             x = linear_layer(x, update_spectral_norm)
             x = nnx.silu(x)
-
-        return z + self.output_layer(x, update_spectral_norm)
+        
+        return self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
