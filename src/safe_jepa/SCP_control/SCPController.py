@@ -6,6 +6,7 @@ import cvxpy as cp
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn
+from ..Sampling_control.evaluate_sequences import plan_summary
 
 class SCPController():
     def __init__(self, cfg: dict):
@@ -101,23 +102,15 @@ class SCPController():
                  - terminal_value)
         return J_lin
 
-    def non_linear_cost_fn(self, wm_networks: tuple[jax.Array, ...], z: jax.Array, u: jax.Array) -> np.ndarray:
-        cost_jax = self.nonlinear_cost_fn(
-            jnp.array(z), 
+    def rollout(self, z_c: jax.Array, u: np.ndarray, wm_networks: tuple[jax.Array, ...]):
+        cost_jax, feasible, predictions = self.nonlinear_cost_fn(
+            z_c, 
             jnp.array(u),
             *wm_networks,
             self.hyperparams
         )
-        return np.asarray(cost_jax)
-
-    def rollout(self, z_c: jax.Array, u: np.ndarray, f_fn):
-        # Initialise the trajectory
-        z_list = [z_c]
-
-        # Roll the action sequence through the world model
-        for i in range(self.horizon):
-            z_list.append(f_fn(z_list[-1], jnp.array(u[i, :]), update_spectral_norm=False))
-        return np.asarray(jnp.stack(z_list))
+        z = np.concatenate([np.asarray(z_c)[np.newaxis], np.asarray(predictions["latents"])])
+        return z, np.asarray(cost_jax), feasible, predictions
 
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
@@ -136,10 +129,10 @@ class SCPController():
             u_ref[-1, :] = 0.0
 
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
-        z_ref = self.rollout(z_c, u_ref, f_fn)
+        z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
-        for _ in range(self.scp_iters):
+        for iteration in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jac_extractor_fn(
                 z_ref=jnp.array(z_ref), 
@@ -169,16 +162,13 @@ class SCPController():
             linear_cost_old = self.linear_cost_fn(
                 cpu_matrices, z_ref_np, u_ref_np
             )
-            nonlinear_cost_old = self.non_linear_cost_fn(
-                wm_networks, z_ref, u_ref
-            )
 
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
                 cpu_matrices, z_opt, u_opt
             )
-            nonlinear_cost_new = self.non_linear_cost_fn(
-                wm_networks, z_opt, u_opt
+            z_opt_rollout, nonlinear_cost_new, feasible_new, predictions_new = self.rollout(
+                z_c, u_opt, wm_networks
             )
 
             # Compute the ratio of cost improvement between true and linearised system
@@ -195,7 +185,8 @@ class SCPController():
 
                 # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
-                z_ref = self.rollout(z_c, u_ref, f_fn)
+                z_ref = z_opt_rollout
+                nonlinear_cost_old, feasible_ref, predictions_ref = nonlinear_cost_new, feasible_new, predictions_new
 
                 # Check if TR must be resized
                 if rho > self.rho_upper:
@@ -208,11 +199,18 @@ class SCPController():
                     break
 
         # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
-        if rho < self.rho_lower:
+        last_rejected = rho < self.rho_lower
+        if last_rejected:
             u_opt = u_ref
             z_opt = z_ref
+
+        info = {
+            "iterations": iteration + 1,
+            "last_rejected": last_rejected,
+            **plan_summary(jnp.asarray(u_opt), feasible_ref, predictions_ref)
+        }
 
         # Update orevious solution buffer and return 1st action to take
         self.u_prev = u_opt
         self.z_prev = z_opt
-        return jnp.array(u_opt[0, :])
+        return jnp.array(u_opt[0, :]), info

@@ -45,7 +45,7 @@ class SafeJEPAAgent:
         # Refresh controller for a new episode
         self.controller = self.make_controller()
         self.q_prev = None
-        self.plan_info = {}
+        self.last_info = {}
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         # Encode observation to the current latent state
@@ -53,8 +53,11 @@ class SafeJEPAAgent:
 
         # Plan with the chosen controller and return the first action
         if self.controller_type == "SCP":
-            u = self.controller.step(z_c, self.wm_networks)
+            u, info = self.controller.step(z_c, self.wm_networks)
         else:
             self.key, sub = jax.random.split(self.key)
-            u, self.q_prev, self.plan_info = self.controller.step(z_c, self.wm_networks, sub, q_prev=self.q_prev)
+            u, self.q_prev, info = self.controller.step(
+                z_c, self.wm_networks, sub, q_prev=self.q_prev
+            )
+        self.last_info = {k: np.asarray(v) for k, v in info.items()}
         return np.asarray(u)

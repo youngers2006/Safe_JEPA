@@ -5,7 +5,7 @@ import numpy as np
 import flax.nnx as nnx
 from functools import partial
 
-from .evaluate_sequences import evaluate_sequences, _evaluate_sequences
+from .evaluate_sequences import evaluate_sequences, plan_summary
 
 class SamplingController():
     def __init__(self, cfg: dict):
@@ -98,7 +98,7 @@ class SamplingController():
             key, sub = jax.random.split(key)
 
             action_seqs = self.sample_sequences(q, self.num_seqs, sub)
-            seq_reward, seq_feasible, seq_viols = evaluate_sequences(
+            seq_reward, seq_feasible, seq_viols, _ = evaluate_sequences(
                 z_c, action_seqs, *wm_networks, self.safety_threshold, self.discount, self.rho_u
             )
             elite_idx, weights, any_feas = self.rank_policies(
@@ -109,15 +109,26 @@ class SamplingController():
             )
             return (q, key), (any_feas, action_seqs[elite_idx[0]])
 
-        (q_best, _), (feasibility_history, best_hist) = lax.scan(
+        (q_best, _), (feasibility_history, best_hist, n_feasible) = lax.scan(
             scan_step, (q0, key), None, length=self.optimisation_iters 
         )
 
-        _, mean_feas, _ = _evaluate_sequences(
-            z_c, q_best["mean"][None, :, :], *wm_networks, self.safety_threshold, self.discount, self.rho_u
+        candidates = jnp.stack([q_best["mean"], best_hist[-1]])
+        _, cand_feas, _, cand_pred = evaluate_sequences(
+            z_c, candidates, *wm_networks, self.safety_threshold, self.discount, self.rho_u
         )
-        mean_ok = mean_feas[0]
-        u_seq = jnp.where(mean_ok, q_best["mean"], best_hist[-1])
+        mean_ok = cand_feas[0]
+        chosen = jnp.where(mean_ok, 0, 1)
+        u_seq = candidates[chosen]
 
-        return u_seq[0], q_best, {"any_feasible": feasibility_history[-1], "mean_feasible": mean_ok}
+        info = {
+            "any_feasible": feasibility_history[-1],
+            "mean_feasible": mean_ok,
+            # Feasible sampled plans per optimisation iteration (out of num_seqs), and as fractions
+            "n_feasible": n_feasible,
+            "feasible_frac_first": n_feasible[0] / self.num_seqs,
+            "feasible_frac_last": n_feasible[-1] / self.num_seqs,
+            **plan_summary(u_seq, cand_feas[chosen], {k: v[chosen] for k, v in cand_pred.items()})
+        }
+        return u_seq[0], q_best, info
         
