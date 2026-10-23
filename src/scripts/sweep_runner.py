@@ -89,18 +89,28 @@ def summarise(summary, trajectory, info_log, max_steps):
     out["plan_time_med"] = float(np.median(pt))
     out["plan_time_p99"] = float(np.percentile(pt, 99))
 
-    out["feasible_frac"] = _mean_of(info_log, "feasible_frac")
+    # Fraction of sampled plans the model predicts feasible (CEM/MPPI), first and last optimisation iteration
+    out["feasible_frac_first"] = _mean_of(info_log, "feasible_frac_first")
+    out["feasible_frac_last"] = _mean_of(info_log, "feasible_frac_last")
     out["mean_feasible_rate"] = _mean_of(info_log, "mean_feasible")
     out["rejection_gap"] = _mean_of(info_log, "rejection_gap")
     out["scp_iters"] = _mean_of(info_log, "iterations")
+    out["scp_last_rejected_rate"] = _mean_of(info_log, "last_rejected")
+
+    # What the world model predicted for the executed plans (all planners), free of model error
+    out["pred_return"] = _mean_of(info_log, "pred_return")
+    out["pred_max_risk"] = _mean_of(info_log, "pred_max_risk")
+    out["pred_feasible_rate"] = _mean_of(info_log, "pred_feasible")
 
     af = [bool(d["any_feasible"]) for d in info_log if "any_feasible" in d]
     out["fallback_rate"] = float(1.0 - np.mean(af)) if af else float("nan")
     return out
 
 def _info_arrays(info_log):
+    # One array per planner info key, stacked over steps: (T,) for scalars, (T, horizon) for per-step predictions,
+    # (T, horizon, d_u) for the plan, (T, opt_iters) for the feasible-sample counts
     keys = {k for d in info_log for k in d}
-    return {f"info_{k}": np.array([float(d.get(k, np.nan)) for d in info_log])
+    return {f"info_{k}": np.stack([np.asarray(d[k], dtype=float) for d in info_log])
             for k in keys}
 
 def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,

@@ -6,6 +6,7 @@ import cvxpy as cp
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn
+from ..Sampling_control.evaluate_sequences import _evaluate_sequences, plan_summary
 
 class SCPController():
     def __init__(self, cfg: dict):
@@ -139,7 +140,7 @@ class SCPController():
         z_ref = self.rollout(z_c, u_ref, f_fn)
 
         rho = -np.inf
-        for _ in range(self.scp_iters):
+        for iteration in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jac_extractor_fn(
                 z_ref=jnp.array(z_ref), 
@@ -208,11 +209,24 @@ class SCPController():
                     break
 
         # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
-        if rho < self.rho_lower:
+        last_rejected = rho < self.rho_lower
+        if last_rejected:
             u_opt = u_ref
             z_opt = z_ref
+
+        # Model-predicted outcome of the executed plan, evaluated exactly as the sampling planners evaluate theirs
+        u_plan = jnp.asarray(u_opt)
+        _, feasible, _, predictions = _evaluate_sequences(
+            z_c, u_plan[None], r_fn, v_fn, f_fn, Q_fn,
+            self.hyperparams['tau'], self.hyperparams['discount'], self.hyperparams['rho_u']
+        )
+        info = {
+            "iterations": iteration + 1,
+            "last_rejected": last_rejected,
+            **plan_summary(u_plan, feasible[0], {k: v[0] for k, v in predictions.items()})
+        }
 
         # Update orevious solution buffer and return 1st action to take
         self.u_prev = u_opt
         self.z_prev = z_opt
-        return jnp.array(u_opt[0, :])
+        return jnp.array(u_opt[0, :]), info
