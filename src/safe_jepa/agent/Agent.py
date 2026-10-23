@@ -56,8 +56,8 @@ class SafeJEPAAgent:
             u, info = self.controller.step(z_c, self.wm_networks)
         else:
             self.key, sub = jax.random.split(self.key)
-            u, self.q_prev, info = self.controller.step(z_c, self.wm_networks, sub, q_prev=self.q_prev)
-
-        # What the planner predicted for the plan it chose; the experiment logger reads this after every act()
+            u, self.q_prev, info = self.controller.step(
+                z_c, self.wm_networks, sub, q_prev=self.q_prev
+            )
         self.last_info = {k: np.asarray(v) for k, v in info.items()}
         return np.asarray(u)

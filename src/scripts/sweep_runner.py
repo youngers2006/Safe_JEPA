@@ -89,7 +89,6 @@ def summarise(summary, trajectory, info_log, max_steps):
     out["plan_time_med"] = float(np.median(pt))
     out["plan_time_p99"] = float(np.percentile(pt, 99))
 
-    # Fraction of sampled plans the model predicts feasible (CEM/MPPI), first and last optimisation iteration
     out["feasible_frac_first"] = _mean_of(info_log, "feasible_frac_first")
     out["feasible_frac_last"] = _mean_of(info_log, "feasible_frac_last")
     out["mean_feasible_rate"] = _mean_of(info_log, "mean_feasible")
@@ -107,8 +106,6 @@ def summarise(summary, trajectory, info_log, max_steps):
     return out
 
 def _info_arrays(info_log):
-    # One array per planner info key, stacked over steps: (T,) for scalars, (T, horizon) for per-step predictions,
-    # (T, horizon, d_u) for the plan, (T, opt_iters) for the feasible-sample counts
     keys = {k for d in info_log for k in d}
     return {f"info_{k}": np.stack([np.asarray(d[k], dtype=float) for d in info_log])
             for k in keys}

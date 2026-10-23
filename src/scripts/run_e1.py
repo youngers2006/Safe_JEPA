@@ -18,7 +18,6 @@ SEEDS = list(range(30))
 THRESHOLDS = [0.5, 0.3, 0.2, 0.1, 0.05, 0.02]
 
 def main():
-    # Both world models over the same thresholds, planners and seeds; results go under each model's data_dir
     for wm_cfg in WM_CFGS:
         for p in tqdm(THRESHOLDS, leave=True):
             for planner in tqdm(PLANNERS, leave=False):

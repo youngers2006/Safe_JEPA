@@ -26,7 +26,7 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     # Scan the function and rollout trajectory in the world model (swap axes as scan runs across first dim)
     z_terminal, (z_traj, rewards, q_safe) = lax.scan(scan_step, z0, jnp.swapaxes(u_seq, 0, 1)) # returns N, J
 
-    # Predicted return of each trajectory (discounted rewards + discounted terminal value), then the action penalty
+    # Predicted return for each trajectory
     horizon = u_seq.shape[1]
     discount_vec = discount ** jnp.arange(horizon)
     pred_return = jnp.sum(discount_vec[:, None] * rewards.squeeze(axis=-1), axis=0)
@@ -38,13 +38,13 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     traj_violations = jnp.sum(violations, axis=-1) # (J,)
     traj_feasibility = (traj_violations == 0.0) # (J,)
 
-    # What the model predicts along each trajectory, for logging and for SCP to reuse (unused outputs cost nothing under jit)
     predictions = {
         "return": pred_return, # (J,)
         "rewards": rewards.squeeze(axis=-1).T, # (J, N)
         "risk": q_safe.squeeze(axis=-1).T, # (J, N)
-        "latents": jnp.swapaxes(z_traj, 0, 1) # (J, N, dz), z_1 to z_N
+        "latents": jnp.swapaxes(z_traj, 0, 1) # (J, N, dz), SCP's reference trajectory
     }
+
     return traj_reward, traj_feasibility, violations, predictions
 
 def plan_summary(u_seq, feasible, predictions):

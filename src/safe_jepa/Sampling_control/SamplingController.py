@@ -107,14 +107,12 @@ class SamplingController():
             q = self.update_params(
                 q, action_seqs, elite_idx, weights
             )
-            # Also record how many of the sampled plans the model predicts are feasible this iteration
             return (q, key), (any_feas, action_seqs[elite_idx[0]], jnp.sum(seq_feasible))
 
         (q_best, _), (feasibility_history, best_hist, n_feasible) = lax.scan(
-            scan_step, (q0, key), None, length=self.optimisation_iters
+            scan_step, (q0, key), None, length=self.optimisation_iters 
         )
 
-        # Execute the refined mean if it is feasible, otherwise the last iteration's best sample
         candidates = jnp.stack([q_best["mean"], best_hist[-1]])
         _, cand_feas, _, cand_pred = evaluate_sequences(
             z_c, candidates, *wm_networks, self.safety_threshold, self.discount, self.rho_u

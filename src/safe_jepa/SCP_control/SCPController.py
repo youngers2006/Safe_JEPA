@@ -103,10 +103,8 @@ class SCPController():
         return J_lin
 
     def rollout(self, z_c: jax.Array, u: np.ndarray, wm_networks: tuple[jax.Array, ...]):
-        # Roll the action sequence through the world model once, giving the trajectory (which obeys the dynamics),
-        # its nonlinear cost, and the model's feasibility verdict and predictions along it
         cost_jax, feasible, predictions = self.nonlinear_cost_fn(
-            z_c,
+            z_c, 
             jnp.array(u),
             *wm_networks,
             self.hyperparams
@@ -130,7 +128,7 @@ class SCPController():
             u_ref = np.roll(self.u_prev, shift=-1, axis=0)
             u_ref[-1, :] = 0.0
 
-        # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics, keeping its model cost
+        # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
         z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
@@ -160,12 +158,12 @@ class SCPController():
                 self.hyperparams
             )
 
-            # Compute reference trajectory cost with the linearised system (its model cost was kept from its rollout)
+            # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
                 cpu_matrices, z_ref_np, u_ref_np
             )
 
-            # Compute optimal trajectory costs with model and linearised system, keeping the model rollout of u_opt
+            # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
                 cpu_matrices, z_opt, u_opt
             )
@@ -185,7 +183,7 @@ class SCPController():
                 # Calculate change in u
                 delta_u = np.max(np.abs(u_opt - u_ref))
 
-                # Update reference with u* and its model rollout, so z_ref obeys the dynamics without rolling u out again
+                # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
                 z_ref = z_opt_rollout
                 nonlinear_cost_old, feasible_ref, predictions_ref = nonlinear_cost_new, feasible_new, predictions_new
@@ -206,8 +204,6 @@ class SCPController():
             u_opt = u_ref
             z_opt = z_ref
 
-        # Model-predicted outcome of the executed plan, evaluated exactly as the sampling planners evaluate theirs.
-        # The executed plan is the reference either way (an accepted u* became the reference), so its rollout is already kept
         info = {
             "iterations": iteration + 1,
             "last_rejected": last_rejected,
