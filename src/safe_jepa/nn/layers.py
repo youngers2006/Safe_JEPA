@@ -64,8 +64,6 @@ class SpectralNormLinear(nnx.Module):
         # Compute spectral norm from current W
         sigma = self.spectral_norm(W)
 
-        # Only store it when updating: planners call the networks inside lax.scan / jax.jacrev with
-        # update_spectral_norm=False, where mutating module state raises a TraceContextError
         if update_spectral_norm:
             self.sigma.value = jax.lax.stop_gradient(sigma)
 
