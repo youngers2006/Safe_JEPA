@@ -2,43 +2,23 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 
-@nnx.jit
-def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams: dict) -> jax.Array:
-    # Get computation graphs of the networks for lax scan
-    r_graph, r_state = nnx.split(r_fn)
-    f_graph, f_state = nnx.split(f_fn)
-    Q_graph, Q_state = nnx.split(Q_fn)
+from ..Sampling_control.evaluate_sequences import evaluate_sequences
 
+@nnx.jit
+def nonlinear_cost_fn(z0: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams: dict) -> tuple[jax.Array, jax.Array, dict]:
     # extract hyperparams
     tau = hyperparams['tau']
     w_slack = hyperparams['w_slack']
     rho_u = hyperparams['rho_u']
     gamma = hyperparams['discount']
 
-    def scan_step(z_current: jax.Array, u_current: jax.Array) -> tuple[jax.Array, tuple[jax.Array, ...]]:
-        z_next = nnx.merge(f_graph, f_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        reward = nnx.merge(r_graph, r_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        q_safe = nnx.merge(Q_graph, Q_state)(
-            z_current, u_current, update_spectral_norm=False
-        )
-        return z_next, (z_next, reward, q_safe) # Returns Carry variable (z_next) and yield variables (z_next, reward, q_safe)
-
-    # Scan step function to run it in compiled form over a loop up to the horizon
-    z_terminal, (z_history, r_history, q_safe_history) = jax.lax.scan(scan_step, z[0], u)
-
-    # Compute discount vector
-    horizon = u.shape[0]
-    discount_vec = gamma ** jnp.arange(horizon)
-
-    # Reward cost
-    discounted_reward = jnp.sum(discount_vec * r_history.squeeze(-1))
+    # Rollout the plan from z0 with the same evaluation the sampling planners use: the predicted return (discounted
+    # rewards + discounted terminal value), the safety critic at each step, feasibility and the latent trajectory
+    _, feasible, _, predictions = evaluate_sequences(z0, u[None], r_fn, v_fn, f_fn, Q_fn, tau, gamma)
+    predictions = {k: v[0] for k, v in predictions.items()}
 
     # Safety cost
-    safe_errors = jnp.maximum(0.0, q_safe_history - tau)
+    safe_errors = jnp.maximum(0.0, predictions["risk"] - tau)
     safe_cost = jnp.sum(safe_errors ** 2)
 
     # Dynamics cost
@@ -47,14 +27,10 @@ def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperp
     # Control cost
     control_cost = jnp.sum(u ** 2)
 
-    # Terminal value cost
-    v_terminal = v_fn(z_terminal, update_spectral_norm=False).squeeze(-1)
-    terminal_term = (gamma ** horizon) * v_terminal
-    
-    # Compute final penalty
-    J_nonlin = (-discounted_reward 
-                + rho_u * control_cost 
-                + w_slack * (dyn_cost + safe_cost) 
-                - terminal_term)
-                
-    return J_nonlin
+    # Compute final penalty, the return holds both the reward and terminal value terms
+    J_nonlin = (-predictions["return"]
+                + rho_u * control_cost
+                + w_slack * (dyn_cost + safe_cost))
+
+    # Also return the rollout so SCP can reuse it instead of rolling the plan out again
+    return J_nonlin, feasible[0], predictions

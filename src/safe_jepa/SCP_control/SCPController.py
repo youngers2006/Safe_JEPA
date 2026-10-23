@@ -6,7 +6,7 @@ import cvxpy as cp
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn
-from ..Sampling_control.evaluate_sequences import _evaluate_sequences, plan_summary
+from ..Sampling_control.evaluate_sequences import plan_summary
 
 class SCPController():
     def __init__(self, cfg: dict):
@@ -102,23 +102,17 @@ class SCPController():
                  - terminal_value)
         return J_lin
 
-    def non_linear_cost_fn(self, wm_networks: tuple[jax.Array, ...], z: jax.Array, u: jax.Array) -> np.ndarray:
-        cost_jax = self.nonlinear_cost_fn(
-            jnp.array(z), 
+    def rollout(self, z_c: jax.Array, u: np.ndarray, wm_networks: tuple[jax.Array, ...]):
+        # Roll the action sequence through the world model once, giving the trajectory (which obeys the dynamics),
+        # its nonlinear cost, and the model's feasibility verdict and predictions along it
+        cost_jax, feasible, predictions = self.nonlinear_cost_fn(
+            z_c,
             jnp.array(u),
             *wm_networks,
             self.hyperparams
         )
-        return np.asarray(cost_jax)
-
-    def rollout(self, z_c: jax.Array, u: np.ndarray, f_fn):
-        # Initialise the trajectory
-        z_list = [z_c]
-
-        # Roll the action sequence through the world model
-        for i in range(self.horizon):
-            z_list.append(f_fn(z_list[-1], jnp.array(u[i, :]), update_spectral_norm=False))
-        return np.asarray(jnp.stack(z_list))
+        z = np.concatenate([np.asarray(z_c)[np.newaxis], np.asarray(predictions["latents"])])
+        return z, np.asarray(cost_jax), feasible, predictions
 
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
@@ -136,8 +130,8 @@ class SCPController():
             u_ref = np.roll(self.u_prev, shift=-1, axis=0)
             u_ref[-1, :] = 0.0
 
-        # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
-        z_ref = self.rollout(z_c, u_ref, f_fn)
+        # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics, keeping its model cost
+        z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
         for iteration in range(self.scp_iters):
@@ -166,20 +160,17 @@ class SCPController():
                 self.hyperparams
             )
 
-            # Compute reference trajectory costs with the model and linearised system
+            # Compute reference trajectory cost with the linearised system (its model cost was kept from its rollout)
             linear_cost_old = self.linear_cost_fn(
                 cpu_matrices, z_ref_np, u_ref_np
             )
-            nonlinear_cost_old = self.non_linear_cost_fn(
-                wm_networks, z_ref, u_ref
-            )
 
-            # Compute optimal trajectory costs with model and linearised system
+            # Compute optimal trajectory costs with model and linearised system, keeping the model rollout of u_opt
             linear_cost_new = self.linear_cost_fn(
                 cpu_matrices, z_opt, u_opt
             )
-            nonlinear_cost_new = self.non_linear_cost_fn(
-                wm_networks, z_opt, u_opt
+            z_opt_rollout, nonlinear_cost_new, feasible_new, predictions_new = self.rollout(
+                z_c, u_opt, wm_networks
             )
 
             # Compute the ratio of cost improvement between true and linearised system
@@ -194,9 +185,10 @@ class SCPController():
                 # Calculate change in u
                 delta_u = np.max(np.abs(u_opt - u_ref))
 
-                # Update reference, rolling u through the world model to ensure it obeys dynamics
+                # Update reference with u* and its model rollout, so z_ref obeys the dynamics without rolling u out again
                 u_ref = u_opt
-                z_ref = self.rollout(z_c, u_ref, f_fn)
+                z_ref = z_opt_rollout
+                nonlinear_cost_old, feasible_ref, predictions_ref = nonlinear_cost_new, feasible_new, predictions_new
 
                 # Check if TR must be resized
                 if rho > self.rho_upper:
@@ -214,16 +206,12 @@ class SCPController():
             u_opt = u_ref
             z_opt = z_ref
 
-        # Model-predicted outcome of the executed plan, evaluated exactly as the sampling planners evaluate theirs
-        u_plan = jnp.asarray(u_opt)
-        _, feasible, _, predictions = _evaluate_sequences(
-            z_c, u_plan[None], r_fn, v_fn, f_fn, Q_fn,
-            self.hyperparams['tau'], self.hyperparams['discount'], self.hyperparams['rho_u']
-        )
+        # Model-predicted outcome of the executed plan, evaluated exactly as the sampling planners evaluate theirs.
+        # The executed plan is the reference either way (an accepted u* became the reference), so its rollout is already kept
         info = {
             "iterations": iteration + 1,
             "last_rejected": last_rejected,
-            **plan_summary(u_plan, feasible[0], {k: v[0] for k, v in predictions.items()})
+            **plan_summary(jnp.asarray(u_opt), feasible_ref, predictions_ref)
         }
 
         # Update orevious solution buffer and return 1st action to take

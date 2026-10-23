@@ -38,11 +38,12 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     traj_violations = jnp.sum(violations, axis=-1) # (J,)
     traj_feasibility = (traj_violations == 0.0) # (J,)
 
-    # What the model predicts along each trajectory, for logging (unused outputs cost nothing under jit)
+    # What the model predicts along each trajectory, for logging and for SCP to reuse (unused outputs cost nothing under jit)
     predictions = {
         "return": pred_return, # (J,)
         "rewards": rewards.squeeze(axis=-1).T, # (J, N)
-        "risk": q_safe.squeeze(axis=-1).T # (J, N)
+        "risk": q_safe.squeeze(axis=-1).T, # (J, N)
+        "latents": jnp.swapaxes(z_traj, 0, 1) # (J, N, dz), z_1 to z_N
     }
     return traj_reward, traj_feasibility, violations, predictions
 
