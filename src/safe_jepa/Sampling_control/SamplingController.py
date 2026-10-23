@@ -107,7 +107,7 @@ class SamplingController():
             q = self.update_params(
                 q, action_seqs, elite_idx, weights
             )
-            return (q, key), (any_feas, action_seqs[elite_idx[0]])
+            return (q, key), (any_feas, action_seqs[elite_idx[0]], jnp.sum(seq_feasible))
 
         (q_best, _), (feasibility_history, best_hist, n_feasible) = lax.scan(
             scan_step, (q0, key), None, length=self.optimisation_iters 

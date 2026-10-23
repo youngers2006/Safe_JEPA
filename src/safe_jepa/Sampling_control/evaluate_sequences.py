@@ -41,7 +41,8 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     predictions = {
         "return": pred_return, # (J,)
         "rewards": rewards.squeeze(axis=-1).T, # (J, N)
-        "risk": q_safe.squeeze(axis=-1).T # (J, N)
+        "risk": q_safe.squeeze(axis=-1).T, # (J, N)
+        "latents": jnp.swapaxes(z_traj, 0, 1) # (J, N, dz), SCP's reference trajectory
     }
 
     return traj_reward, traj_feasibility, violations, predictions

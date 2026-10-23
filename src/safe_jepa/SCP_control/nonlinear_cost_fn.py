@@ -6,7 +6,7 @@ from ..Sampling_control.evaluate_sequences import evaluate_sequences
 
 @nnx.jit
 def nonlinear_cost_fn(z0: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams: dict) -> tuple[jax.Array, jax.Array, dict]:
-    # extract hyperparams
+    # Extract hyperparams
     tau = hyperparams['tau']
     w_slack = hyperparams['w_slack']
     rho_u = hyperparams['rho_u']
