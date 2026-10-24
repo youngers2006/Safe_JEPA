@@ -124,14 +124,15 @@ class SCPController():
             u_ref = self.u_prev
             self.is_first_step = False
         else:
-            # Shift actions by 1 and set last action to 0
+            # Shift actions by 1 and repeat the last action
             u_ref = np.roll(self.u_prev, shift=-1, axis=0)
-            u_ref[-1, :] = 0.0
+            u_ref[-1, :] = self.u_prev[-1, :]
 
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
         z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
+        converged, stationary_dist = False, np.nan
         for iteration in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jac_extractor_fn(
@@ -180,8 +181,10 @@ class SCPController():
             if rho < self.rho_lower: # Reject u* and decrease TR size
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
             else:
-                # Calculate change in u
+                # Calculate change in u, and from it the estimated distance to a stationary point. The step alone shrinks
+                # with the trust region, so scale it by (w_prox + rho_u) / rho_u using the w_prox that produced it
                 delta_u = np.max(np.abs(u_opt - u_ref))
+                stationary_dist = delta_u * (self.hyperparams['w_prox'] + self.hyperparams['rho_u']) / self.hyperparams['rho_u']
 
                 # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
@@ -195,7 +198,8 @@ class SCPController():
                     pass
 
                 # If solution has converged, break the loop
-                if delta_u < self.tol:
+                if stationary_dist < self.tol:
+                    converged = True
                     break
 
         # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
@@ -207,6 +211,10 @@ class SCPController():
         info = {
             "iterations": iteration + 1,
             "last_rejected": last_rejected,
+            # Whether the stationarity test stopped the loop before the iteration cap, and the estimated distance to a
+            # stationary point at the last accepted iteration (nan if none was accepted)
+            "converged": converged,
+            "stationary_dist": stationary_dist,
             **plan_summary(jnp.asarray(u_opt), feasible_ref, predictions_ref)
         }
 

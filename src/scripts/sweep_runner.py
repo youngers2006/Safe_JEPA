@@ -95,6 +95,7 @@ def summarise(summary, trajectory, info_log, max_steps):
     out["rejection_gap"] = _mean_of(info_log, "rejection_gap")
     out["scp_iters"] = _mean_of(info_log, "iterations")
     out["scp_last_rejected_rate"] = _mean_of(info_log, "last_rejected")
+    out["scp_converged_rate"] = _mean_of(info_log, "converged")   # stopped by the stationarity test before the cap
 
     # What the world model predicted for the executed plans (all planners), free of model error
     out["pred_return"] = _mean_of(info_log, "pred_return")

@@ -1,7 +1,7 @@
 controller: "SCP"
 w_slack: 10000.0 # penalty on dynamics and safety slack
 w_prox: 1.0 # initial trust region weight
-scp_iters: 6 # scp max iters per timestep
-tol: 1.0e-3 # early stopping criteria
+scp_iters: 20 # scp max iters per timestep
+tol: 1.0e-3 # early stopping criteria: estimated distance to a stationary point, in action units
 rho_lower: 0.25 # reject and tighten trust region threshold
 rho_upper: 0.75 # loosen traust region threshold
