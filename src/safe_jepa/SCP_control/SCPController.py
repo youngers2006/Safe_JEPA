@@ -116,8 +116,9 @@ class SCPController():
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
-        # Reset w_prox to prevent it becoming too extreme
-        self.hyperparams['w_prox'] = self.w_prox_init
+        # Carry the trust-region weight over from the last step, which solved a nearby problem, clipped so it can't become
+        # too extreme (each episode builds a new controller, so it starts from w_prox_init)
+        self.hyperparams['w_prox'] = float(np.clip(self.hyperparams['w_prox'], self.hyperparams['rho_u'] / 10, self.w_prox_init))
 
         if self.is_first_step:
             # Initial u is zeros

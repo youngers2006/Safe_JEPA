@@ -1,6 +1,6 @@
 controller: "SCP"
 w_slack: 10000.0 # penalty on dynamics and safety slack
-w_prox: 1.0 # initial trust region weight
+w_prox: 1.0 # initial trust region weight, then carried over between steps within an episode (clipped to [rho_u / 10, w_prox])
 scp_iters: 20 # scp max iters per timestep
 tol: 1.0e-2 # early stopping criteria: stop once the prox-linear stationarity measure is below this fraction of its first-iteration value
 rho_lower: 0.25 # reject and tighten trust region threshold
