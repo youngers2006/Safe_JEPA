@@ -162,7 +162,7 @@ class SCPController():
             # Convergence criteria
             # Prox-gradient norm ||G_t|| = ||u_ref - u_opt|| / t, with t = 1 / (2 w_prox) , (Elango et al. 2024, Alg. 1)
             prox_grad = 2.0 * self.hyperparams['w_prox'] * np.linalg.norm(u_opt - u_ref_np)
-            if prox_grad <= self.tol * max(1.0, abs(nonlinear_cost_old)):
+            if prox_grad <= self.tol:
                 stop_reason = "converged" if feasible_ref else "converged_infeasible"
                 u_opt, z_opt = u_ref, z_ref
                 break
