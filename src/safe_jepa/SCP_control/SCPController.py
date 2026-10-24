@@ -132,6 +132,7 @@ class SCPController():
         z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
+        stop_reason = "max_iters"
         for iteration in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jac_extractor_fn(
@@ -163,6 +164,7 @@ class SCPController():
             prox_grad = 2.0 * self.hyperparams['w_prox'] * np.linalg.norm(u_opt - u_ref_np)
             if prox_grad <= self.tol * max(1.0, abs(nonlinear_cost_old)):
                 stop_reason = "converged" if feasible_ref else "converged_infeasible"
+                u_opt, z_opt = u_ref, z_ref
                 break
 
             # Compute reference trajectory costs with the model and linearised system
