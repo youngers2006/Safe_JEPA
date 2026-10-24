@@ -95,11 +95,8 @@ def summarise(summary, trajectory, info_log, max_steps):
     out["rejection_gap"] = _mean_of(info_log, "rejection_gap")
     out["scp_iters"] = _mean_of(info_log, "iterations")
     out["scp_last_rejected_rate"] = _mean_of(info_log, "last_rejected")
-    # Fraction of SCP steps stopped by the convergence test before the iteration cap (feasible or not)
     sr = [str(d["stop_reason"]) for d in info_log if "stop_reason" in d]
     out["scp_converged_rate"] = float(np.mean([r != "max_iters" for r in sr])) if sr else float("nan")
-
-    # What the world model predicted for the executed plans (all planners), free of model error
     out["pred_return"] = _mean_of(info_log, "pred_return")
     out["pred_max_risk"] = _mean_of(info_log, "pred_max_risk")
     out["pred_feasible_rate"] = _mean_of(info_log, "pred_feasible")
@@ -109,7 +106,6 @@ def summarise(summary, trajectory, info_log, max_steps):
     return out
 
 def _info_arrays(info_log):
-    # Numeric info as float arrays, anything else (e.g. SCP's stop_reason) kept as it is
     out = {}
     for k in {k for d in info_log for k in d}:
         arr = np.stack([np.asarray(d[k]) for d in info_log])

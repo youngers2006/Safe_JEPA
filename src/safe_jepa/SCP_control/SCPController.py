@@ -164,7 +164,6 @@ class SCPController():
             prox_grad = 2.0 * self.hyperparams['w_prox'] * np.linalg.norm(u_opt - u_ref_np)
             if prox_grad <= self.tol * max(1.0, abs(nonlinear_cost_old)):
                 stop_reason = "converged" if feasible_ref else "converged_infeasible"
-                # The reference is the converged plan; this iteration's u_opt was never checked by the trust-region test
                 u_opt, z_opt = u_ref, z_ref
                 break
 
