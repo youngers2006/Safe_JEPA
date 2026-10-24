@@ -124,9 +124,9 @@ class SCPController():
             u_ref = self.u_prev
             self.is_first_step = False
         else:
-            # Shift actions by 1 and set last action to 0
+            # Shift actions by 1 and set last action to end of the prev action sequence
             u_ref = np.roll(self.u_prev, shift=-1, axis=0)
-            u_ref[-1, :] = 0.0
+            u_ref[-1, :] = self.u_prev[-1, :]
 
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
         z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
@@ -158,6 +158,13 @@ class SCPController():
                 self.hyperparams
             )
 
+            # Convergence criteria
+            # Prox-gradient norm ||G_t|| = ||u_ref - u_opt|| / t, with t = 1 / (2 w_prox) , (Elango et al. 2024, Alg. 1)
+            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.linalg.norm(u_opt - u_ref_np)
+            if prox_grad <= self.tol * max(1.0, abs(nonlinear_cost_old)):
+                stop_reason = "converged" if feasible_ref else "converged_infeasible"
+                break
+
             # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
                 cpu_matrices, z_ref_np, u_ref_np
@@ -174,15 +181,12 @@ class SCPController():
             # Compute the ratio of cost improvement between true and linearised system
             dJ_actual = nonlinear_cost_old - nonlinear_cost_new
             dJ_predicted = linear_cost_old - linear_cost_new
-            rho = dJ_actual / (dJ_predicted + 1e-8)
+            rho = dJ_actual / dJ_predicted if (dJ_predicted > 0) else -np.inf
 
             # Trust region resizing based on error
             if rho < self.rho_lower: # Reject u* and decrease TR size
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
             else:
-                # Calculate change in u
-                delta_u = np.max(np.abs(u_opt - u_ref))
-
                 # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
                 z_ref = z_opt_rollout
@@ -194,10 +198,6 @@ class SCPController():
                 else:
                     pass
 
-                # If solution has converged, break the loop
-                if delta_u < self.tol:
-                    break
-
         # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
         last_rejected = rho < self.rho_lower
         if last_rejected:
@@ -206,8 +206,11 @@ class SCPController():
 
         info = {
             "iterations": iteration + 1,
-            "last_rejected": last_rejected,
-            **plan_summary(jnp.asarray(u_opt), feasible_ref, predictions_ref)
+            "stop_reason": stop_reason,
+            "prox_grad": prox_grad,
+            "w_prox_final": self.hyperparams['w_prox'],
+            "last_rejected": stop_reason == "max_iters" and rho < self.rho_lower,
+            **plan_summary(jnp.asarray(u_ref), feasible_ref, predictions_ref),
         }
 
         # Update orevious solution buffer and return 1st action to take
