@@ -132,7 +132,7 @@ class SCPController():
         z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
 
         rho = -np.inf
-        converged, stationary_dist = False, np.nan
+        converged, stationarity_ratio = False, np.nan
         for iteration in range(self.scp_iters):
             # Extract matrices from world model
             jax_matrices = self.jac_extractor_fn(
@@ -159,6 +159,14 @@ class SCPController():
                 self.hyperparams
             )
 
+            # Prox-linear stationarity measure at the reference: the subproblem's step over its step size t = 1 / (2 w_prox).
+            # Measured every iteration, accepted or not: near a solution the predicted and actual decreases are both at
+            # noise level, so the ratio test below rejects, and a check on accepted steps alone never sees convergence
+            stationarity = 2.0 * self.hyperparams['w_prox'] * np.max(np.abs(u_opt - u_ref))
+            if iteration == 0:
+                stationarity_first = stationarity
+            stationarity_ratio = stationarity / stationarity_first if stationarity_first > 0 else np.nan
+
             # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
                 cpu_matrices, z_ref_np, u_ref_np
@@ -181,11 +189,6 @@ class SCPController():
             if rho < self.rho_lower: # Reject u* and decrease TR size
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
             else:
-                # Calculate change in u, and from it the estimated distance to a stationary point. The step alone shrinks
-                # with the trust region, so scale it by (w_prox + rho_u) / rho_u using the w_prox that produced it
-                delta_u = np.max(np.abs(u_opt - u_ref))
-                stationary_dist = delta_u * (self.hyperparams['w_prox'] + self.hyperparams['rho_u']) / self.hyperparams['rho_u']
-
                 # Update reference, rolling u through the world model to ensure it obeys dynamics
                 u_ref = u_opt
                 z_ref = z_opt_rollout
@@ -197,10 +200,11 @@ class SCPController():
                 else:
                     pass
 
-                # If solution has converged, break the loop
-                if stationary_dist < self.tol:
-                    converged = True
-                    break
+            # If solution has converged, break the loop: the stationarity measure is below tol times its first-iteration
+            # value (an exactly zero step is the solver's failure fallback, not convergence)
+            if 0.0 < stationarity < self.tol * stationarity_first:
+                converged = True
+                break
 
         # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
         last_rejected = rho < self.rho_lower
@@ -211,10 +215,10 @@ class SCPController():
         info = {
             "iterations": iteration + 1,
             "last_rejected": last_rejected,
-            # Whether the stationarity test stopped the loop before the iteration cap, and the estimated distance to a
-            # stationary point at the last accepted iteration (nan if none was accepted)
+            # Whether the stationarity test stopped the loop before the iteration cap, and the last iteration's
+            # stationarity measure as a fraction of the first iteration's
             "converged": converged,
-            "stationary_dist": stationary_dist,
+            "stationarity_ratio": stationarity_ratio,
             **plan_summary(jnp.asarray(u_opt), feasible_ref, predictions_ref)
         }
 
