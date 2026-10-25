@@ -11,7 +11,7 @@ gymnasium
 safety-gymnasium
 mujoco
 cvxpy
-osqp>=1.0
+clarabel>=0.7
 
 # python 3.10
 # DO NOT ADD JAX HERE. 
