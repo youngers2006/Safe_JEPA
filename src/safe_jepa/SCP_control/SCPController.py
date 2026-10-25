@@ -28,6 +28,10 @@ class SCPController():
         self.w_prox_init = cfg["w_prox"]
         self.w_prox_min = cfg["w_prox_min"]
 
+        # w_prox carried between steps
+        self.w_prox_warm = cfg["w_prox"]
+        self.w_prox_max_start = 10 * cfg["w_prox"]
+
         # SCP loop settings
         self.scp_iters = cfg["scp_iters"]
         self.tol = cfg["tol"]
@@ -48,6 +52,7 @@ class SCPController():
             self.d_z, 
             self.d_u, 
             self.hyperparams['discount'],
+            self.hyperparams['rho_u'],
             self.u_bounds[0], 
             self.u_bounds[1]
         )
@@ -133,8 +138,8 @@ class SCPController():
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
-        # Reset w_prox to prevent it becoming too extreme
-        self.hyperparams['w_prox'] = self.w_prox_init
+        # Obtain w_prox from previous step
+        self.hyperparams['w_prox'] = float(np.clip(self.w_prox_warm, self.w_prox_min, self.w_prox_max_start))
 
         if self.is_first_step:
             # Initial u is zeros
@@ -246,6 +251,7 @@ class SCPController():
         # Update previous solution buffer and return 1st action to take
         self.u_prev = u_ref
         self.z_prev = z_ref
+        self.w_prox_warm = self.hyperparams["w_prox"]
         return jnp.asarray(u_ref[0, :]), info
 
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
