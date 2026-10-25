@@ -61,3 +61,10 @@ def rollout_fn(z0: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams:
     )
     predictions = {k: v[0] for k, v in predictions.items()}
     return feasible[0], predictions
+
+@nnx.jit
+def node_predictions(z: jax.Array, u: jax.Array, f_fn, Q_fn) -> tuple[jax.Array, jax.Array]:
+    # The world model's next state and risk at each node, for the second-order correction
+    z_next = jax.vmap(lambda z_k, u_k: f_fn(z_k, u_k, update_spectral_norm=False))(z[:-1], u)
+    risk = jax.vmap(lambda z_k, u_k: Q_fn(z_k, u_k, update_spectral_norm=False).squeeze(-1))(z[:-1], u)
+    return z_next, risk

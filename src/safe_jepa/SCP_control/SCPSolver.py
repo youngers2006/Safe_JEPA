@@ -52,16 +52,19 @@ class SCPSolver():
         # Initialise problem store
         constraints = [self.z[0, :] == self.z_c]
         objective_terms = []
+        self.dyn_constraints, self.safe_constraints = [], []
 
         for h in range(self.horizon):
             # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n
-            constraints.append(
+            self.dyn_constraints.append(
                 self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h]
             )
+            constraints.append(self.dyn_constraints[-1])
 
             # Safety constraint: C_k z_k + D_k u_k - nu_k <= tau - r'_k
-            constraints.append(self.C[h] @ self.z[h] + self.D[h] @ self.u[h] - self.nu[h] <= 
+            self.safe_constraints.append(self.C[h] @ self.z[h] + self.D[h] @ self.u[h] - self.nu[h] <=
                 self.tau - self.r_prime[h])
+            constraints.append(self.safe_constraints[-1])
 
             # Trust region deviation from the reference path
             constraints.append(self.dz[h] == self.z[h+1] - self.z_ref[h+1])
@@ -87,6 +90,13 @@ class SCPSolver():
 
         # Ensure problem is DPP
         assert self.problem.is_dpp(), "Warning: SCP problem is not DPP"
+
+    def slack_and_multipliers(self) -> tuple[float, float, float, float]:
+        # Largest slack used and largest constraint multiplier at the last solution. The L1 penalty caps each multiplier
+        # at w_slack and a multiplier at the cap means its slack is in use, so w_slack must sit above the largest one
+        return (float(np.max(self.mu_p.value + self.mu_n.value)), float(np.max(self.nu.value)),
+                max(float(np.max(np.abs(c.dual_value))) for c in self.dyn_constraints),
+                max(float(np.max(c.dual_value)) for c in self.safe_constraints))
 
     def solve_problem(
             self, 
