@@ -19,16 +19,21 @@ SLACK_TOL = 1e-7
 
 def last_solve_recorder(solver, log):
     # Wrap solve_problem so the slack and multipliers of the latest successful subproblem are kept in log
-    dyn = [c for c in solver.problem.constraints if any(v is solver.mu_p for v in c.variables())]
-    safe = [c for c in solver.problem.constraints if any(v is solver.nu for v in c.variables())]
+    if hasattr(solver, "slack_and_multipliers"):
+        read = solver.slack_and_multipliers
+    else:
+        # cvxpy formulation: the dynamics constraints are those with mu_p, the safety constraints those with nu
+        dyn = [c for c in solver.problem.constraints if any(v is solver.mu_p for v in c.variables())]
+        safe = [c for c in solver.problem.constraints if any(v is solver.nu for v in c.variables())]
+        read = lambda: (float(np.max(solver.mu_p.value + solver.mu_n.value)), float(np.max(solver.nu.value)),
+                        max(float(np.max(np.abs(c.dual_value))) for c in dyn),
+                        max(float(np.max(c.dual_value)) for c in safe))
     solve = solver.solve_problem
 
     def recorded(*args, **kwargs):
         u, z, ok = solve(*args, **kwargs)
         if ok:
-            log["last"] = (float(np.max(solver.mu_p.value + solver.mu_n.value)), float(np.max(solver.nu.value)),
-                           max(float(np.max(np.abs(c.dual_value))) for c in dyn),
-                           max(float(np.max(c.dual_value)) for c in safe))
+            log["last"] = read()
         return u, z, ok
     return recorded
 
@@ -71,7 +76,8 @@ def main():
         rows = run_episode(cfg, env, args.seed, args.steps)
         slack_dyn, slack_safe, mult_dyn, mult_safe, max_risk, feasible = rows.T
         free_dyn, free_safe = slack_dyn <= SLACK_TOL, slack_safe <= SLACK_TOL
-        largest = lambda m, free: f"{m[free].max():.3g}" if free.any() else "-"
+        # NaN marks a multiplier the solver could not resolve accurately
+        largest = lambda m, free: f"{np.nanmax(m[free]):.3g}" if np.any(free & ~np.isnan(m)) else "-"
         print(f"w_slack {w:g}, tau {args.tau:g}: {len(rows)} steps | dynamics slack in use on {np.mean(~free_dyn):.2f} of steps, "
               f"largest dynamics multiplier without it {largest(mult_dyn, free_dyn)} | safety slack in use on "
               f"{np.mean(~free_safe):.2f} of steps, largest safety multiplier without it {largest(mult_safe, free_safe)} | "

@@ -170,7 +170,7 @@ class SCPController():
                 )
                 matrices = tuple(np.asarray(m) for m in jax_matrices)
 
-            # Run solver to setup and solve SOCP
+            # Run solver to setup and solve the QP
             u_opt, z_opt, ok = self.SCP_solver.solve_problem(
                 matrices,
                 z_c_np,
