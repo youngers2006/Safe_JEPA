@@ -6,7 +6,7 @@ from jax.experimental import enable_x64
 
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
-from .nonlinear_cost_fn import nonlinear_cost_fn, rollout_fn, node_predictions
+from .nonlinear_cost_fn import nonlinear_cost_fn, rollout_fn
 from ..Sampling_control.evaluate_sequences import plan_summary
 
 class SCPController():
@@ -126,15 +126,6 @@ class SCPController():
         )
         return float(J), float(max_defect), float(max_risk)
 
-    def corrected_matrices(self, matrices: tuple, z: np.ndarray, u: np.ndarray, wm_networks: tuple) -> tuple:
-        # Shift the linear model's constants so it matches the world model's dynamics and risk at (z, u); the
-        # subproblem re-solved with them sees each step's second-order defects (second-order correction)
-        Jr_z, Jr_u, Jv_z, A, B, r, C, D, r_prime = matrices
-        z_next, risk = node_predictions(jnp.asarray(z), jnp.asarray(u), wm_networks[2], wm_networks[3])
-        e_dyn = np.asarray(z_next) - (np.einsum("hij,hj->hi", A, z[:-1]) + np.einsum("hij,hj->hi", B, u) + r)
-        e_safe = np.asarray(risk) - (np.sum(C * z[:-1], axis=1) + np.sum(D * u, axis=1) + r_prime)
-        return Jr_z, Jr_u, Jv_z, A, B, r + e_dyn, C, D, r_prime + e_safe
-
     def is_feasible(self, max_defect: float, max_risk: float) -> bool:
         return max_defect <= self.feas_tol and max_risk <= self.hyperparams['tau'] + self.feas_tol
 
@@ -163,8 +154,6 @@ class SCPController():
         prox_grad = np.inf
         n_rejected = 0
         n_solver_failures = 0
-        n_soc, n_soc_used = 0, 0
-        slack_dyn = slack_safe = mult_dyn = mult_safe = np.nan
         matrices = None
         iteration = -1
         for iteration in range(self.scp_iters):
@@ -196,9 +185,6 @@ class SCPController():
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
                 continue
 
-            # Slack used and largest multipliers at this solution, to check that w_slack sits above the multipliers
-            slack_dyn, slack_safe, mult_dyn, mult_safe = self.SCP_solver.slack_and_multipliers()
-
             # Convergence criteria
             # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox), bounded at the fixed step of w_prox_init. The
             # prox step grows and ||G_t|| shrinks as w_prox falls, so testing at the current w_prox passes once w_prox is
@@ -226,26 +212,6 @@ class SCPController():
             dJ_actual = J_ref - J_new
             dJ_predicted = linear_cost_old - linear_cost_new
             rho = dJ_actual / dJ_predicted if (dJ_predicted > 0) else -np.inf
-
-            # Second-order correction (Maratos effect): L1 charges each step's second-order defects at full price, which
-            # holds rho under rho_upper however good the step is, and the more so the larger w_slack. Re-solve with the
-            # linear model matched to the world model at the trial point, and keep the corrected step if it scores better
-            # against the same predicted decrease
-            if dJ_predicted > 0 and rho < self.rho_upper:
-                u_soc, z_soc, ok_soc = self.SCP_solver.solve_problem(
-                    self.corrected_matrices(matrices, z_opt, u_opt, wm_networks),
-                    z_c_np,
-                    z_ref,
-                    u_ref,
-                    self.hyperparams
-                )
-                if ok_soc:
-                    n_soc += 1
-                    J_soc, defect_soc, risk_soc = self.merit(z_soc, u_soc, wm_networks)
-                    rho_soc = (J_ref - J_soc) / dJ_predicted
-                    if rho_soc > rho:
-                        n_soc_used += 1
-                        u_opt, z_opt, J_new, defect_new, risk_new, rho = u_soc, z_soc, J_soc, defect_soc, risk_soc, rho_soc
 
             # Trust region resizing
             if rho >= self.rho_lower:
@@ -277,12 +243,6 @@ class SCPController():
             "w_prox_final": self.hyperparams['w_prox'],
             "n_rejected": n_rejected,
             "n_solver_failures": n_solver_failures,
-            "n_soc": n_soc,
-            "n_soc_used": n_soc_used,
-            "slack_dyn": slack_dyn,
-            "slack_safe": slack_safe,
-            "mult_dyn": mult_dyn,
-            "mult_safe": mult_safe,
             **plan_summary(jnp.asarray(u_ref), feasible_rollout, predictions),
         }
  
