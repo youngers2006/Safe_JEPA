@@ -20,6 +20,7 @@ class SCPSolver():
         self.nu = cp.Variable(horizon, nonneg=True)
 
         # Deviation from reference
+        # covers u_0...u_H-1 and z_1...z_H
         self.dz = cp.Variable((horizon, d_z))
         self.du = cp.Variable((horizon, d_u))
 
@@ -46,7 +47,6 @@ class SCPSolver():
         # Weights for optimisation
         self.rho_u = cp.Parameter(nonneg=True)
         self.w_slack = cp.Parameter(nonneg=True)
-        self.w_dyn = cp.Parameter(nonneg=True)
         self.w_prox = cp.Parameter(nonneg=True)
 
         # Initialise problem store
@@ -54,9 +54,7 @@ class SCPSolver():
         objective_terms = []
 
         for h in range(self.horizon):
-            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n. The slack (virtual control) keeps the
-            # subproblem feasible; its L1 penalty below is exact, so above the costates the optimal slack is exactly zero,
-            # where a quadratic penalty always uses some and so predicts gains the rollout never delivers
+            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n
             constraints.append(
                 self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h]
             )
@@ -66,7 +64,7 @@ class SCPSolver():
                 self.tau - self.r_prime[h])
 
             # Trust region deviation from the reference path
-            constraints.append(self.dz[h] == self.z[h] - self.z_ref[h])
+            constraints.append(self.dz[h] == self.z[h+1] - self.z_ref[h+1])
             constraints.append(self.du[h] == self.u[h] - self.u_ref[h])
 
             # Action bounding
@@ -76,9 +74,9 @@ class SCPSolver():
             # Epigraph condition: moved action magnitude cost to conditions with epigraph to allow otpimisation
             constraints.append(self.rho_u * cp.sum_squares(self.u[h]) - self.t[h] <= 0)
 
-            # Timestep cost (action magnitude cost, reward, safety slack cost, trust region costs)
+            # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
             objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                    + self.w_dyn * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
+                    + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
@@ -111,7 +109,6 @@ class SCPSolver():
         self.tau.value = float(hyperparams['tau'])
         self.rho_u.value = float(hyperparams['rho_u'])
         self.w_slack.value = float(hyperparams['w_slack'])
-        self.w_dyn.value = float(hyperparams['w_dyn'])
         self.w_prox.value = float(hyperparams['w_prox'])
 
         # Setup time varying values
@@ -127,18 +124,13 @@ class SCPSolver():
 
         try:
             # Solve optimisation problem with SOCP solver CLARABEL
-            self.problem.solve(solver=cp.CLARABEL, warm_start=True) # Warm start turned off for now, msut convert this to DDP
-            status = self.problem.status
-
-            if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]: # Success
-                return self.u.value, self.z.value
-            elif status == cp.INFEASIBLE: # Failed due to infeasible preoblem
-                print("SCP Error: Problem is Infeasible. Falling Back to Previous Solution")
-                return self.u_ref.value, self.z_ref.value
-            else: # Failed for other reason
-                print(f"Solver Error: Solver exited with status {status}")
-                return self.u_ref.value, self.z_ref.value
-        # If solver crashes then return the reference value and report the crash to the command line
+            self.problem.solve(solver=cp.CLARABEL, warm_start=True)
         except Exception as e:
-            print(f"C++ Backend Crashed: {e}")
-            return self.u_ref.value, self.z_ref.value
+            print(f"SCP subproblem: solver crashed ({e})")
+            return self.u_ref.value, self.z_ref.value, False
+        
+        status = self.problem.status
+        if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE] and self.u.value is not None: # Success
+            return self.u.value, self.z.value, True
+        print(f"SCP subproblem: solver returned status {status}")
+        return self.u_ref.value, self.z_ref.value, False
