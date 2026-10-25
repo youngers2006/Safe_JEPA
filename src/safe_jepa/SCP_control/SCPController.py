@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
+from jax.experimental import enable_x64
 
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
@@ -128,7 +129,7 @@ class SCPController():
     def is_feasible(self, max_defect: float, max_risk: float) -> bool:
         return max_defect <= self.feas_tol and max_risk <= self.hyperparams['tau'] + self.feas_tol
 
-    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+    def _step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
@@ -246,3 +247,8 @@ class SCPController():
         self.u_prev = u_ref
         self.z_prev = z_ref
         return jnp.asarray(u_ref[0, :]), info
+
+    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+        with enable_x64():
+            u, info = self._step(jnp.asarray(z_c, dtype=jnp.float64), wm_networks)
+        return jnp.asarray(u, dtype=jnp.float32), info
