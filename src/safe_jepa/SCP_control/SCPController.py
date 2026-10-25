@@ -22,11 +22,16 @@ class SCPController():
             "discount": cfg["discount"],
             "tau": cfg["safety_threshold"],
             "rho_u": cfg["rho_u"],
-            "w_slack": cfg["w_slack"],
+            "w_dyn": cfg["w_dyn"],
+            "w_safe": cfg["w_safe"],
             "w_prox": cfg["w_prox"]
         }
         self.w_prox_init = cfg["w_prox"]
         self.w_prox_min = cfg["w_prox_min"]
+
+        # w_prox carried between steps
+        self.w_prox_warm = cfg["w_prox"]
+        self.w_prox_max_start = 10 * cfg["w_prox"]
 
         # SCP loop settings
         self.scp_iters = cfg["scp_iters"]
@@ -48,6 +53,7 @@ class SCPController():
             self.d_z, 
             self.d_u, 
             self.hyperparams['discount'],
+            self.hyperparams['rho_u'],
             self.u_bounds[0], 
             self.u_bounds[1]
         )
@@ -66,7 +72,8 @@ class SCPController():
         # Hyperparams
         gamma = self.hyperparams['discount']
         rho_u = self.hyperparams['rho_u']
-        w_slack = self.hyperparams['w_slack']
+        w_dyn = self.hyperparams['w_dyn']
+        w_safe = self.hyperparams['w_safe']
         tau = self.hyperparams['tau']
         
         # Vectorized discount array [1, gamma, gamma^2, ...]
@@ -103,7 +110,8 @@ class SCPController():
         # Compute total trajectory cost for the linearised system
         J_lin = (-discounted_reward 
                  + control_penalty 
-                 + w_slack * (dyn_penalty + safe_penalty) 
+                 + w_dyn * dyn_penalty 
+                 + w_safe * safe_penalty 
                  - terminal_value)
         return float(J_lin)
 
@@ -133,8 +141,8 @@ class SCPController():
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
-        # w_prox carries over from the previous step (the controller is rebuilt each episode, so each episode starts at
-        # w_prox_init); the stopping test below no longer gets easier as w_prox falls, so this cannot stop SCP early
+        # Obtain w_prox from previous step
+        self.hyperparams['w_prox'] = float(np.clip(self.w_prox_warm, self.w_prox_min, self.w_prox_max_start))
 
         if self.is_first_step:
             # Initial u is zeros
@@ -170,7 +178,7 @@ class SCPController():
                 )
                 matrices = tuple(np.asarray(m) for m in jax_matrices)
 
-            # Run solver to setup and solve the QP
+            # Run solver to setup and solve SOCP
             u_opt, z_opt, ok = self.SCP_solver.solve_problem(
                 matrices,
                 z_c_np,
@@ -186,12 +194,9 @@ class SCPController():
                 continue
 
             # Convergence criteria
-            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox), bounded at the fixed step of w_prox_init. The
-            # prox step grows and ||G_t|| shrinks as w_prox falls, so testing at the current w_prox passes once w_prox is
-            # small whether or not the plan has stopped moving; 2 max(w_prox, w_prox_init) ||step|| bounds ||G_t|| at
-            # w_prox_init whatever w_prox is now
+            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
             step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
-            prox_grad = 2.0 * max(self.hyperparams['w_prox'], self.w_prox_init) * np.sqrt(step_sq)
+            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.sqrt(step_sq)
             if prox_grad <= self.tol:
                 stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
                 break
@@ -249,6 +254,7 @@ class SCPController():
         # Update previous solution buffer and return 1st action to take
         self.u_prev = u_ref
         self.z_prev = z_ref
+        self.w_prox_warm = self.hyperparams["w_prox"]
         return jnp.asarray(u_ref[0, :]), info
 
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
