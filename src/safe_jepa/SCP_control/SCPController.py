@@ -22,7 +22,8 @@ class SCPController():
             "discount": cfg["discount"],
             "tau": cfg["safety_threshold"],
             "rho_u": cfg["rho_u"],
-            "w_slack": cfg["w_slack"],
+            "w_dyn": cfg["w_dyn"],
+            "w_safe": cfg["w_safe"],
             "w_prox": cfg["w_prox"]
         }
         self.w_prox_init = cfg["w_prox"]
@@ -71,7 +72,8 @@ class SCPController():
         # Hyperparams
         gamma = self.hyperparams['discount']
         rho_u = self.hyperparams['rho_u']
-        w_slack = self.hyperparams['w_slack']
+        w_dyn = self.hyperparams['w_dyn']
+        w_safe = self.hyperparams['w_safe']
         tau = self.hyperparams['tau']
         
         # Vectorized discount array [1, gamma, gamma^2, ...]
@@ -108,7 +110,8 @@ class SCPController():
         # Compute total trajectory cost for the linearised system
         J_lin = (-discounted_reward 
                  + control_penalty 
-                 + w_slack * (dyn_penalty + safe_penalty) 
+                 + w_dyn * dyn_penalty 
+                 + w_safe * safe_penalty 
                  - terminal_value)
         return float(J_lin)
 

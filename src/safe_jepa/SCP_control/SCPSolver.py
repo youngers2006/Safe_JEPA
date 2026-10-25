@@ -39,7 +39,8 @@ class SCPSolver():
         self.tau = cp.Parameter(nonneg=True)
  
         # Weights for optimisation
-        self.w_slack = cp.Parameter(nonneg=True)
+        self.w_dyn = cp.Parameter(nonneg=True)
+        self.w_safe = cp.Parameter(nonneg=True)
         self.w_prox = cp.Parameter(nonneg=True)
  
         # Initialise problem store
@@ -69,7 +70,7 @@ class SCPSolver():
             objective_terms.append(
                 self.rho_u * cp.sum_squares(self.u_ref[h] + self.du[h])
                 - (self.discount ** h) * reward
-                + self.w_slack * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * self.nu[h]
+                + self.w_dyn * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_safe * self.nu[h]
                 + self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h]))
             )
         objective_terms.append(-(self.discount ** self.horizon) * (self.Jv_z @ self.dz[self.horizon - 1]))
@@ -98,7 +99,8 @@ class SCPSolver():
 
         # Setup hyperparams
         self.tau.value = float(hyperparams['tau'])
-        self.w_slack.value = float(hyperparams['w_slack'])
+        self.w_dyn.value = float(hyperparams['w_dyn'])
+        self.w_safe.value = float(hyperparams['w_dyn'])
         self.w_prox.value = float(hyperparams['w_prox'])
 
         f_np = (A_np @ z_ref[:-1, :, np.newaxis]).squeeze(-1) + (B_np @ u_ref[:, :, np.newaxis]).squeeze(-1) + r_np

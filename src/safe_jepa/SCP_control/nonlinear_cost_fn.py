@@ -8,7 +8,8 @@ from ..Sampling_control.evaluate_sequences import evaluate_sequences
 def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperparams: dict) -> tuple[jax.Array, jax.Array, dict]:
     # Extract hyperparams
     tau = hyperparams['tau']
-    w_slack = hyperparams['w_slack']
+    w_dyn = hyperparams['w_dyn']
+    w_safe = hyperparams['w_safe']
     rho_u = hyperparams['rho_u']
     gamma = hyperparams['discount']
     H = u.shape[0]
@@ -44,7 +45,8 @@ def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperp
     # Compute total cost and return it
     J_nonlinear = (-discounted_return
                    + rho_u * control_cost
-                   + w_slack * (dyn_cost + safe_cost))
+                   + w_dyn * dyn_cost 
+                   + w_safe * safe_cost)
     return J_nonlinear, jnp.max(jnp.abs(error)), jnp.max(risk)
 
 @nnx.jit
