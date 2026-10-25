@@ -15,8 +15,6 @@ class SCPSolver():
         self.z = cp.Variable((horizon + 1, d_z))
         self.u = cp.Variable((horizon, d_u))
         self.t = cp.Variable((horizon))
-        self.mu_p = cp.Variable((horizon, d_z), nonneg=True)
-        self.mu_n = cp.Variable((horizon, d_z), nonneg=True)
         self.nu = cp.Variable(horizon, nonneg=True)
 
         # Deviation from reference
@@ -53,9 +51,11 @@ class SCPSolver():
         objective_terms = []
 
         for h in range(self.horizon):
-            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n
+            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k, held exactly. A slack here lets the subproblem move the
+            # latent state without the actions that would cause it, so it predicts gains the rollout never delivers and the
+            # trust-region test rejects; with no state constraints the linearised dynamics are always satisfiable
             constraints.append(
-                self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h]
+                self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h]
             )
 
             # Safety constraint: C_k z_k + D_k u_k - nu_k <= tau - r'_k
@@ -73,9 +73,9 @@ class SCPSolver():
             # Epigraph condition: moved action magnitude cost to conditions with epigraph to allow otpimisation
             constraints.append(self.rho_u * cp.sum_squares(self.u[h]) - self.t[h] <= 0)
 
-            # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
+            # Timestep cost (action magnitude cost, reward, safety slack cost, trust region costs)
             objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                    + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
+                    + self.w_slack * cp.sum_squares(self.nu[h]) +
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function

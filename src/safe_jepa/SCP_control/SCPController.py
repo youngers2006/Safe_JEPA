@@ -29,6 +29,7 @@ class SCPController():
         # SCP loop settings
         self.scp_iters = cfg["scp_iters"]
         self.tol = cfg["tol"]
+        self.tol_pred = cfg["tol_pred"]
 
         # Jitted function objects
         self.jac_extractor_fn = get_jacobians
@@ -68,21 +69,11 @@ class SCPController():
         # Vectorized discount array [1, gamma, gamma^2, ...]
         discount_vec = gamma ** np.arange(self.horizon)
 
-        # Define unsqeezed vectors to allow @ operation on 3rd order tensor
-        z_un = z[..., np.newaxis]
-        u_un = u[..., np.newaxis]
-
         # Reward for trajectory
         reward_vec = np.sum(Jr_z * z[:-1], axis=1) + np.sum(Jr_u * u, axis=1)
         discounted_reward = np.sum(discount_vec * reward_vec)
 
-        # mu_p and mu_n usage penalty
-        Az = (A @ z_un[:-1]).squeeze(-1)
-        Bu = (B @ u_un).squeeze(-1)
-        dyn_error = z[1:] - (Az + Bu + r)
-        dyn_penalty = np.sum(dyn_error ** 2)
-
-        # nu usage penalty
+        # nu usage penalty (the dynamics are exact in the subproblem, so they have no slack to penalise)
         Cz = np.sum(C * z[:-1], axis=1)
         Du = np.sum(D * u, axis=1)
         safe_pred = Cz + Du + r_prime
@@ -98,7 +89,7 @@ class SCPController():
         # Compute total trajectory cost for the linearised system
         J_lin = (-discounted_reward 
                  + control_penalty 
-                 + w_slack * (dyn_penalty + safe_penalty) 
+                 + w_slack * safe_penalty
                  - terminal_value)
         return J_lin
 
@@ -185,6 +176,14 @@ class SCPController():
             # Compute the ratio of cost improvement between true and linearised system
             dJ_actual = nonlinear_cost_old - nonlinear_cost_new
             dJ_predicted = linear_cost_old - linear_cost_new
+
+            # Also converged once the subproblem predicts no meaningful improvement (the standard trust-region stop); the
+            # prox-gradient test above can sit just over its tolerance while each iteration gains almost nothing
+            if dJ_predicted <= self.tol_pred * max(1.0, abs(nonlinear_cost_old)):
+                stop_reason = "converged" if feasible_ref else "converged_infeasible"
+                u_opt, z_opt = u_ref, z_ref
+                break
+
             rho = dJ_actual / dJ_predicted if (dJ_predicted > 0) else -np.inf
 
             # Trust region resizing based on error
