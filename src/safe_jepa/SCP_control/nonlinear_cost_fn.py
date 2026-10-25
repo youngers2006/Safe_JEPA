@@ -31,12 +31,12 @@ def nonlinear_cost_fn(z: jax.Array, u: jax.Array, r_fn, v_fn, f_fn, Q_fn, hyperp
     # Compute predicted return
     discounted_return = jnp.sum(gamma ** jnp.arange(H) * rewards) + gamma ** H * terminal_value
 
-    # Compute L1 penalty on defects, matches sum(mu_p + mu_n)
+    # Compute quadratic penalty on defects, matches sum_squares(mu_p + mu_n)
     error = z[1:] - z_next
-    dyn_cost = jnp.sum(jnp.abs(error))
+    dyn_cost = jnp.sum(error ** 2)
 
-    # Compute L1 penalty on threshold violations, matches sum(nu)
-    safe_cost = jnp.sum(jnp.maximum(0.0, risk - tau))
+    # Compute quadratic penalty on threshold violations, matches sum_squares(nu)
+    safe_cost = jnp.sum(jnp.maximum(0.0, risk - tau) ** 2)
 
     # Compute control cost
     control_cost = jnp.sum(u ** 2)

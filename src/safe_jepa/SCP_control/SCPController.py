@@ -83,14 +83,14 @@ class SCPController():
         Az = (A @ z_un[:-1]).squeeze(-1)
         Bu = (B @ u_un).squeeze(-1)
         dyn_error = z[1:] - (Az + Bu + r)
-        dyn_penalty = np.sum(np.abs(dyn_error))
+        dyn_penalty = np.sum(dyn_error ** 2)
 
         # nu usage penalty
         Cz = np.sum(C * z[:-1], axis=1)
         Du = np.sum(D * u, axis=1)
         safe_pred = Cz + Du + r_prime
         safe_penalty = np.sum(
-            np.maximum(0.0, safe_pred - tau)
+            np.maximum(0.0, safe_pred - tau) ** 2
         )
 
         # Action magnitude penalty
