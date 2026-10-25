@@ -100,7 +100,7 @@ class SCPSolver():
         # Setup hyperparams
         self.tau.value = float(hyperparams['tau'])
         self.w_dyn.value = float(hyperparams['w_dyn'])
-        self.w_safe.value = float(hyperparams['w_dyn'])
+        self.w_safe.value = float(hyperparams['w_safe'])
         self.w_prox.value = float(hyperparams['w_prox'])
 
         f_np = (A_np @ z_ref[:-1, :, np.newaxis]).squeeze(-1) + (B_np @ u_ref[:, :, np.newaxis]).squeeze(-1) + r_np

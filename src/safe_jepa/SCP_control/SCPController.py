@@ -196,7 +196,7 @@ class SCPController():
             # Convergence criteria
             # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
             step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
-            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.sqrt(step_sq)
+            prox_grad = 2.0 * max(self.hyperparams['w_prox'], self.w_prox_init) * np.sqrt(step_sq)
             if prox_grad <= self.tol:
                 stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
                 break
