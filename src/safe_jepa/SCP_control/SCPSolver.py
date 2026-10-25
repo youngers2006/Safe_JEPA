@@ -14,20 +14,15 @@ class SCPSolver():
         # Optimisation variables (real and slack)
         self.z = cp.Variable((horizon + 1, d_z))
         self.u = cp.Variable((horizon, d_u))
-        self.t = cp.Variable((horizon))
         self.mu_p = cp.Variable((horizon, d_z), nonneg=True)
         self.mu_n = cp.Variable((horizon, d_z), nonneg=True)
         self.nu = cp.Variable(horizon, nonneg=True)
 
-        # Deviation from reference
-        # covers u_0...u_H-1 and z_1...z_H
-        self.dz = cp.Variable((horizon, d_z))
-        self.du = cp.Variable((horizon, d_u))
-
-        # Reference path
-        self.z_ref = cp.Parameter((horizon + 1, d_z))
-        self.u_ref = cp.Parameter((horizon, d_u))
-        self.t_ref = cp.Parameter((horizon))
+        # Reference path scaled by the trust region weight, w_prox * z_ref and w_prox * u_ref: expanding the proximal term
+        # w_prox ||z - z_ref||^2 = w_prox ||z||^2 - 2 (w_prox z_ref)^T z + const keeps the problem DPP without auxiliary
+        # deviation variables (w_prox * sum_squares(z - z_ref) would multiply two parameter-dependent expressions)
+        self.wz_ref = cp.Parameter((horizon + 1, d_z))
+        self.wu_ref = cp.Parameter((horizon, d_u))
 
         # Taylor series coefficients
         self.A = [cp.Parameter((d_z, d_z)) for _ in range(self.horizon)]
@@ -63,21 +58,16 @@ class SCPSolver():
             constraints.append(self.C[h] @ self.z[h] + self.D[h] @ self.u[h] - self.nu[h] <= 
                 self.tau - self.r_prime[h])
 
-            # Trust region deviation from the reference path
-            constraints.append(self.dz[h] == self.z[h+1] - self.z_ref[h+1])
-            constraints.append(self.du[h] == self.u[h] - self.u_ref[h])
-
             # Action bounding
             constraints.append(self.u[h] <= u_max)
             constraints.append(self.u[h] >= u_min)
 
-            # Epigraph condition: moved action magnitude cost to conditions with epigraph to allow otpimisation
-            constraints.append(self.rho_u * cp.sum_squares(self.u[h]) - self.t[h] <= 0)
-
-            # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
-            objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                    + self.w_slack * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum(self.nu[h]) +
-                    self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
+            # Timestep cost (reward, slack variable costs, trust region terms on z_1...z_H and u_0...u_H-1, and the action
+            # magnitude cost, which shares the quadratic in u with the trust region term)
+            objective_terms.append(-(self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
+                    + self.w_slack * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum(self.nu[h])
+                    + self.w_prox * cp.sum_squares(self.z[h+1]) - 2.0 * (self.wz_ref[h+1] @ self.z[h+1])
+                    + (self.w_prox + self.rho_u) * cp.sum_squares(self.u[h]) - 2.0 * (self.wu_ref[h] @ self.u[h]))
 
         # End of horizon cost with value function
         objective_terms.append(-(self.discount ** self.horizon) * (self.Jv_z @ self.z[self.horizon]))
@@ -101,8 +91,9 @@ class SCPSolver():
 
         # Setup static values
         self.z_c.value = z_c
-        self.z_ref.value = z_ref
-        self.u_ref.value = u_ref
+        self.z_ref_np, self.u_ref_np = np.asarray(z_ref), np.asarray(u_ref)
+        self.wz_ref.value = float(hyperparams['w_prox']) * self.z_ref_np
+        self.wu_ref.value = float(hyperparams['w_prox']) * self.u_ref_np
         self.Jv_z.value = Jv_z_np
 
         # Setup hyperparams
@@ -123,14 +114,14 @@ class SCPSolver():
             self.Jr_u[h].value = Jr_u_np[h]
 
         try:
-            # Solve optimisation problem with SOCP solver CLARABEL
-            self.problem.solve(solver=cp.CLARABEL, warm_start=True)
+            # Solve the QP with OSQP, warm started from the last solution; polishing recovers the exact active-set solution
+            self.problem.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-5, eps_rel=1e-5, max_iter=20000, polish=True)
         except Exception as e:
             print(f"SCP subproblem: solver crashed ({e})")
-            return self.u_ref.value, self.z_ref.value, False
+            return self.u_ref_np, self.z_ref_np, False
         
         status = self.problem.status
         if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE] and self.u.value is not None: # Success
             return self.u.value, self.z.value, True
         print(f"SCP subproblem: solver returned status {status}")
-        return self.u_ref.value, self.z_ref.value, False
+        return self.u_ref_np, self.z_ref_np, False
