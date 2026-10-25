@@ -83,14 +83,15 @@ class SCPController():
         Az = (A @ z_un[:-1]).squeeze(-1)
         Bu = (B @ u_un).squeeze(-1)
         dyn_error = z[1:] - (Az + Bu + r)
-        dyn_penalty = np.sum(dyn_error ** 2)
+        dyn_penalty = np.sum(np.abs(dyn_error))
 
         # nu usage penalty
         Cz = np.sum(C * z[:-1], axis=1)
         Du = np.sum(D * u, axis=1)
         safe_pred = Cz + Du + r_prime
-        safe_error = np.maximum(0.0, safe_pred - tau)
-        safe_penalty = np.sum(safe_error ** 2)
+        safe_penalty = np.sum(
+            np.maximum(0.0, safe_pred - tau)
+        )
 
         # Action magnitude penalty
         control_penalty = rho_u * np.sum(u ** 2)
@@ -200,7 +201,7 @@ class SCPController():
                 matrices, z_opt, u_opt
             )
             J_new, defect_new, risk_new = self.merit(
-                z_c, u_opt, wm_networks
+                z_opt, u_opt, wm_networks
             )
 
             # Compute the ratio of cost improvement between true and linearised system
