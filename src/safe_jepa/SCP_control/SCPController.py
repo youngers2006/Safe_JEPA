@@ -5,7 +5,7 @@ import cvxpy as cp
 
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
-from .nonlinear_cost_fn import nonlinear_cost_fn
+from .nonlinear_cost_fn import nonlinear_cost_fn, rollout_fn
 from ..Sampling_control.evaluate_sequences import plan_summary
 
 class SCPController():
@@ -25,14 +25,21 @@ class SCPController():
             "w_prox": cfg["w_prox"]
         }
         self.w_prox_init = cfg["w_prox"]
+        self.w_prox_min = cfg["w_prox_min"]
 
         # SCP loop settings
         self.scp_iters = cfg["scp_iters"]
         self.tol = cfg["tol"]
+        self.feas_tol = cfg["feas_tol"]
+
+        # TR dynamic resizing trigger bounds
+        self.rho_lower = cfg["rho_lower"]
+        self.rho_upper = cfg["rho_upper"]
 
         # Jitted function objects
         self.jac_extractor_fn = get_jacobians
         self.nonlinear_cost_fn = nonlinear_cost_fn
+        self.rollout_fn = rollout_fn
 
         # Solver parameters
         self.SCP_solver = SCPSolver(
@@ -46,10 +53,6 @@ class SCPController():
 
         # Flag to trigger initial warm start
         self.is_first_step = True
-
-        # TR dynamic resizing trigger bounds
-        self.rho_lower = cfg["rho_lower"]
-        self.rho_upper = cfg["rho_upper"]
         
         # Memory buffer for trajectories to use in warm starting
         self.u_prev = np.zeros((self.horizon, self.d_u))
@@ -100,17 +103,29 @@ class SCPController():
                  + control_penalty 
                  + w_slack * (dyn_penalty + safe_penalty) 
                  - terminal_value)
-        return J_lin
+        return float(J_lin)
 
     def rollout(self, z_c: jax.Array, u: np.ndarray, wm_networks: tuple[jax.Array, ...]):
-        cost_jax, feasible, predictions = self.nonlinear_cost_fn(
+        feasible, predictions = self.rollout_fn(
             z_c, 
-            jnp.array(u),
+            jnp.asarray(u),
             *wm_networks,
             self.hyperparams
         )
         z = np.concatenate([np.asarray(z_c)[np.newaxis], np.asarray(predictions["latents"])])
-        return z, np.asarray(cost_jax), feasible, predictions
+        return z, feasible, predictions
+
+    def merit(self, z: np.ndarray, u: np.ndarray, wm_networks: tuple):
+        J, max_defect, max_risk = self.nonlinear_cost_fn(
+            jnp.asarray(z),
+            jnp.asarray(u),
+            *wm_networks,
+            self.hyperparams
+        )
+        return float(J), float(max_defect), float(max_risk)
+
+    def is_feasible(self, max_defect: float, max_risk: float) -> bool:
+        return max_defect <= self.feas_tol and max_risk <= self.hyperparams['tau'] + self.feas_tol
 
     def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
@@ -121,7 +136,7 @@ class SCPController():
 
         if self.is_first_step:
             # Initial u is zeros
-            u_ref = self.u_prev
+            u_ref = self.u_prev.copy()
             self.is_first_step = False
         else:
             # Shift actions by 1 and set last action to end of the prev action sequence
@@ -129,93 +144,103 @@ class SCPController():
             u_ref[-1, :] = self.u_prev[-1, :]
 
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
-        z_ref, nonlinear_cost_old, feasible_ref, predictions_ref = self.rollout(z_c, u_ref, wm_networks)
+        z_ref, _, _ = self.rollout(z_c, u_ref, wm_networks)
+        J_ref, defect_ref, risk_ref = self.merit(z_ref, u_ref, wm_networks)
 
-        rho = -np.inf
+        z_c_np = np.asarray(z_c)
         stop_reason = "max_iters"
+        prox_grad = np.inf
+        n_rejected = 0
+        n_solver_failures = 0
+        matrices = None
+        iteration = -1
         for iteration in range(self.scp_iters):
-            # Extract matrices from world model
-            jax_matrices = self.jac_extractor_fn(
-                z_ref=jnp.array(z_ref), 
-                u_ref=jnp.array(u_ref),
-                r_fn=r_fn,
-                v_fn=v_fn,
-                f_fn=f_fn,
-                Q_fn=Q_fn
-            )
-
-            # Conversion to numpy
-            cpu_matrices = tuple(np.asarray(m) for m in jax_matrices)
-            z_c_np = np.asarray(z_c)
-            z_ref_np = np.asarray(z_ref)
-            u_ref_np = np.asarray(u_ref)
+            # Linearise only if the referene has changed
+            if matrices is None:
+                # Extract matrices from world model
+                jax_matrices = self.jac_extractor_fn(
+                    z_ref=jnp.array(z_ref), 
+                    u_ref=jnp.array(u_ref),
+                    r_fn=r_fn,
+                    v_fn=v_fn,
+                    f_fn=f_fn,
+                    Q_fn=Q_fn
+                )
+                matrices = tuple(np.asarray(m) for m in jax_matrices)
 
             # Run solver to setup and solve SOCP
-            u_opt, z_opt = self.SCP_solver.solve_problem(
-                cpu_matrices,
+            u_opt, z_opt, ok = self.SCP_solver.solve_problem(
+                matrices,
                 z_c_np,
-                z_ref_np,
-                u_ref_np,
+                z_ref,
+                u_ref,
                 self.hyperparams
             )
 
+            # Failed solver step, reject and try again with a tighter trust region
+            if not ok:
+                n_solver_failures += 1
+                self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
+                continue
+
             # Convergence criteria
-            # Prox-gradient norm ||G_t|| = ||u_ref - u_opt|| / t, with t = 1 / (2 w_prox) , (Elango et al. 2024, Alg. 1)
-            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.linalg.norm(u_opt - u_ref_np)
+            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
+            step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
+            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.sqrt(step_sq)
             if prox_grad <= self.tol:
-                stop_reason = "converged" if feasible_ref else "converged_infeasible"
-                u_opt, z_opt = u_ref, z_ref
+                stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
                 break
 
             # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
-                cpu_matrices, z_ref_np, u_ref_np
+                matrices, z_ref, u_ref
             )
-
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
-                cpu_matrices, z_opt, u_opt
+                matrices, z_opt, u_opt
             )
-            z_opt_rollout, nonlinear_cost_new, feasible_new, predictions_new = self.rollout(
+            J_new, defect_new, risk_new = self.merit(
                 z_c, u_opt, wm_networks
             )
 
             # Compute the ratio of cost improvement between true and linearised system
-            dJ_actual = nonlinear_cost_old - nonlinear_cost_new
+            dJ_actual = J_ref - J_new
             dJ_predicted = linear_cost_old - linear_cost_new
             rho = dJ_actual / dJ_predicted if (dJ_predicted > 0) else -np.inf
 
-            # Trust region resizing based on error
-            if rho < self.rho_lower: # Reject u* and decrease TR size
-                self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
-            else:
-                # Update reference, rolling u through the world model to ensure it obeys dynamics
-                u_ref = u_opt
-                z_ref = z_opt_rollout
-                nonlinear_cost_old, feasible_ref, predictions_ref = nonlinear_cost_new, feasible_new, predictions_new
+            # Trust region resizing
+            if rho >= self.rho_lower:
+                u_ref, z_ref = u_opt, z_opt
+                J_ref, defect_ref, risk_ref = J_new, defect_new, risk_new
+                matrices = None
 
-                # Check if TR must be resized
                 if rho > self.rho_upper:
-                    self.hyperparams['w_prox'] = 0.5 * self.hyperparams['w_prox']
-                else:
-                    pass
+                    self.hyperparams['w_prox'] = max(
+                        self.w_prox_min, 0.5 * self.hyperparams['w_prox']
+                    )
+            else:
+                # Reject: keep the reference and shrink the step
+                n_rejected += 1
+                self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
 
-        # If the final iteration was rejected then u_opt is unsafe so fallback to reference solution
-        last_rejected = rho < self.rho_lower
-        if last_rejected:
-            u_opt = u_ref
-            z_opt = z_ref
+        _, feasible_rollout, predictions = self.rollout(
+            z_c, u_ref, wm_networks
+        )
+        certified = stop_reason == "converged" and bool(feasible_rollout)
 
         info = {
             "iterations": iteration + 1,
             "stop_reason": stop_reason,
+            "certified": certified,
             "prox_grad": prox_grad,
+            "max_defect": defect_ref,
             "w_prox_final": self.hyperparams['w_prox'],
-            "last_rejected": stop_reason == "max_iters" and rho < self.rho_lower,
-            **plan_summary(jnp.asarray(u_ref), feasible_ref, predictions_ref),
+            "n_rejected": n_rejected,
+            "n_solver_failures": n_solver_failures,
+            **plan_summary(jnp.asarray(u_ref), feasible_rollout, predictions),
         }
-
-        # Update orevious solution buffer and return 1st action to take
-        self.u_prev = u_opt
-        self.z_prev = z_opt
-        return jnp.array(u_opt[0, :]), info
+ 
+        # Update previous solution buffer and return 1st action to take
+        self.u_prev = u_ref
+        self.z_prev = z_ref
+        return jnp.asarray(u_ref[0, :]), info

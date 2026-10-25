@@ -20,6 +20,7 @@ class SCPSolver():
         self.nu = cp.Variable(horizon, nonneg=True)
 
         # Deviation from reference
+        # covers u_0...u_H-1 and z_1...z_H
         self.dz = cp.Variable((horizon, d_z))
         self.du = cp.Variable((horizon, d_u))
 
@@ -63,7 +64,7 @@ class SCPSolver():
                 self.tau - self.r_prime[h])
 
             # Trust region deviation from the reference path
-            constraints.append(self.dz[h] == self.z[h] - self.z_ref[h])
+            constraints.append(self.dz[h] == self.z[h+1] - self.z_ref[h+1])
             constraints.append(self.du[h] == self.u[h] - self.u_ref[h])
 
             # Action bounding
@@ -123,18 +124,13 @@ class SCPSolver():
 
         try:
             # Solve optimisation problem with SOCP solver CLARABEL
-            self.problem.solve(solver=cp.CLARABEL, warm_start=True) # Warm start turned off for now, msut convert this to DDP
-            status = self.problem.status
-
-            if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]: # Success
-                return self.u.value, self.z.value
-            elif status == cp.INFEASIBLE: # Failed due to infeasible preoblem
-                print("SCP Error: Problem is Infeasible. Falling Back to Previous Solution")
-                return self.u_ref.value, self.z_ref.value
-            else: # Failed for other reason
-                print(f"Solver Error: Solver exited with status {status}")
-                return self.u_ref.value, self.z_ref.value
-        # If solver crashes then return the reference value and report the crash to the command line
+            self.problem.solve(solver=cp.CLARABEL, warm_start=True)
         except Exception as e:
-            print(f"C++ Backend Crashed: {e}")
-            return self.u_ref.value, self.z_ref.value
+            print(f"SCP subproblem: solver crashed ({e})")
+            return self.u_ref.value, self.z_ref.value, False
+        
+        status = self.problem.status
+        if status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE] and self.u.value is not None: # Success
+            return self.u.value, self.z.value, True
+        print(f"SCP subproblem: solver returned status {status}")
+        return self.u_ref.value, self.z_ref.value, False
