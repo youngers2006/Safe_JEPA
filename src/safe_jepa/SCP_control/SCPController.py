@@ -133,8 +133,8 @@ class SCPController():
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
-        # Reset w_prox to prevent it becoming too extreme
-        self.hyperparams['w_prox'] = self.w_prox_init
+        # w_prox carries over from the previous step (the controller is rebuilt each episode, so each episode starts at
+        # w_prox_init); the stopping test below no longer gets easier as w_prox falls, so this cannot stop SCP early
 
         if self.is_first_step:
             # Initial u is zeros
@@ -186,9 +186,12 @@ class SCPController():
                 continue
 
             # Convergence criteria
-            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
+            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox), bounded at the fixed step of w_prox_init. The
+            # prox step grows and ||G_t|| shrinks as w_prox falls, so testing at the current w_prox passes once w_prox is
+            # small whether or not the plan has stopped moving; 2 max(w_prox, w_prox_init) ||step|| bounds ||G_t|| at
+            # w_prox_init whatever w_prox is now
             step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
-            prox_grad = 2.0 * self.hyperparams['w_prox'] * np.sqrt(step_sq)
+            prox_grad = 2.0 * max(self.hyperparams['w_prox'], self.w_prox_init) * np.sqrt(step_sq)
             if prox_grad <= self.tol:
                 stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
                 break
