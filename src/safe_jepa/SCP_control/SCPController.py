@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import cvxpy as cp
+from jax.experimental import enable_x64
 
 from .SCPSolver import SCPSolver
 from .get_jacobians import get_jacobians
@@ -83,14 +84,14 @@ class SCPController():
         Az = (A @ z_un[:-1]).squeeze(-1)
         Bu = (B @ u_un).squeeze(-1)
         dyn_error = z[1:] - (Az + Bu + r)
-        dyn_penalty = np.sum(dyn_error ** 2)
+        dyn_penalty = np.sum(np.abs(dyn_error))
 
         # nu usage penalty
         Cz = np.sum(C * z[:-1], axis=1)
         Du = np.sum(D * u, axis=1)
         safe_pred = Cz + Du + r_prime
         safe_penalty = np.sum(
-            np.maximum(0.0, safe_pred - tau) ** 2
+            np.maximum(0.0, safe_pred - tau)
         )
 
         # Action magnitude penalty
@@ -128,7 +129,7 @@ class SCPController():
     def is_feasible(self, max_defect: float, max_risk: float) -> bool:
         return max_defect <= self.feas_tol and max_risk <= self.hyperparams['tau'] + self.feas_tol
 
-    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+    def _step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
@@ -215,6 +216,7 @@ class SCPController():
                 J_ref, defect_ref, risk_ref = J_new, defect_new, risk_new
                 matrices = None
 
+                # If 
                 if rho > self.rho_upper:
                     self.hyperparams['w_prox'] = max(
                         self.w_prox_min, 0.5 * self.hyperparams['w_prox']
@@ -245,3 +247,8 @@ class SCPController():
         self.u_prev = u_ref
         self.z_prev = z_ref
         return jnp.asarray(u_ref[0, :]), info
+
+    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+        with enable_x64():
+            u, info = self._step(jnp.asarray(z_c, dtype=jnp.float64), wm_networks)
+        return jnp.asarray(u, dtype=jnp.float32), info

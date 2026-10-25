@@ -76,7 +76,7 @@ class SCPSolver():
 
             # Timestep cost (action magnitude cost, reward, slack variable costs, trust region costs)
             objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                    + self.w_slack * cp.sum_squares(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
+                    + self.w_slack * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum(self.nu[h]) +
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
