@@ -215,6 +215,7 @@ class SCPController():
                 J_ref, defect_ref, risk_ref = J_new, defect_new, risk_new
                 matrices = None
 
+                # If 
                 if rho > self.rho_upper:
                     self.hyperparams['w_prox'] = max(
                         self.w_prox_min, 0.5 * self.hyperparams['w_prox']
