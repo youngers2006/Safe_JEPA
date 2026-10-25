@@ -15,6 +15,8 @@ class SCPSolver():
         self.z = cp.Variable((horizon + 1, d_z))
         self.u = cp.Variable((horizon, d_u))
         self.t = cp.Variable((horizon))
+        self.mu_p = cp.Variable((horizon, d_z), nonneg=True)
+        self.mu_n = cp.Variable((horizon, d_z), nonneg=True)
         self.nu = cp.Variable(horizon, nonneg=True)
 
         # Deviation from reference
@@ -44,6 +46,7 @@ class SCPSolver():
         # Weights for optimisation
         self.rho_u = cp.Parameter(nonneg=True)
         self.w_slack = cp.Parameter(nonneg=True)
+        self.w_dyn = cp.Parameter(nonneg=True)
         self.w_prox = cp.Parameter(nonneg=True)
 
         # Initialise problem store
@@ -51,11 +54,11 @@ class SCPSolver():
         objective_terms = []
 
         for h in range(self.horizon):
-            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k, held exactly. A slack here lets the subproblem move the
-            # latent state without the actions that would cause it, so it predicts gains the rollout never delivers and the
-            # trust-region test rejects; with no state constraints the linearised dynamics are always satisfiable
+            # Dynamics constraint: z_k+1 = A_k z_k + B_k u_k + r_k + mu_p - mu_n. The slack (virtual control) keeps the
+            # subproblem feasible; its L1 penalty below is exact, so above the costates the optimal slack is exactly zero,
+            # where a quadratic penalty always uses some and so predicts gains the rollout never delivers
             constraints.append(
-                self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h]
+                self.z[h+1] == self.A[h] @ self.z[h] + self.B[h] @ self.u[h] + self.r[h] + self.mu_p[h] - self.mu_n[h]
             )
 
             # Safety constraint: C_k z_k + D_k u_k - nu_k <= tau - r'_k
@@ -75,7 +78,7 @@ class SCPSolver():
 
             # Timestep cost (action magnitude cost, reward, safety slack cost, trust region costs)
             objective_terms.append(self.t[h] - (self.discount ** h) * (self.Jr_z[h] @ self.z[h] + self.Jr_u[h] @ self.u[h])
-                    + self.w_slack * cp.sum_squares(self.nu[h]) +
+                    + self.w_dyn * cp.sum(self.mu_p[h] + self.mu_n[h]) + self.w_slack * cp.sum_squares(self.nu[h]) +
                     self.w_prox * (cp.sum_squares(self.dz[h]) + cp.sum_squares(self.du[h])))
 
         # End of horizon cost with value function
@@ -108,6 +111,7 @@ class SCPSolver():
         self.tau.value = float(hyperparams['tau'])
         self.rho_u.value = float(hyperparams['rho_u'])
         self.w_slack.value = float(hyperparams['w_slack'])
+        self.w_dyn.value = float(hyperparams['w_dyn'])
         self.w_prox.value = float(hyperparams['w_prox'])
 
         # Setup time varying values

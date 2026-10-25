@@ -22,6 +22,7 @@ class SCPController():
             "tau": cfg["safety_threshold"],
             "rho_u": cfg["rho_u"],
             "w_slack": cfg["w_slack"],
+            "w_dyn": cfg["w_dyn"],
             "w_prox": cfg["w_prox"]
         }
         self.w_prox_init = cfg["w_prox"]
@@ -69,11 +70,18 @@ class SCPController():
         # Vectorized discount array [1, gamma, gamma^2, ...]
         discount_vec = gamma ** np.arange(self.horizon)
 
+        # Propagate u through the linearised dynamics from z[0], so this is the linearisation of the rollout cost (the
+        # subproblem's own z can carry virtual control, which the rollout never has)
+        z_lin = [z[0]]
+        for h in range(self.horizon):
+            z_lin.append(A[h] @ z_lin[-1] + B[h] @ u[h] + r[h])
+        z = np.stack(z_lin)
+
         # Reward for trajectory
         reward_vec = np.sum(Jr_z * z[:-1], axis=1) + np.sum(Jr_u * u, axis=1)
         discounted_reward = np.sum(discount_vec * reward_vec)
 
-        # nu usage penalty (the dynamics are exact in the subproblem, so they have no slack to penalise)
+        # nu usage penalty (z follows the linearised dynamics exactly here, so there is no dynamics slack to penalise)
         Cz = np.sum(C * z[:-1], axis=1)
         Du = np.sum(D * u, axis=1)
         safe_pred = Cz + Du + r_prime
@@ -179,7 +187,7 @@ class SCPController():
 
             # Also converged once the subproblem predicts no meaningful improvement (the standard trust-region stop); the
             # prox-gradient test above can sit just over its tolerance while each iteration gains almost nothing
-            if dJ_predicted <= self.tol_pred * max(1.0, abs(nonlinear_cost_old)):
+            if abs(dJ_predicted) <= self.tol_pred * max(1.0, abs(nonlinear_cost_old)):
                 stop_reason = "converged" if feasible_ref else "converged_infeasible"
                 u_opt, z_opt = u_ref, z_ref
                 break
