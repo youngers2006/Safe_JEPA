@@ -1,23 +1,3 @@
-"""Plot saved closed-loop episodes and check where the safety threshold fails.
-
-Reads a results folder written by sweep_runner.run_point (one {controller}_seed_{s}.npz per episode and the merged
-{controller}_config.yaml) and, for every episode:
-  - plots the planned risk of the executed step and of the whole plan against the threshold, the reward the planner
-    predicted for the executed step against the real one, the planned return against the discounted return actually
-    earned from that step on, and for SCP its iterations, stop reasons and plan times;
-  - check 1: classifies how the episode ended from when the plans stopped meeting the threshold: no violation / the
-    critic saw no risk (the last plan met the threshold) / warned late (plans over the threshold only near the end) /
-    over the threshold throughout (plans over it from early on).
-With the world model, whose checkpoint and dataset are found through the saved config, it also runs:
-  - check 2: the critic's risk on the dataset, at the dataset's actions and at the safest of K sampled actions, overall
-    and on states far from any violation, i.e. how much of the data the threshold already excludes;
-  - check 3: at every visited state, the critic's risk at the executed action, at the safest sampled action and at the
-    action of the nearest dataset state in latent space: whether a safe action existed at all, and whether the planner
-    chose actions the critic rates riskier than dataset-like ones.
-
-usage: python src/scripts/analyse_episodes.py src/save_data/experiments/<data_dir>/<tag> [--controller SCP] [--no_model]
-Figures and a per-episode CSV are written to <results>/analysis.
-"""
 import argparse
 import csv
 import re

@@ -121,7 +121,7 @@ class RewardPredictor(nnx.Module):
             current_dim = h
         self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
-        
+
     def outputs(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
