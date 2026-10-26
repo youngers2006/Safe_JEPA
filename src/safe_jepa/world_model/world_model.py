@@ -254,6 +254,7 @@ class WorldModel(nnx.Module):
             z = z0
 
             total_loss = 0
+            w_sum = 0.0
             step_metrics = {}
             for t in range(H):
                 a, m = action[:, t], mask[:, t]
@@ -302,6 +303,7 @@ class WorldModel(nnx.Module):
                 # Total world model loss
                 total_loss = total_loss + self.rho ** t * (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
                             self.lambda_s * loss_s + self.lambda_r * loss_r)
+                w_sum = w_sum + self.rho ** t
 
                 if t == 0:
                     loss_z_0, loss_v_0, loss_s_0, loss_r_0, q_aux = loss_z, loss_v, loss_s, loss_r, q_aux_t
@@ -327,7 +329,7 @@ class WorldModel(nnx.Module):
             loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
 
             # add vicreg loss to total loss
-            total_loss = total_loss + loss_vicreg
+            total_loss = total_loss / w_sum + loss_vicreg
 
             # Record Metrics
             metrics = {
