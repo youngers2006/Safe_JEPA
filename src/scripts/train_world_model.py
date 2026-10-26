@@ -25,7 +25,9 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["DynamicsParams"]["d_in"] = d_z + act_dim
     cfg["DynamicsParams"]["d_out"] = d_z
     cfg["RewardParams"]["d_in"] = d_z + act_dim
-    cfg["RewardParams"]["d_out"] = 1
+    cfg["RewardParams"]["d_out"] = 2 if "goal_weight" in cfg else 1 # second output: goal logit
+    cfg["RewardParams"]["goal_reward"] = cfg.get("goal_reward", 1.0)
+    cfg["RewardParams"]["goal_weight"] = cfg.get("goal_weight", 1.0)
     cfg["ValueParams"]["d_in"] = d_z
     cfg["ValueParams"]["d_out"] = 1
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
@@ -91,6 +93,14 @@ def main(cfg_filename):
 
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
+
+    # Goal events: the dataset has no goal flag, but reaching the goal adds goal_reward to a per-step reward that is
+    # far smaller than goal_threshold. goal_weight = s (1 - p) / ((1 - s) p) gives goal rows a share s of the weighted loss
+    goal_rows = data_dict["rewards"] > cfg.get("goal_threshold", 0.5)
+    p_goal = goal_rows.mean()
+    print(f"{goal_rows.sum()} goal rows ({100 * p_goal:.2f}%), largest |reward| on the other rows "
+          f"{np.abs(data_dict['rewards'][~goal_rows]).max():.3f}; goal_weight for a 15% share: "
+          f"{0.15 * (1 - p_goal) / (0.85 * max(p_goal, 1e-12)):.0f}")
 
     # Add additional data
     cfg = resolve_dims(
