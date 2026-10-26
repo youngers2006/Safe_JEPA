@@ -1,5 +1,4 @@
 from __future__ import annotations
-import math
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
@@ -105,12 +104,6 @@ class RewardPredictor(nnx.Module):
         layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
-
-        # With the goal head (d_out = 2) the second output is the logit of reaching the goal on this step. Training
-        # weights goal rows by goal_weight, which raises the optimal logit by log(goal_weight), so predictions remove it
-        self.goal_head = d_out == 2
-        self.goal_reward = cfg.get("goal_reward", 1.0)
-        self.log_goal_weight = math.log(cfg.get("goal_weight", 1.0))
         
         current_dim = d_in
         
@@ -122,7 +115,7 @@ class RewardPredictor(nnx.Module):
         self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
 
-    def outputs(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         x = jnp.concatenate([z, u], axis=-1)
 
         for l in range(0, len(self.layers)):
@@ -132,20 +125,6 @@ class RewardPredictor(nnx.Module):
             x = nnx.silu(x)
         
         return self.output_layer(x, update_spectral_norm)
-
-    def heads(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> tuple[jax.Array, jax.Array]:
-        # Dense reward and goal logit, for training the goal head
-        out = self.outputs(z, u, update_spectral_norm)
-        return out[..., 0], out[..., 1]
-
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        out = self.outputs(z, u, update_spectral_norm)
-        if not self.goal_head:
-            return out
-
-        # Expected reward: dense reward plus the goal bonus times the probability of reaching the goal
-        p_goal = jax.nn.sigmoid(out[..., 1:] - self.log_goal_weight)
-        return out[..., :1] + self.goal_reward * p_goal
 
 class QSafetyCritic(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):

@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "src/datasets/FilteredSafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
-data_dir: "T6_pointgoal2_c_1_5_seed_0"        # one subdir per sweep point
+data_dir: "T5_pointgoal2_c_1_5_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
@@ -29,12 +29,6 @@ gamma: 0.5                         # VICReg variance target, tanh latent compres
 alpha: 0.05    # CQL weight
 violation_weight: 65    # Bellman weight on high-risk targets
 ER_tau: 0.7
-
-# goal head of the reward model (delete goal_weight to train the plain reward head, as for T5)
-goal_threshold: 0.5   # reward above this marks a step that reached the goal; the dataset has no goal flag
-goal_reward: 1.0      # Safety-Gymnasium's goal bonus
-goal_weight: 35       # weight on goal rows in the goal loss; set it to the "goal_weight for a 15% share" printed at load
-lambda_goal: 1.0      # weight of the goal loss in the reward loss
 
 tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
 

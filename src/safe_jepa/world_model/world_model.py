@@ -56,13 +56,6 @@ class WorldModel(nnx.Module):
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
         self.rho = cfg["rho"] # Weight rho^t on losses at rollout step t
 
-        # Goal head of the reward model, used when goal_weight is set
-        self.goal_head = "goal_weight" in cfg
-        self.goal_threshold = cfg.get("goal_threshold", 0.5) # reward above this marks a step that reached the goal
-        self.goal_reward = cfg.get("goal_reward", 1.0) # goal bonus
-        self.goal_weight = cfg.get("goal_weight", 1.0) # weight on goal rows in the goal classification loss
-        self.lambda_goal = cfg.get("lambda_goal", 1.0)
-
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
             mu=obs_mean,
@@ -272,33 +265,8 @@ class WorldModel(nnx.Module):
                 loss_z = masked_mean(jnp.mean((next_z - next_z_target[:, t]) ** 2, axis=-1), m)
 
                 # Reward Loss
-                if self.goal_head:
-                    # The dense reward by regression, and reaching the goal by a classification weighted towards the
-                    # rare goal rows (the dataset has no goal flag; the goal bonus lifts the reward above goal_threshold)
-                    dense_pred, goal_logit = rew_fn.heads(z, a, update_spectral_norm=sn)
-                    goal = (reward[:, t] > self.goal_threshold).astype(jnp.float32)
-                    loss_r_dense = masked_mean((dense_pred - (reward[:, t] - self.goal_reward * goal)) ** 2, m)
-
-                    w_goal = m * (1.0 + (self.goal_weight - 1.0) * goal)
-                    loss_r_goal = jnp.sum(
-                        w_goal * optax.sigmoid_binary_cross_entropy(goal_logit, goal)
-                    ) / jnp.maximum(jnp.sum(w_goal), 1e-8)
-
-                    loss_r = loss_r_dense + self.lambda_goal * loss_r_goal
-
-                    # Goal probability as the planners see it, on goal rows and on the rest
-                    p_goal = jax.nn.sigmoid(goal_logit - rew_fn.log_goal_weight)
-                    goal_aux_t = {
-                        "loss_r_dense": loss_r_dense,
-                        "loss_r_goal": loss_r_goal,
-                        "p_goal_on_goal": jnp.sum(m * goal * p_goal) / jnp.maximum(jnp.sum(m * goal), 1.0),
-                        "p_goal_off_goal": jnp.sum(m * (1.0 - goal) * p_goal) / jnp.maximum(jnp.sum(m * (1.0 - goal)), 1.0),
-                        "goal_rows": jnp.sum(m * goal)
-                    }
-                else:
-                    r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
-                    loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
-                    goal_aux_t = {}
+                r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
+                loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
 
                 # Value Loss
                 # Get value prediction
@@ -339,7 +307,6 @@ class WorldModel(nnx.Module):
 
                 if t == 0:
                     loss_z_0, loss_v_0, loss_s_0, loss_r_0, q_aux = loss_z, loss_v, loss_s, loss_r, q_aux_t
-                    goal_aux = goal_aux_t
                 step_metrics[f"loss_dyn_t{t}"] = loss_z
 
                 z = next_z
@@ -373,7 +340,6 @@ class WorldModel(nnx.Module):
                 "loss_var": loss_var,
                 "loss_cov": loss_cov,
                 "loss_r": loss_r_0,
-                **goal_aux,
                 **q_aux,
                 **step_metrics,
                 "q_target_min": jnp.min(q_target),
