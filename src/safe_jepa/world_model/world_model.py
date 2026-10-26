@@ -27,6 +27,9 @@ class TargetBundle(nnx.Module):
 def expectile_regression_loss(u, tau):
     return jnp.where(u > 0, tau, 1 - tau) * (u **2)
 
+def masked_mean(x, mask):
+    return jnp.sum(mask * x) / jnp.maximum(jnp.sum(mask), 1.0)
+
 class WorldModel(nnx.Module):
     def __init__(
             self, 
@@ -51,6 +54,7 @@ class WorldModel(nnx.Module):
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
         self.violation_weight = cfg["violation_weight"]
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
+        self.rho = cfg["rho"] # Weight rho^t on losses at rollout step t
 
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
@@ -121,7 +125,9 @@ class WorldModel(nnx.Module):
             self.target_safety_critic
         )
         self.optimiser = nnx.Optimizer(
-            self.trainable_nodes, optax.adam(learning_rate=lr), wrt=nnx.Param
+            self.trainable_nodes, 
+            optax.chain((optax.clip_by_global_norm(20.0)), optax.adam(learning_rate=lr)), 
+            wrt=nnx.Param
         )
 
     @nnx.jit
@@ -183,18 +189,24 @@ class WorldModel(nnx.Module):
     @partial(nnx.jit, static_argnames=("Q_minima_samples", "action_bounds"))
     def train_step(
         self,
-        obs: jax.Array, 
-        next_obs: jax.Array, 
-        action: jax.Array, 
-        reward: jax.Array, 
-        safety_cost: jax.Array, 
-        terminal: jax.Array,
+        obs: jax.Array, # (B, H, obs_dim)
+        next_obs: jax.Array, # (B, H, obs_dim)
+        action: jax.Array, # (B, H, d_u)
+        reward: jax.Array, # (B, H)
+        safety_cost: jax.Array, # (B, H)
+        terminal: jax.Array, # (B, H)
+        mask: jax.Array, # (B, H)
         key: jax.Array,
         Q_minima_samples: int = 64,
         action_bounds: tuple[float, float] = (-1.0, 1.0)
     ) -> dict:
+        # B windows of H consecutive transitions
+        B, H, d_u = action.shape
+
         # Create z targets
-        next_z_target = self.target_encoder(next_obs)
+        next_z_target = self.target_encoder(
+            next_obs.reshape((B * H,) + next_obs.shape[2:])
+        ).reshape(B, H, -1)
         next_z_target = jax.lax.stop_gradient(
             next_z_target
         )
@@ -202,19 +214,27 @@ class WorldModel(nnx.Module):
         # Create value target
         next_value_Q_target = jax.lax.stop_gradient(
             reward + self.discount * (1.0 - terminal) * self.value_fn(next_z_target).squeeze(axis=-1)
-        )
+        ) # (B, H)
 
         # Create safety targets
         sampled_actions = jax.random.uniform(
             key,
-            shape=(obs.shape[0], Q_minima_samples, action.shape[-1]),
-            minval=action_bounds[0], maxval=action_bounds[1],
-        ).reshape(-1, action.shape[-1])
+            shape=(B * H * Q_minima_samples, action.shape[-1]),
+            minval=action_bounds[0], 
+            maxval=action_bounds[1],
+        )
 
         q_target = self.target_safety_critic.compute_targets(
-            self.target_safety_critic, next_z_target, sampled_actions,
-            safety_cost, terminal, self.discount, Q_minima_samples,
-        )
+            self.target_safety_critic, 
+            next_z_target.reshape(B * H, -1), 
+            sampled_actions,
+            safety_cost.reshape(-1), 
+            terminal.reshape(-1), 
+            self.discount, 
+            Q_minima_samples,
+        ).reshape(B, H)
+
+        sampled_actions = sampled_actions.reshape(B, H, Q_minima_samples, d_u)
 
         def loss_fn(trainable_partition: TrainableBundle, target_partition: TargetBundle) -> dict:
             # Extract trainable networks
@@ -230,40 +250,69 @@ class WorldModel(nnx.Module):
 
             # Encoder and Dynamics Loss
             # Encode observations to latent space
-            z = enc(obs)
+            z0 = enc(obs[:, 0])
+            z = z0
 
-            # Get next z prediction
-            next_z = dyn(z, action, update_spectral_norm=True)
+            total_loss = 0
+            step_metrics = {}
+            for t in range(H):
+                a, m = action[:, t], mask[:, t]
+                sn = (t == 0) # spectral norm update done once per train step
 
-            # Get latent loss
-            loss_z = jnp.mean((next_z - next_z_target) ** 2)
+                # Get next z prediction
+                next_z = dyn(z, a, update_spectral_norm=sn)
+                loss_z = masked_mean(jnp.mean((next_z - next_z_target[:, t]) ** 2, axis=-1), m)
 
-            # Reward Loss
-            r_pred = rew_fn(z, action, update_spectral_norm=True).squeeze(axis=-1)
-            loss_r = jnp.mean((r_pred - reward) ** 2)
+                # Reward Loss
+                r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
+                loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
 
-            # Value Loss
-            # Get value prediction
-            v_pred = val_fn(z, update_spectral_norm=True).squeeze(axis=-1)
+                # Value Loss
+                # Get value prediction
+                v_pred = val_fn(z, update_spectral_norm=sn).squeeze(axis=-1)
 
-            # Get value loss
-            next_value_target = jax.lax.stop_gradient(
-                target_val_fn_Q(z, action)
-            ).squeeze(axis=-1)
-            
-            loss_v_v = jnp.mean(
-                expectile_regression_loss(next_value_target - v_pred, self.ER_tau)
-            )
+                # Get value loss
+                next_value_target = jax.lax.stop_gradient(
+                    target_val_fn_Q(z, a)
+                ).squeeze(axis=-1)
+                
+                loss_v_v = masked_mean(
+                    expectile_regression_loss(next_value_target - v_pred, self.ER_tau), m
+                )
 
-            q_pred = val_fn_Q(z, action).squeeze(axis=-1)
-            loss_v_q = jnp.mean((next_value_Q_target - q_pred) ** 2)
+                q_pred = val_fn_Q(z, a).squeeze(axis=-1)
+                loss_v_q = masked_mean((next_value_Q_target[:, t] - q_pred) ** 2, m)
 
-            loss_v = loss_v_q + loss_v_v
+                loss_v = loss_v_q + loss_v_v
 
-            # VicReg Loss
+                # Compute safety constraint loss
+                loss_s, q_aux_t = safety_Q.compute_loss(
+                    z,
+                    a,
+                    q_target[:, t],
+                    sampled_actions[:, t].reshape(-1, d_u),
+                    action_bounds,
+                    self.cql_alpha,
+                    Q_minima_samples,
+                    self.violation_weight,
+                    mask=m,
+                    update_spectral_norm=sn
+                )
+
+                # Total world model loss
+                total_loss = total_loss + self.rho ** t * (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
+                            self.lambda_s * loss_s + self.lambda_r * loss_r)
+
+                if t == 0:
+                    loss_z_0, loss_v_0, loss_s_0, loss_r_0, q_aux = loss_z, loss_v, loss_s, loss_r, q_aux_t
+                step_metrics[f"loss_dyn_t{t}"] = loss_z
+
+                z = next_z
+
+            # VicReg Loss on the encoder output
             # Obtain covariace matrix (d, d)
             # Note rowvar=False is because the row dimension is what we want to get the cov of
-            cov_mat = jnp.cov(z, rowvar=False)
+            cov_mat = jnp.cov(z0, rowvar=False)
             d = cov_mat.shape[0]
 
             # Calculate vireg variance loss with digonal terms
@@ -277,32 +326,20 @@ class WorldModel(nnx.Module):
             # Compute vicreg loss
             loss_vicreg = self.lambda_var * loss_var + self.lambda_cov * loss_cov
 
-            # Compute safety constraint loss
-            loss_s, q_aux = safety_Q.compute_loss(
-                z,
-                action,
-                q_target,
-                sampled_actions,
-                action_bounds,
-                self.cql_alpha,
-                Q_minima_samples,
-                self.violation_weight
-            )
-
-            # Total world model loss
-            total_loss = (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
-                          loss_vicreg + self.lambda_s * loss_s + self.lambda_r * loss_r)
+            # add vicreg loss to total loss
+            total_loss = total_loss + loss_vicreg
 
             # Record Metrics
             metrics = {
                 "loss_total": total_loss,
-                "loss_dyn": loss_z,
-                "loss_v": loss_v,
-                "loss_safety": loss_s,
+                "loss_dyn": loss_z_0,
+                "loss_v": loss_v_0,
+                "loss_safety": loss_s_0,
                 "loss_var": loss_var,
                 "loss_cov": loss_cov,
-                "loss_r": loss_r,
+                "loss_r": loss_r_0,
                 **q_aux,
+                **step_metrics,
                 "q_target_min": jnp.min(q_target),
                 "q_target_max": jnp.max(q_target),
                 "sigma_dyn_0":  dyn.layers[0].sigma.value

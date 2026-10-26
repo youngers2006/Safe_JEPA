@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+import numpy as np
 import orbax.checkpoint as ocp
 import h5py
 import yaml
@@ -51,15 +52,29 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
         w.writeheader()
         w.writerows(rows)
 
-@partial(jax.jit, static_argnames=("batch_size",))
-def _sample(data_dict, key, batch_size):
-    n = data_dict["observations"].shape[0]
-    indices = jax.random.randint(key, (batch_size,), 0, n)
-    return {k: jnp.asarray(v[indices]) for k, v in data_dict.items()}, indices
+def episode_ids(data_dict):
+    ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
+    joins = np.all(
+        np.isclose(data_dict["next_observations"][:-1], data_dict["observations"][1:]), 
+        axis=-1
+    )
+    return np.concatenate([[0], np.cumsum(~(~ends[:-1] & joins))])
 
-def get_batches(data_dict, batch_size, N, key, epoch):
+@partial(jax.jit, static_argnames=("batch_size", "horizon"))
+def _sample(data_dict, key, batch_size, horizon):
+    n = data_dict["observations"].shape[0]
+    starts = jax.random.randint(key, (batch_size,), 0, n)
+    rows = starts[:, None] + jnp.arange(horizon)
+    idx = jnp.minimum(rows, n - 1)
+    batch = {k: jnp.asarray(v[idx]) for k, v in data_dict.items() if k != "episode"}
+
+    same_episode = data_dict["episode"][idx] == data_dict["episode"][starts][:, None]
+    batch["mask"] = ((rows < n) & same_episode).astype(jnp.float32)
+    return batch, starts
+
+def get_batches(data_dict, batch_size, N, key, epoch, horizon):
     for i in range(N):
-        yield _sample(data_dict, jax.random.fold_in(key, i + epoch * N), batch_size)
+        yield _sample(data_dict, jax.random.fold_in(key, i + epoch * N), batch_size, horizon)
 
 def main(cfg_filename):
     # Load training config
@@ -73,6 +88,9 @@ def main(cfg_filename):
     with h5py.File(ROOT / cfg["dataset_filename"], 'r') as f:
         for k in list(f.keys()):
             data_dict[k] = f[k][:]
+
+    data_dict["episode"] = episode_ids(data_dict)
+    print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
 
     # Add additional data
     cfg = resolve_dims(
@@ -102,19 +120,21 @@ def main(cfg_filename):
 
     # Run training loop
     print("Beginning Training Loop ... ")
+    horizon = cfg["train_horizon"]
     metrics_log = []
     for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
         for i, (batch, _) in enumerate(tqdm(get_batches(data_dict, cfg["batch_size"], 
-                cfg["num_batches"], data_key, epoch), total=cfg["num_batches"], desc=f"Batches", leave=False)):
+                cfg["num_batches"], data_key, epoch, horizon), total=cfg["num_batches"], desc=f"Batches", leave=False)):
             obs = batch["observations"]
             next_obs = batch["next_observations"]
             actions = batch["actions"]
             rewards = batch["rewards"]
             safety_costs = batch["costs"]
             terminals = batch["terminals"]
+            mask = batch["mask"]
             metrics = world_model.train_step(
-                obs, next_obs, actions, rewards, safety_costs, terminals, 
+                obs, next_obs, actions, rewards, safety_costs, terminals, mask,
                 jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i)
             )
             metrics_log_epoch.append(jax.device_get(metrics))

@@ -197,20 +197,25 @@ class QSafetyCritic(nnx.Module):
             action_bounds: tuple[float, float],
             cql_alpha: float,
             Q_minima_samples: int = 64,
-            violation_weight: float = 1.0
+            violation_weight: float = 1.0,
+            mask: jax.Array | None = None, # (B, )
+            update_spectral_norm: bool = True
         ):
         # Obtain batch size and the number of members of each batch is seen per ensemble member
         batch_size = z.shape[0]
 
+        # Mask initialisation
+        mask = jnp.ones(batch_size) if mask is None else mask
+
         # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
         # q_risk_id: (B, ). Score safety of actions taken
         q_risk_id = self(
-            z, action, update_spectral_norm=True
+            z, action, update_spectral_norm=update_spectral_norm
         ).squeeze(axis=-1)
 
         # Compute the bellman recursion error (weight high risk more due to sparsity in the data)
-        w = 1.0 + (violation_weight - 1.0) * q_target
-        bellman_risk_loss = jnp.sum(w * (q_risk_id - q_target) ** 2) / jnp.sum(w)
+        w = mask * (1.0 + (violation_weight - 1.0) * q_target)
+        bellman_risk_loss = jnp.sum(w * (q_risk_id - q_target) ** 2) / jnp.maximum(jnp.sum(w), 1e-8)
 
         # CQL q loss, pushes up ood actions up
         # expand z dims in action sample dims
@@ -228,9 +233,9 @@ class QSafetyCritic(nnx.Module):
         q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
 
         # Get CQL loss, pushes seen actions down and unseen actions up
-        cql_risk_loss = jnp.mean(
-            q_risk_ood + q_risk_id
-        )
+        cql_risk_loss = jnp.sum(
+            mask * (q_risk_ood + q_risk_id)
+        ) / jnp.maximum(jnp.sum(mask), 1.0)
 
         # total safety Q loss for each ensemble member then combine into a single loss
         loss_s = bellman_risk_loss + (cql_alpha * cql_risk_loss)
