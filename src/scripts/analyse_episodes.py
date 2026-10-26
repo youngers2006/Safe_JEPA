@@ -1,12 +1,7 @@
 import csv
-import os
 import re
 import sys
-import time
 from pathlib import Path
-
-# The network calls here are small, so skip XLA's GPU matmul autotuning, which added about 10 s to every compilation
-os.environ["XLA_FLAGS"] = os.environ.get("XLA_FLAGS", "") + " --xla_gpu_autotune_level=0"
 
 import h5py
 import jax
@@ -445,7 +440,6 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
     out_dir.mkdir(exist_ok=True)
     point = {}
     for controller in controllers:
-        start = time.perf_counter()
         cfg_path = results_dir / f"{controller}_config.yaml"
         if not cfg_path.exists():
             print(f"  {controller}: no results")
@@ -488,7 +482,7 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
         if critic is not None:
             # The executed-step risk recomputed here should match what the planner logged
             line += f" | recomputed vs logged risk {max(r['max_abs_exec_vs_planned'] for r in rows):.1e}"
-        print(line + f" | {time.perf_counter() - start:.0f} s", flush=True)
+        print(line)
 
     if point:
         tau = point[next(iter(point))]["tau"]
