@@ -30,6 +30,8 @@ FAR = 50 # dataset states at least this many steps before a violation count as f
 K_ACTIONS = 64 # sampled actions for the safest-action risk
 N_DATA = 200_000 # dataset rows scored in check 2
 N_BANK = 100_000 # dataset rows searched for the nearest neighbour in check 3
+DATA_CHUNK = 8192 # rows per network call on the dataset
+EPISODE_CHUNK = 256 # rows per network call on an episode
 
 CONTROLLER_COLOURS = {"SCP": "tab:blue", "MPPI": "tab:orange", "CEM": "tab:green"}
 VERDICT_COLOURS = {"no violation": "tab:green", "critic saw no risk": "tab:purple", "warned late": "tab:orange",
@@ -101,40 +103,69 @@ def load_world_model(cfg):
     nnx.update(world_model, ocp.StandardCheckpointer().restore(ckpt_path, target))
     return world_model, data
 
-class Critic:
-    # The world model's encoder and safety critic, evaluated in chunks
-    def __init__(self, world_model, action_bounds, d_u):
-        self.wm, self.bounds, self.d_u = world_model, action_bounds, d_u
-        self.key = jax.random.key(0)
+# Jitted network calls. They only ever see chunks of DATA_CHUNK or EPISODE_CHUNK rows (the last chunk is padded), so
+# each compiles once per chunk size rather than once per episode length
 
-    def encode(self, obs, size=65536):
-        return np.concatenate([np.asarray(self.wm.encoder(jnp.asarray(obs[i:i + size]))) for i in range(0, len(obs), size)])
+@nnx.jit
+def _encode(encoder, obs):
+    return encoder(obs)
 
-    def risk(self, z, u, size=65536):
-        return np.concatenate([np.asarray(self.wm.safety_critic(jnp.asarray(z[i:i + size]), jnp.asarray(u[i:i + size])).squeeze(-1))
-                               for i in range(0, len(z), size)])
+@nnx.jit
+def _risk(safety_critic, z, u):
+    return safety_critic(z, u).squeeze(-1)
 
-    def safest_risk(self, z, size=4096):
-        # Lowest risk over K uniformly sampled actions: the floor the critic allows at each state
-        out = []
-        for i in range(0, len(z), size):
-            zc = jnp.asarray(z[i:i + size])
-            self.key, sub = jax.random.split(self.key)
-            u = jax.random.uniform(sub, (zc.shape[0] * K_ACTIONS, self.d_u), minval=self.bounds[0], maxval=self.bounds[1])
-            q = self.wm.safety_critic(jnp.repeat(zc, K_ACTIONS, axis=0), u).reshape(zc.shape[0], K_ACTIONS)
-            out.append(np.asarray(q.min(axis=-1)))
-        return np.concatenate(out)
+@nnx.jit
+def _safest(safety_critic, z, u):
+    # Lowest risk over the K sampled actions of each state, u: (B * K, d_u)
+    q = safety_critic(jnp.repeat(z, K_ACTIONS, axis=0), u).reshape(z.shape[0], K_ACTIONS)
+    return q.min(axis=-1)
 
-def nearest(bank_z, z, size=256):
+@jax.jit
+def _nearest(bank_z, bank_sq, z):
     # Index of the nearest bank latent (Euclidean) for each row of z
-    bank = jnp.asarray(bank_z)
-    bank_sq = jnp.sum(bank ** 2, axis=-1)
+    d = jnp.sum(z ** 2, axis=-1)[:, None] + bank_sq[None] - 2.0 * z @ bank_z.T
+    return jnp.argmin(d, axis=-1)
+
+def in_chunks(fn, arrays, size):
+    # Apply fn to fixed-size chunks of the arrays, padding the last chunk by repeating its last row
+    n = len(arrays[0])
     out = []
-    for i in range(0, len(z), size):
-        q = jnp.asarray(z[i:i + size])
-        d = jnp.sum(q ** 2, axis=-1)[:, None] + bank_sq[None] - 2.0 * q @ bank.T
-        out.append(np.asarray(jnp.argmin(d, axis=-1)))
+    for i in range(0, n, size):
+        part = [a[i:i + size] for a in arrays]
+        k = len(part[0])
+        if k < size:
+            part = [np.concatenate([p, np.repeat(p[-1:], size - k, axis=0)]) for p in part]
+        out.append(np.asarray(fn(*[jnp.asarray(p) for p in part]))[:k])
     return np.concatenate(out)
+
+class Critic:
+    # The world model's encoder and safety critic, and a bank of dataset latents for nearest-neighbour search
+    def __init__(self, world_model, action_bounds, d_u):
+        self.encoder, self.safety_critic = world_model.encoder, world_model.safety_critic
+        self.bounds, self.d_u = action_bounds, d_u
+        self.rng = np.random.default_rng(0)
+
+    def encode(self, obs, size):
+        return in_chunks(lambda o: _encode(self.encoder, o), [obs], size)
+
+    def risk(self, z, u, size):
+        return in_chunks(lambda zz, uu: _risk(self.safety_critic, zz, uu), [z, u], size)
+
+    def safest_risk(self, z, size):
+        # Lowest risk over K uniformly sampled actions: the floor the critic allows at each state
+        def fn(zz):
+            u = self.rng.uniform(self.bounds[0], self.bounds[1], (zz.shape[0] * K_ACTIONS, self.d_u))
+            return _safest(self.safety_critic, zz, jnp.asarray(u))
+        return in_chunks(fn, [z], size)
+
+    def set_bank(self, obs, actions):
+        self.bank_z = jnp.asarray(self.encode(obs, DATA_CHUNK))
+        self.bank_sq = jnp.sum(self.bank_z ** 2, axis=-1)
+        self.bank_u = actions
+
+    def nearest_action(self, z, size):
+        nn = in_chunks(lambda zz: _nearest(self.bank_z, self.bank_sq, zz), [z], size)
+        return self.bank_u[nn]
 
 def check_dataset(critic, data, taus):
     # Check 2: the critic's risk on the dataset, at the data's actions and at the safest sampled action
@@ -146,9 +177,9 @@ def check_dataset(critic, data, taus):
     ends_in_violation = (data["costs"][last_row] > 0)[episode]
     far = (~ends_in_violation | (steps_to_end >= FAR))[idx]
 
-    z = critic.encode(data["observations"][idx])
-    q_data = critic.risk(z, data["actions"][idx])
-    q_min = critic.safest_risk(z)
+    z = critic.encode(data["observations"][idx], DATA_CHUNK)
+    q_data = critic.risk(z, data["actions"][idx], DATA_CHUNK)
+    q_min = critic.safest_risk(z, DATA_CHUNK)
     print(f"Check 2 - the critic on {len(idx)} dataset rows ({far.mean():.0%} at least {FAR} steps from a violation): "
           f"share with risk over each threshold")
     print(f"  {'threshold':>9s}  {'dataset action':>14s}  {'... far from violations':>23s}  {'safest action':>13s}  "
@@ -158,15 +189,14 @@ def check_dataset(critic, data, taus):
               f"{np.mean(q_min > tau):13.1%}  {np.mean(q_min[far] > tau):23.1%}")
     return q_data, q_min, far
 
-def check_visited(critic, ep, bank_z, bank_u):
+def check_visited(critic, ep):
     # Check 3: at each visited state, risk at the executed action, at the safest sampled action and at the action of the
     # nearest dataset state
-    z = critic.encode(ep["obs"])
-    nn = nearest(bank_z, z)
+    z = critic.encode(ep["obs"], EPISODE_CHUNK)
     return {
-        "exec": critic.risk(z, ep["actions"]),
-        "safest": critic.safest_risk(z),
-        "nearest": critic.risk(z, bank_u[nn])
+        "exec": critic.risk(z, ep["actions"], EPISODE_CHUNK),
+        "safest": critic.safest_risk(z, EPISODE_CHUNK),
+        "nearest": critic.risk(z, critic.nearest_action(z, EPISODE_CHUNK), EPISODE_CHUNK)
     }
 
 # Figures
@@ -184,8 +214,7 @@ def plot_episode(path, controller, seed, ep, tau, gamma, over, result, visited=N
         ax.plot(steps, visited["safest"], lw=1, label="safest sampled action")
         ax.plot(steps, visited["nearest"], lw=1, alpha=0.7, label="nearest dataset action")
     ax.axhline(tau, color="k", ls="--", lw=1, label="threshold")
-    for t in np.flatnonzero(over):
-        ax.axvspan(t - 0.5, t + 0.5, color="red", alpha=0.08, lw=0)
+    ax.fill_between(steps, 0, 1, where=over, step="mid", color="red", alpha=0.08, lw=0, transform=ax.get_xaxis_transform())
     if result["violated"]:
         ax.axvline(steps[-1], color="red", lw=1.5, label="violation")
     ax.set_ylabel("risk")
@@ -405,7 +434,7 @@ def plot_sweep(path, title, sweep):
 
 # Running the analysis
 
-def analyse_point(results_dir, title, controllers, critic=None, bank=None, episode_figures=True):
+def analyse_point(results_dir, title, controllers, critic=None, episode_figures=True):
     # Check 1 (and check 3) for every episode of every controller at one sweep point, their figures, and the comparison
     out_dir = results_dir / "analysis"
     out_dir.mkdir(exist_ok=True)
@@ -428,7 +457,7 @@ def analyse_point(results_dir, title, controllers, critic=None, bank=None, episo
             result = {"seed": seed, **result}
             visited = None
             if critic is not None:
-                visited = check_visited(critic, ep, *bank)
+                visited = check_visited(critic, ep)
                 result.update({
                     "steps_no_safe_action": float(np.mean(visited["safest"] > tau)),
                     "median_exec_minus_nearest": float(np.median(visited["exec"] - visited["nearest"])),
@@ -472,7 +501,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
     print(f"\n{experiment}")
 
     # Checks 2 and 3 need the world model, which every config of the experiment shares
-    critic, bank = None, None
+    critic = None
     if model_checks:
         cfg = yaml.safe_load(open(configs[0]))
         world_model, data = load_world_model(cfg)
@@ -481,7 +510,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
         dataset = check_dataset(critic, data, taus)
         plot_dataset(out_dir / "check2_critic_on_dataset.png", dataset, taus)
         rows = np.random.default_rng(1).choice(len(data["rewards"]), min(N_BANK, len(data["rewards"])), replace=False)
-        bank = (critic.encode(data["observations"][rows]), data["actions"][rows])
+        critic.set_bank(data["observations"][rows], data["actions"][rows])
 
     # Every sweep point, then each sweep (e.g. e1, e2) across its points
     sweeps = {}
@@ -490,7 +519,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
             print(f"{tag}: not found")
             continue
         print(f"{tag}:")
-        point = analyse_point(exp_dir / tag, f"{Path(experiment).name}: {tag}", controllers, critic, bank, episode_figures)
+        point = analyse_point(exp_dir / tag, f"{Path(experiment).name}: {tag}", controllers, critic, episode_figures)
         if point:
             sweeps.setdefault(tag.split("/")[0], []).append((tag, point))
 
