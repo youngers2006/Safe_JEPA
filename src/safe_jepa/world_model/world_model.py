@@ -50,6 +50,7 @@ class WorldModel(nnx.Module):
 
         lr = cfg["lr"]
         self.discount = cfg["discount"]
+        self.safety_discount = cfg["safety_discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
         self.violation_weight = cfg["violation_weight"]
