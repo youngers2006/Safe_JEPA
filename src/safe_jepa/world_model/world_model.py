@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import optax
-from functools import partial
 
 # import modules
 from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor, MarginNet
@@ -157,7 +156,7 @@ class WorldModel(nnx.Module):
         self.update_target_encoder(tau_vals[0])
         self.update_target_value_Q(tau_vals[1])
 
-    @partial(nnx.jit, static_argnames=("Q_minima_samples", "action_bounds"))
+    @nnx.jit
     def train_step(
         self,
         obs: jax.Array, # (B, H, obs_dim)
