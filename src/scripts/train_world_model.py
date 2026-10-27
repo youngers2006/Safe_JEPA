@@ -31,7 +31,7 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
     cfg["ValueQParams"]["d_out"] = 1
     cfg["MarginParams"]["d_in"] = d_z
-    cfg["MarginParams"]["d_out"] = 1
+    cfg["MarginParams"]["d_out"] = len(cfg["margin_constraints"])
     for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
@@ -53,9 +53,16 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
         w.writerows(rows)
 
 def safety_margin(obs, sources):
-    # A lidar bin reads 1 - d/3 for an object at distance d, so a source [first column, last column + 1, contact distance]
-    # gives d - contact distance, and the margin is the smallest over the sources (<= 0 exactly when the step incurs a cost)
     return np.min([3.0 * (1.0 - obs[:, lo:hi].max(axis=1)) - contact for lo, hi, contact in sources], axis=0)
+
+# How each kind of constraint's margin is computed from observations: label name -> fn(obs, constraint config)
+MARGIN_LABELS = {
+    "lidar": lambda obs, c: safety_margin(obs, c["sources"]),
+}
+
+def margin_labels(obs, constraints):
+    # One column per constraint, in the order of margin_constraints
+    return np.stack([MARGIN_LABELS[c["label"]](obs, c) for c in constraints], axis=-1)
 
 def episode_ids(data_dict):
     ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
@@ -94,13 +101,14 @@ def main(cfg_filename):
         for k in list(f.keys()):
             data_dict[k] = f[k][:]
 
+    # Augment datadict
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
-
-    # Safety margin of each next state from its lidar
-    data_dict["margins"] = safety_margin(data_dict["next_observations"], cfg["margin_sources"])
-    print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
-          f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+    data_dict["margins"] = margin_labels(data_dict["next_observations"], cfg["margin_constraints"])
+    for k, c in enumerate(cfg["margin_constraints"]):
+        m_k = data_dict["margins"][:, k]
+        print(f"margin {k} ({c['label']}) <= 0 on {np.mean(m_k[data_dict['costs'] > 0] <= 0):.1%} of cost rows "
+              f"and {np.mean(m_k[data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
 
     # Add additional data
     cfg = resolve_dims(
@@ -140,12 +148,11 @@ def main(cfg_filename):
             next_obs = batch["next_observations"]
             actions = batch["actions"]
             rewards = batch["rewards"]
-            margins = batch["margins"]
             terminals = batch["terminals"]
             mask = batch["mask"]
+            margins = batch["margins"]
             metrics = world_model.train_step(
-                obs, next_obs, actions, rewards, margins, terminals, mask
-            )
+                obs, next_obs, actions, rewards, margins, terminals, mask)
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)
     print("Training Loop Completed.")

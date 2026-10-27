@@ -127,16 +127,47 @@ class RewardPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class MarginBarrier(nnx.Module):
-    # Discrete-time control barrier function on the margin head: the planners' safety constraint.
-    # With h = margin - eps, the planner keeps h(f(z, u)) >= (1 - alpha) * h(z): the margin above eps may shrink by at most
-    # a fraction alpha per step, which caps the approach speed to a hazard. Returned as a risk, so risk <= 0 is safe
-    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: float, alpha: float):
+    # One discrete-time barrier per output of the margin head: h_k = (margin_k - eps_k) / scale_k must satisfy
+    # h_k(f(z, u)) >= (1 - alpha) h_k(z). Dividing by scale_k leaves each condition unchanged but puts the constraints'
+    # violations in comparable units, so the largest one is returned as the risk (risk <= 0 means all are met)
+    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: tuple, scale: tuple, alpha: float):
         self.dynamics = dynamics
         self.margin_fn = margin_fn
-        self.eps = eps
+        self.eps = tuple(eps)
+        self.scale = tuple(scale)
         self.alpha = alpha
 
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        h_now = self.margin_fn(z, update_spectral_norm=False) - self.eps
-        h_next = self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - self.eps
-        return (1.0 - self.alpha) * h_now - h_next
+        eps, scale = jnp.asarray(self.eps), jnp.asarray(self.scale)
+        h_now = (self.margin_fn(z, update_spectral_norm=False) - eps) / scale
+        h_next = (self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - eps) / scale
+        return jnp.max((1.0 - self.alpha) * h_now - h_next, axis=-1, keepdims=True)
+
+class MarginNet(nnx.Module):
+    def __init__(self, cfg, rngs: nnx.Rngs):
+        d_in = cfg["d_in"]
+        hidden_features = cfg["hidden_features"]
+        d_out = cfg["d_out"]
+        lipschitz_bound = cfg["lipschitz_bound"]
+        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
+        self.hidden_features = hidden_features
+        temp_layers = []
+            
+        current_dim = d_in
+        
+        for h in hidden_features:
+            temp_layers.append(
+                    SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
+            )
+            current_dim = h
+        self.layers = temp_layers
+        self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
+             
+    def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        for l in range(0, len(self.layers)):
+            linear_layer = self.layers[l]
+
+            z = linear_layer(z, update_spectral_norm)
+            z = nnx.silu(z)
+        
+        return self.output_layer(z, update_spectral_norm)

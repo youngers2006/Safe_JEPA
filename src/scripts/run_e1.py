@@ -21,7 +21,7 @@ def main():
         for eps in tqdm(MARGIN_EPS, leave=True):
             for planner in tqdm(PLANNERS, leave=False):
                 run_point(SEEDS, wm_cfg, COMMON, planner, ENV,
-                          {"margin_eps": eps}, f"e1/eps_{eps}")
+                          {"margin_eps": [eps]}, f"e1/eps_{eps}")
 
 if __name__ == "__main__":
     main()

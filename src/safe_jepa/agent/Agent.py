@@ -5,8 +5,8 @@ import flax.nnx as nnx
 import numpy as np
 
 from ..world_model.world_model import WorldModel
-from ..SCP_control.SCPController import SCPController
 from ..nn.mlp import MarginBarrier
+from ..SCP_control.SCPController import SCPController
 from ..Sampling_control.SamplingController import SamplingController
 
 class SafeJEPAAgent:
@@ -19,12 +19,18 @@ class SafeJEPAAgent:
         # Instantiate world model
         self.world_model = WorldModel(cfg, obs_mean, obs_std, rngs=rngs)
 
-        # Store tuple of references to wm networks, with the margin barrier as the safety constraint
+        # Store tuple of references to wm networks
         self.wm_networks = (
             self.world_model.reward_fn,
             self.world_model.value_fn,
             self.world_model.dynamics,
-            MarginBarrier(self.world_model.dynamics, self.world_model.margin_fn, cfg["margin_eps"], cfg["barrier_alpha"]),
+            MarginBarrier(
+                self.world_model.dynamics, 
+                self.world_model.margin_fn, 
+                cfg["margin_eps"],
+                [c["scale"] for c in cfg["margin_constraints"]],
+                cfg["barrier_alpha"]
+            ),
         )
 
         # Store configuration
@@ -37,7 +43,6 @@ class SafeJEPAAgent:
         self.reset()
 
     def make_controller(self):
-        # The barrier is met at risk <= 0, so the planners' risk threshold is 0
         control_cfg = {**self.cfg, "d_z": self.cfg["d_latent"], "safety_threshold": 0.0}
         if self.controller_type == "SCP":
             return SCPController(control_cfg)

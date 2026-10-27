@@ -4,18 +4,18 @@ import flax.nnx as nnx
 import optax
 
 # import modules
-from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor
+from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor, MarginNet
 from ..nn.variables import SpectralStat
 from .encoder import Encoder
 
 class TrainableBundle(nnx.Module):
-    def __init__(self, encoder, dynamics, value_fn, value_Q, reward_fn, margin_fn):
+    def __init__(self, encoder, dynamics, value_fn, value_Q, margin_fn, reward_fn):
         self.encoder = encoder
         self.dynamics = dynamics
         self.value_fn = value_fn
         self.value_Q = value_Q
-        self.reward_fn = reward_fn
         self.margin_fn = margin_fn
+        self.reward_fn = reward_fn
 
 class TargetBundle(nnx.Module):
     def __init__(self, encoder, value_Q):
@@ -95,19 +95,19 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        # Hazard margin head: distance from the latent's state to the nearest hazard's edge (<= 0 is a violation)
-        self.margin_fn = ValueNet(
+        self.margin_fn = MarginNet(
             cfg=cfg["MarginParams"],
             rngs=rngs
         )
+        self.margin_scale = tuple(c["scale"] for c in cfg["margin_constraints"]) # typical size of each margin
 
         self.trainable_nodes = TrainableBundle(
             self.encoder, 
             self.dynamics, 
             self.value_fn,
             self.value_Q,
-            self.reward_fn,
-            self.margin_fn
+            self.margin_fn, 
+            self.reward_fn
         )
         self.target_nodes = TargetBundle(
             self.target_encoder, 
@@ -164,7 +164,7 @@ class WorldModel(nnx.Module):
         next_obs: jax.Array, # (B, H, obs_dim)
         action: jax.Array, # (B, H, d_u)
         reward: jax.Array, # (B, H)
-        margin: jax.Array, # (B, H) hazard margin at next_obs
+        margin: jax.Array, # (B, H, K) margin of each constraint at next_obs
         terminal: jax.Array, # (B, H)
         mask: jax.Array # (B, H)
     ) -> dict:
@@ -190,8 +190,8 @@ class WorldModel(nnx.Module):
             dyn = trainable_partition.dynamics
             val_fn = trainable_partition.value_fn
             val_fn_Q = trainable_partition.value_Q
-            rew_fn = trainable_partition.reward_fn
             margin_fn = trainable_partition.margin_fn
+            rew_fn = trainable_partition.reward_fn
 
             # Extract target networks
             target_val_fn_Q = target_partition.value_Q
@@ -216,10 +216,6 @@ class WorldModel(nnx.Module):
                 r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
                 loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
 
-                # Margin Loss on the predicted next latent, so the head is trained on the latents the planner sees
-                m_pred = margin_fn(next_z, update_spectral_norm=sn).squeeze(axis=-1)
-                loss_m = masked_mean((m_pred - margin[:, t]) ** 2, m)
-
                 # Value Loss
                 # Get value prediction
                 v_pred = val_fn(z, update_spectral_norm=sn).squeeze(axis=-1)
@@ -238,6 +234,12 @@ class WorldModel(nnx.Module):
 
                 loss_v = loss_v_q + loss_v_v
 
+                # Compute margin constraint loss
+                # Each constraint's error in units of its typical size, so constraints in different units weigh alike
+                m_pred = margin_fn(next_z, update_spectral_norm=sn) # (B, K)
+                m_err = (m_pred - margin[:, t]) / jnp.asarray(self.margin_scale)
+                loss_m = masked_mean(jnp.mean(m_err ** 2, axis=-1), m)
+                
                 # Total world model loss
                 total_loss = total_loss + self.rho ** t * (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
                             self.lambda_m * loss_m + self.lambda_r * loss_r)
