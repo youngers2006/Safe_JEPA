@@ -130,7 +130,7 @@ class MarginBarrier(nnx.Module):
     # Discrete-time control barrier function on the margin head: the planners' safety constraint.
     # With h = margin - eps, the planner keeps h(f(z, u)) >= (1 - alpha) * h(z): the margin above eps may shrink by at most
     # a fraction alpha per step, which caps the approach speed to a hazard. Returned as a risk, so risk <= 0 is safe
-    def __init__(self, dynamics: DynamicsPredictor, margin_fn: ValueNet, eps: float, alpha: float):
+    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: float, alpha: float):
         self.dynamics = dynamics
         self.margin_fn = margin_fn
         self.eps = eps
