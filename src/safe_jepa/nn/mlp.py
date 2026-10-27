@@ -166,7 +166,9 @@ class QSafetyCritic(nnx.Module):
         safety_cost: jax.Array,       # (B,)
         terminal: jax.Array,          # (B,)
         discount: float,
-        Q_minima_samples: int
+        Q_minima_samples: int,
+        next_action: jax.Array | None = None, # (B, d_u), the dataset's action at the next state
+        next_valid: jax.Array | None = None   # (B,), 1 where that action continues the same trajectory
     ) -> jax.Array:
         # Get batch and z size
         B, d_z = next_z_target.shape
@@ -183,9 +185,20 @@ class QSafetyCritic(nnx.Module):
         ).squeeze(axis=-1).reshape(B, Q_minima_samples)
         target_q_min = jnp.min(target_next_q, axis=-1) # (B,)
 
+        # With the dataset's next action, bootstrap from the risk of continuing as the data did instead of from the safest
+        # sampled action. The minimum assumes the safest action is always found later, and a minimum over noisy estimates
+        # is biased low; the data's next action has neither problem. Rows whose next action is not in the data (the last
+        # row before a timeout) keep the minimum
+        target_q_next = target_q_min
+        if next_action is not None:
+            target_q_data = target_Q(
+                next_z_target, next_action, update_spectral_norm=False
+            ).squeeze(axis=-1)
+            target_q_next = jnp.where(next_valid > 0, target_q_data, target_q_min)
+
         # Compute Bellman recursion target
         return jax.lax.stop_gradient(
-            jnp.clip(safety_cost + discount * (1.0 - safety_cost) * (1.0 - terminal) * target_q_min, 0.0, 1.0)
+            jnp.clip(safety_cost + discount * (1.0 - safety_cost) * (1.0 - terminal) * target_q_next, 0.0, 1.0)
         )
 
     def compute_loss(

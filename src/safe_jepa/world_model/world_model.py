@@ -55,6 +55,8 @@ class WorldModel(nnx.Module):
         self.violation_weight = cfg["violation_weight"]
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
         self.rho = cfg["rho"] # Weight rho^t on losses at rollout step t
+        self.safety_discount = cfg.get("safety_discount", cfg["discount"]) # discount of the safety critic's target
+        self.safety_target = cfg.get("safety_target", "min") # "data": bootstrap from the dataset's next action, "min": from the safest sampled action
 
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
@@ -198,7 +200,9 @@ class WorldModel(nnx.Module):
         mask: jax.Array, # (B, H)
         key: jax.Array,
         Q_minima_samples: int = 64,
-        action_bounds: tuple[float, float] = (-1.0, 1.0)
+        action_bounds: tuple[float, float] = (-1.0, 1.0),
+        next_action: jax.Array | None = None, # (B, H, d_u), the dataset's action at each next state
+        next_valid: jax.Array | None = None # (B, H), 1 where that action continues the same trajectory
     ) -> dict:
         # B windows of H consecutive transitions
         B, H, d_u = action.shape
@@ -224,14 +228,19 @@ class WorldModel(nnx.Module):
             maxval=action_bounds[1],
         )
 
+        use_data = self.safety_target == "data"
+        if use_data and next_action is None:
+            raise ValueError('safety_target "data" needs next_action and next_valid (from train_world_model._sample)')
         q_target = self.target_safety_critic.compute_targets(
             self.target_safety_critic, 
             next_z_target.reshape(B * H, -1), 
             sampled_actions,
             safety_cost.reshape(-1), 
             terminal.reshape(-1), 
-            self.discount, 
+            self.safety_discount, 
             Q_minima_samples,
+            next_action=next_action.reshape(B * H, -1) if use_data else None,
+            next_valid=next_valid.reshape(-1) if use_data else None
         ).reshape(B, H)
 
         sampled_actions = sampled_actions.reshape(B, H, Q_minima_samples, d_u)

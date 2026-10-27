@@ -70,6 +70,12 @@ def _sample(data_dict, key, batch_size, horizon):
 
     same_episode = data_dict["episode"][idx] == data_dict["episode"][starts][:, None]
     batch["mask"] = ((rows < n) & same_episode).astype(jnp.float32)
+
+    # The dataset's action at each row's next state, and whether the next row continues the same trajectory (it does not
+    # after a terminal, a timeout or at the end of the data)
+    nxt = jnp.minimum(rows + 1, n - 1)
+    batch["next_actions"] = data_dict["actions"][nxt]
+    batch["next_valid"] = ((rows + 1 < n) & (data_dict["episode"][nxt] == data_dict["episode"][idx])).astype(jnp.float32)
     return batch, starts
 
 def get_batches(data_dict, batch_size, N, key, epoch, horizon):
@@ -135,7 +141,8 @@ def main(cfg_filename):
             mask = batch["mask"]
             metrics = world_model.train_step(
                 obs, next_obs, actions, rewards, safety_costs, terminals, mask,
-                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i)
+                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i),
+                next_action=batch["next_actions"], next_valid=batch["next_valid"]
             )
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)

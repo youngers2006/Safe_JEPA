@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "src/datasets/FilteredSafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
-data_dir: "T5_pointgoal2_c_inf_seed_0"        # one subdir per sweep point
+data_dir: "T6_pointgoal2_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1        # split by TRAJECTORY, not transition
 
@@ -28,6 +28,8 @@ lambda_cov: 0.04
 gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
 alpha: 0.05   # CQL weight
 violation_weight: 65    # Bellman weight on high-risk targets
+safety_target: data    # "data": bootstrap from the dataset's next action; "min": from the safest sampled action (as before)
+safety_discount: 0.9   # the critic's discount: its risk covers violations within roughly 1 / (1 - 0.9) = 10 steps
 ER_tau: 0.7
 
 tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
