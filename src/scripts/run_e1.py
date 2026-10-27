@@ -14,14 +14,14 @@ PLANNERS = ["configs/Planner/scp.yaml",
             "configs/Planner/cem.yaml"]
 ENV = "SafetyPointGoal1-v0"
 SEEDS = list(range(30))
-THRESHOLDS = [0.5, 0.3, 0.2, 0.1, 0.05, 0.02]
+MARGIN_EPS = [0.0, 0.025, 0.05, 0.1, 0.2] # distance kept from every hazard's edge
 
 def main():
     for wm_cfg in WM_CFGS:
-        for p in tqdm(THRESHOLDS, leave=True):
+        for eps in tqdm(MARGIN_EPS, leave=True):
             for planner in tqdm(PLANNERS, leave=False):
                 run_point(SEEDS, wm_cfg, COMMON, planner, ENV,
-                          {"safety_threshold": p}, f"e1/p_{p}")
+                          {"safety_threshold": p}, f"e1/p_{eps}")
 
 if __name__ == "__main__":
     main()

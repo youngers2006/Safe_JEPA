@@ -126,125 +126,43 @@ class RewardPredictor(nnx.Module):
         
         return self.output_layer(x, update_spectral_norm)
 
-class QSafetyCritic(nnx.Module):
+class MarginBarrier(nnx.Module):
+    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: float, alpha: float):
+        self.dynamics = dynamics
+        self.margin_fn = margin_fn
+        self.eps = eps
+        self.alpha = alpha
+
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        h_now = self.margin_fn(z, update_spectral_norm=False) - self.eps
+        h_next = self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - self.eps
+        return (1.0 - self.alpha) * h_now - h_next
+
+class MarginNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
-        # Unpack
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
-        self.softmin_beta = cfg["softmin_beta"]
         layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
-
-        # Networks layers
         self.hidden_features = hidden_features
         temp_layers = []
+            
         current_dim = d_in
-
-        # Create network
+        
         for h in hidden_features:
             temp_layers.append(
-                SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
+                    SpectralNormLinear(current_dim, h, layer_bound, rngs=rngs)
             )
             current_dim = h
         self.layers = temp_layers
         self.output_layer = SpectralNormLinear(current_dim, d_out, layer_bound, rngs=rngs)
-        
-    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        x = jnp.concatenate([z, u], axis=-1)
-
+             
+    def __call__(self, z: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
         for l in range(0, len(self.layers)):
             linear_layer = self.layers[l]
-            x = linear_layer(x, update_spectral_norm)
-            x = nnx.silu(x)
-        return self.output_layer(x, update_spectral_norm)
 
-    def compute_targets(
-        self,
-        target_Q: QSafetyCritic,
-        next_z_target: jax.Array, # (B, d_z)
-        sampled_actions: jax.Array, # (B*K, d_u)
-        safety_cost: jax.Array, # (B,)
-        terminal: jax.Array, # (B,)
-        discount: float,
-        Q_minima_samples: int
-    ) -> jax.Array:
-        # Get batch and z size
-        B, d_z = next_z_target.shape
-
-        # Extend z target in action sample axis to allow computation
-        # Must be flattened (B, K, d_z) -> (B*K, d_z)
-        z_q = jnp.repeat(
-            next_z_target[:, None, :], Q_minima_samples, axis=1
-        ).reshape(B * Q_minima_samples, d_z)
-
-        # Target critic selects the minimising action. Approximate this by sampling 
-        target_next_q = target_Q(
-            z_q, sampled_actions, update_spectral_norm=False
-        ).squeeze(axis=-1).reshape(B, Q_minima_samples)
-        target_q_min = -(jax.nn.logsumexp(-self.softmin_beta * target_next_q, axis=-1) - jnp.log(Q_minima_samples)) / self.softmin_beta
-
-        # Compute Bellman recursion target
-        return jax.lax.stop_gradient(
-            jnp.clip(safety_cost + discount * (1.0 - safety_cost) * (1.0 - terminal) * target_q_min, 0.0, 1.0)
-        )
-
-    def compute_loss(
-            self, 
-            z: jax.Array, # (B, d_z)
-            action: jax.Array, # (B, d_u)
-            q_target: jax.Array, # (B, )
-            sampled_actions: jax.Array,
-            action_bounds: tuple[float, float],
-            cql_alpha: float,
-            Q_minima_samples: int = 64,
-            violation_weight: float = 1.0,
-            mask: jax.Array | None = None, # (B, )
-            update_spectral_norm: bool = True
-        ):
-        # Obtain batch size and the number of members of each batch is seen per ensemble member
-        batch_size = z.shape[0]
-
-        # Mask initialisation
-        mask = jnp.ones(batch_size) if mask is None else mask
-
-        # Safety critic bellman target formulation y = I(c_t) + gamma * (1 - c_t) * (1 - d_t) * min_u_Q_next
-        # q_risk_id: (B, ). Score safety of actions taken
-        q_risk_id = self(
-            z, action, update_spectral_norm=update_spectral_norm
-        ).squeeze(axis=-1)
-
-        # Compute the bellman recursion error (weight high risk more due to sparsity in the data)
-        w = mask * (1.0 + (violation_weight - 1.0) * q_target)
-        bellman_risk_loss = jnp.sum(w * (q_risk_id - q_target) ** 2) / jnp.maximum(jnp.sum(w), 1e-8)
-
-        # CQL q loss, pushes up ood actions up
-        # expand z dims in action sample dims
-        z_expanded = jnp.repeat(
-            jnp.expand_dims(z, axis=1), Q_minima_samples, axis=1
-        ).reshape(-1, z.shape[-1])
-
-        # Calculate safety prediction at each action sample 
-        q_risk_sampled = self(
-            z_expanded, sampled_actions, update_spectral_norm=False
-        ).squeeze(axis=-1).reshape(batch_size, Q_minima_samples)
-
-        d_u = sampled_actions.shape[-1]
-        log_vol = d_u * jnp.log(action_bounds[1] - action_bounds[0])
-        q_risk_ood = jax.nn.logsumexp(-q_risk_sampled, axis=-1) - jnp.log(Q_minima_samples) + log_vol
-
-        # Get CQL loss, pushes seen actions down and unseen actions up
-        cql_risk_loss = jnp.sum(
-            mask * (q_risk_ood + q_risk_id)
-        ) / jnp.maximum(jnp.sum(mask), 1.0)
-
-        # total safety Q loss for each ensemble member then combine into a single loss
-        loss_s = bellman_risk_loss + (cql_alpha * cql_risk_loss)
-        return loss_s, {
-            "bellman_recursion_term":     bellman_risk_loss,
-            "cql_term":     cql_risk_loss,
-            "q_prob_data":  jnp.mean(q_risk_id),
-            "q_prob_ood":   jnp.mean(q_risk_sampled),
-            "q_pred_min":   jnp.min(q_risk_id),
-            "q_pred_max":   jnp.max(q_risk_id)
-        }
+            z = linear_layer(z, update_spectral_norm)
+            z = nnx.silu(z)
+        
+        return self.output_layer(z, update_spectral_norm)

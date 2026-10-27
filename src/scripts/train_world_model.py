@@ -30,9 +30,9 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueParams"]["d_out"] = 1
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
     cfg["ValueQParams"]["d_out"] = 1
-    cfg["SafetyCriticParams"]["d_in"] = d_z + act_dim
-    cfg["SafetyCriticParams"]["d_out"] = 1
-    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "SafetyCriticParams"):
+    cfg["MarginParams"]["d_in"] = d_z
+    cfg["MarginParams"]["d_out"] = 1
+    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
 
@@ -51,6 +51,9 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
+
+def safety_margin(obs, sources):
+    return np.min([3.0 * (1.0 - obs[:, lo:hi].max(axis=1)) - contact for lo, hi, contact in sources], axis=0)
 
 def episode_ids(data_dict):
     ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
@@ -89,8 +92,12 @@ def main(cfg_filename):
         for k in list(f.keys()):
             data_dict[k] = f[k][:]
 
+    # Augment datadict
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
+    data_dict["margins"] = safety_margin(data_dict["next_observations"], cfg["margin_sources"])
+    print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
+          f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
 
     # Add additional data
     cfg = resolve_dims(
@@ -100,7 +107,7 @@ def main(cfg_filename):
     )
 
     # Create rng key
-    mask_key, data_key, train_key = jax.random.split(jax.random.key(cfg["seed"]), 3)
+    data_key = jax.random.key(cfg["seed"])
     rngs = nnx.Rngs(cfg["seed"])
 
     # Calculate observation distribution
@@ -130,13 +137,11 @@ def main(cfg_filename):
             next_obs = batch["next_observations"]
             actions = batch["actions"]
             rewards = batch["rewards"]
-            safety_costs = batch["costs"]
             terminals = batch["terminals"]
             mask = batch["mask"]
+            margins = batch["margins"]
             metrics = world_model.train_step(
-                obs, next_obs, actions, rewards, safety_costs, terminals, mask,
-                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i)
-            )
+                obs, next_obs, actions, rewards, margins, terminals, mask)
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)
     print("Training Loop Completed.")

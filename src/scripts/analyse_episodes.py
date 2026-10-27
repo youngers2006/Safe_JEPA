@@ -19,14 +19,16 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from safe_jepa.world_model.world_model import WorldModel
-from train_world_model import resolve_dims, episode_ids
+from safe_jepa.nn.mlp import MarginBarrier
+from train_world_model import resolve_dims, episode_ids, safety_margin
 
 RESULTS_PATH = ROOT / "src/save_data/experiments"
 
 FEAS_TOL = 1e-3 # planned risk more than this above the threshold counts as over it
 LATE_WINDOW = 30 # steps before the end of an episode that count as "late"
 EARLY_OVER = 0.3 # a share of over-threshold plans before the late window above this counts as "throughout"
-FAR = 50 # dataset states at least this many steps before a violation count as far from one
+TAU = 0.0 # the margin barrier is met at risk <= 0
+MARGIN_BANDS = ((-np.inf, 0.0), (0.0, 0.25), (0.25, 0.5), (0.5, 1.0), (1.0, np.inf)) # real next margins in check 2
 K_ACTIONS = 64 # sampled actions for the safest-action risk
 N_DATA = 200_000 # dataset rows scored in check 2
 N_BANK = 100_000 # dataset rows searched for the nearest neighbour in check 3
@@ -34,12 +36,11 @@ DATA_CHUNK = 8192 # rows per network call on the dataset
 EPISODE_CHUNK = 256 # rows per network call on an episode
 
 CONTROLLER_COLOURS = {"SCP": "tab:blue", "MPPI": "tab:orange", "CEM": "tab:green"}
-VERDICT_COLOURS = {"no violation": "tab:green", "critic saw no risk": "tab:purple", "warned late": "tab:orange",
+VERDICT_COLOURS = {"no violation": "tab:green", "no warning": "tab:purple", "warned late": "tab:orange",
                    "over the threshold throughout": "tab:red"}
-SWEEP_LABELS = {"p": "safety threshold", "J": "sampled sequences per iteration"}
+SWEEP_LABELS = {"eps": "margin buffer eps", "J": "sampled sequences per iteration"}
 
 # Loading saved episodes
-
 def load_episodes(results_dir, controller):
     files = sorted(results_dir.glob(f"{controller}_seed_*.npz"), key=lambda p: int(re.search(r"seed_(\d+)", p.name).group(1)))
     return [(int(re.search(r"seed_(\d+)", p.name).group(1)), dict(np.load(p))) for p in files]
@@ -111,13 +112,17 @@ def _encode(encoder, obs):
     return encoder(obs)
 
 @nnx.jit
-def _risk(safety_critic, z, u):
-    return safety_critic(z, u).squeeze(-1)
+def _risk(barrier, z, u):
+    return barrier(z, u).squeeze(-1)
 
 @nnx.jit
-def _safest(safety_critic, z, u):
+def _margin_next(dynamics, margin_fn, z, u):
+    return margin_fn(dynamics(z, u)).squeeze(-1)
+
+@nnx.jit
+def _safest(barrier, z, u):
     # Lowest risk over the K sampled actions of each state, u: (B * K, d_u)
-    q = safety_critic(jnp.repeat(z, K_ACTIONS, axis=0), u).reshape(z.shape[0], K_ACTIONS)
+    q = barrier(jnp.repeat(z, K_ACTIONS, axis=0), u).reshape(z.shape[0], K_ACTIONS)
     return q.min(axis=-1)
 
 @jax.jit
@@ -138,16 +143,16 @@ def in_chunks(fn, arrays, size):
         out.append(np.asarray(fn(*[jnp.asarray(p) for p in part]))[:k])
     return np.concatenate(out)
 
-class Critic:
-    # The world model's encoder and safety critic, and a bank of dataset latents for nearest-neighbour search
+class Safety:
     def __init__(self, world_model, action_bounds, d_u):
-        self.encoder, self.safety_critic = world_model.encoder, world_model.safety_critic
+        self.encoder, self.dynamics, self.margin_fn = world_model.encoder, world_model.dynamics, world_model.margin_fn
         self.bounds, self.d_u = action_bounds, d_u
         self.rng = np.random.default_rng(0)
+        self.barrier = None
 
     def encode(self, obs, size):
-        return in_chunks(lambda o: _encode(self.encoder, o), [obs], size)
-
+            return in_chunks(lambda o: _encode(self.encoder, o), [obs], size)
+    
     def risk(self, z, u, size):
         return in_chunks(lambda zz, uu: _risk(self.safety_critic, zz, uu), [z, u], size)
 
@@ -167,7 +172,15 @@ class Critic:
         nn = in_chunks(lambda zz: _nearest(self.bank_z, self.bank_sq, zz), [z], size)
         return self.bank_u[nn]
 
-def check_dataset(critic, data, taus):
+    def set_barrier(self, eps, alpha):
+        # The barrier of one experiment config, as the planners used it
+        self.barrier = MarginBarrier(self.dynamics, self.margin_fn, eps, alpha)
+
+    def margin_next(self, z, u, size):
+        # The margin head's prediction for the next state, as the barrier uses it
+        return in_chunks(lambda zz, uu: _margin_next(self.dynamics, self.margin_fn, zz, uu), [z, u], size)
+
+def check_dataset(safety, data, sources):
     # Check 2: the critic's risk on the dataset, at the data's actions and at the safest sampled action
     n = len(data["rewards"])
     idx = np.random.default_rng(0).choice(n, min(N_DATA, n), replace=False)
@@ -176,6 +189,8 @@ def check_dataset(critic, data, taus):
     steps_to_end = last_row[episode] - np.arange(n)
     ends_in_violation = (data["costs"][last_row] > 0)[episode]
     far = (~ends_in_violation | (steps_to_end >= FAR))[idx]
+    pred = safety.margin_next(z, data["actions"][idx], DATA_CHUNK)
+    real = safety_margin(data["next_observations"][idx], sources)
 
     z = critic.encode(data["observations"][idx], DATA_CHUNK)
     q_data = critic.risk(z, data["actions"][idx], DATA_CHUNK)
@@ -445,7 +460,7 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
             print(f"  {controller}: no results")
             continue
         cfg = yaml.safe_load(open(cfg_path))
-        tau, gamma = cfg["safety_threshold"], cfg["discount"]
+        tau, gamma = TAU, cfg["discount"]
         episodes = load_episodes(results_dir, controller)
         if not episodes or "info_pred_risk" not in episodes[0][1]:
             print(f"  {controller}: no planner logs (only runs made with sweep_runner have them)")
@@ -456,7 +471,7 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
             result, over = check_threshold(ep, tau)
             result = {"seed": seed, **result}
             visited = None
-            if critic is not None:
+            if safety is not None:
                 visited = check_visited(critic, ep)
                 result.update({
                     "steps_no_safe_action": float(np.mean(visited["safest"] > tau)),

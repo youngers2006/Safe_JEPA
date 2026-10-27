@@ -4,7 +4,7 @@ import flax.nnx as nnx
 import cvxpy as cp
 import numpy as np
 
-from ..nn.mlp import RewardPredictor, DynamicsPredictor, ValueNet, QSafetyCritic
+from ..nn.mlp import RewardPredictor, DynamicsPredictor, ValueNet, MarginBarrier
 
 @nnx.jit
 def get_jacobians(
@@ -13,7 +13,7 @@ def get_jacobians(
         r_fn: RewardPredictor, 
         v_fn: ValueNet, 
         f_fn: DynamicsPredictor, 
-        Q_fn: QSafetyCritic
+        Q_fn: MarginBarrier
     ):
 
     def reward_fn(z, u):

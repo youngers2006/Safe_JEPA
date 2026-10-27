@@ -3,7 +3,7 @@ seed: 0
 dataset_filename: "src/datasets/FilteredSafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
 data_dir: "T5_pointgoal2_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
-val_frac: 0.1        # split by TRAJECTORY, not transition
+val_frac: 0.1 # split by TRAJECTORY, not transition
 
 epochs: 100
 num_batches: 1500        # ~= n_transitions / batch_size

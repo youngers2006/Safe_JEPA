@@ -5,6 +5,7 @@ import flax.nnx as nnx
 import numpy as np
 
 from ..world_model.world_model import WorldModel
+from ..nn.mlp import MarginBarrier
 from ..SCP_control.SCPController import SCPController
 from ..Sampling_control.SamplingController import SamplingController
 
@@ -23,7 +24,12 @@ class SafeJEPAAgent:
             self.world_model.reward_fn,
             self.world_model.value_fn,
             self.world_model.dynamics,
-            self.world_model.safety_critic,
+            MarginBarrier(
+                self.world_model.dynamics, 
+                self.world_model.margin_fn, 
+                cfg["margin_eps"], 
+                cfg["barrier_alpha"]
+            ),
         )
 
         # Store configuration
@@ -36,7 +42,7 @@ class SafeJEPAAgent:
         self.reset()
 
     def make_controller(self):
-        control_cfg = {**self.cfg, "d_z": self.cfg["d_latent"]}
+        control_cfg = {**self.cfg, "d_z": self.cfg["d_latent"], "safety_threshold": 0.0}
         if self.controller_type == "SCP":
             return SCPController(control_cfg)
         return SamplingController(control_cfg)
