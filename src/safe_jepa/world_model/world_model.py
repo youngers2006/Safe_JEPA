@@ -50,6 +50,7 @@ class WorldModel(nnx.Module):
 
         lr = cfg["lr"]
         self.discount = cfg["discount"]
+        self.safety_discount = cfg["safety_discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
         self.cql_alpha = cfg["alpha"] # CQL penalty weight
         self.violation_weight = cfg["violation_weight"]
@@ -230,7 +231,7 @@ class WorldModel(nnx.Module):
             sampled_actions,
             safety_cost.reshape(-1), 
             terminal.reshape(-1), 
-            self.discount, 
+            self.safety_discount, 
             Q_minima_samples,
         ).reshape(B, H)
 

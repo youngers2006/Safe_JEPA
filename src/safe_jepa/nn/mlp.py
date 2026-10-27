@@ -133,6 +133,7 @@ class QSafetyCritic(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
+        self.softmin_beta = cfg["softmin_beta"]
         layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
 
         # Networks layers
@@ -161,10 +162,10 @@ class QSafetyCritic(nnx.Module):
     def compute_targets(
         self,
         target_Q: QSafetyCritic,
-        next_z_target: jax.Array,     # (B, d_z)
-        sampled_actions: jax.Array,   # (B*K, d_u)
-        safety_cost: jax.Array,       # (B,)
-        terminal: jax.Array,          # (B,)
+        next_z_target: jax.Array, # (B, d_z)
+        sampled_actions: jax.Array, # (B*K, d_u)
+        safety_cost: jax.Array, # (B,)
+        terminal: jax.Array, # (B,)
         discount: float,
         Q_minima_samples: int
     ) -> jax.Array:
@@ -181,7 +182,7 @@ class QSafetyCritic(nnx.Module):
         target_next_q = target_Q(
             z_q, sampled_actions, update_spectral_norm=False
         ).squeeze(axis=-1).reshape(B, Q_minima_samples)
-        target_q_min = jnp.min(target_next_q, axis=-1) # (B,)
+        target_q_min = -(jax.nn.logsumexp(-self.softmin_beta * target_next_q, axis=-1) - jnp.log(Q_minima_samples)) / self.softmin_beta
 
         # Compute Bellman recursion target
         return jax.lax.stop_gradient(
