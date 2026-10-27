@@ -49,7 +49,7 @@ def main(cfg_filename, n_points=4096):
         "dynamics": (lambda x: world_model.dynamics(x[:, :d_z], x[:, d_z:]), zu, "DynamicsParams"),
         "reward": (lambda x: world_model.reward_fn(x[:, :d_z], x[:, d_z:]), zu, "RewardParams"),
         "value": (lambda x: world_model.value_fn(x), z, "ValueParams"),
-        "safety_critic": (lambda x: world_model.safety_critic(x[:, :d_z], x[:, d_z:]), zu, "SafetyCriticParams"),
+        "margin": (lambda x: world_model.margin_fn(x), z, "MarginParams"),
     }
     print(f"{cfg_filename} ({cfg['data_dir']}), local slope over {n_points} data points:")
     for name, (fn, x, key) in nets.items():

@@ -30,9 +30,9 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueParams"]["d_out"] = 1
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
     cfg["ValueQParams"]["d_out"] = 1
-    cfg["SafetyCriticParams"]["d_in"] = d_z + act_dim
-    cfg["SafetyCriticParams"]["d_out"] = 1
-    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "SafetyCriticParams"):
+    cfg["MarginParams"]["d_in"] = d_z
+    cfg["MarginParams"]["d_out"] = 1
+    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
 
@@ -52,6 +52,11 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
         w.writeheader()
         w.writerows(rows)
 
+def safety_margin(obs, sources):
+    # A lidar bin reads 1 - d/3 for an object at distance d, so a source [first column, last column + 1, contact distance]
+    # gives d - contact distance, and the margin is the smallest over the sources (<= 0 exactly when the step incurs a cost)
+    return np.min([3.0 * (1.0 - obs[:, lo:hi].max(axis=1)) - contact for lo, hi, contact in sources], axis=0)
+
 def episode_ids(data_dict):
     ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
     joins = np.all(
@@ -70,12 +75,6 @@ def _sample(data_dict, key, batch_size, horizon):
 
     same_episode = data_dict["episode"][idx] == data_dict["episode"][starts][:, None]
     batch["mask"] = ((rows < n) & same_episode).astype(jnp.float32)
-
-    # The dataset's action at each row's next state, and whether the next row continues the same trajectory (it does not
-    # after a terminal, a timeout or at the end of the data)
-    nxt = jnp.minimum(rows + 1, n - 1)
-    batch["next_actions"] = data_dict["actions"][nxt]
-    batch["next_valid"] = ((rows + 1 < n) & (data_dict["episode"][nxt] == data_dict["episode"][idx])).astype(jnp.float32)
     return batch, starts
 
 def get_batches(data_dict, batch_size, N, key, epoch, horizon):
@@ -98,6 +97,11 @@ def main(cfg_filename):
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
 
+    # Safety margin of each next state from its lidar
+    data_dict["margins"] = safety_margin(data_dict["next_observations"], cfg["margin_sources"])
+    print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
+          f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+
     # Add additional data
     cfg = resolve_dims(
         cfg,
@@ -106,7 +110,7 @@ def main(cfg_filename):
     )
 
     # Create rng key
-    mask_key, data_key, train_key = jax.random.split(jax.random.key(cfg["seed"]), 3)
+    data_key = jax.random.key(cfg["seed"])
     rngs = nnx.Rngs(cfg["seed"])
 
     # Calculate observation distribution
@@ -136,13 +140,11 @@ def main(cfg_filename):
             next_obs = batch["next_observations"]
             actions = batch["actions"]
             rewards = batch["rewards"]
-            safety_costs = batch["costs"]
+            margins = batch["margins"]
             terminals = batch["terminals"]
             mask = batch["mask"]
             metrics = world_model.train_step(
-                obs, next_obs, actions, rewards, safety_costs, terminals, mask,
-                jax.random.fold_in(train_key, epoch * cfg["num_batches"] + i),
-                next_action=batch["next_actions"], next_valid=batch["next_valid"]
+                obs, next_obs, actions, rewards, margins, terminals, mask
             )
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)

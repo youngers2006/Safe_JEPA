@@ -19,14 +19,16 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from safe_jepa.world_model.world_model import WorldModel
-from train_world_model import resolve_dims, episode_ids
+from safe_jepa.nn.mlp import MarginBarrier
+from train_world_model import resolve_dims, episode_ids, safety_margin
 
 RESULTS_PATH = ROOT / "src/save_data/experiments"
 
+TAU = 0.0 # the margin barrier is met at risk <= 0
 FEAS_TOL = 1e-3 # planned risk more than this above the threshold counts as over it
 LATE_WINDOW = 30 # steps before the end of an episode that count as "late"
 EARLY_OVER = 0.3 # a share of over-threshold plans before the late window above this counts as "throughout"
-FAR = 50 # dataset states at least this many steps before a violation count as far from one
+MARGIN_BANDS = ((-np.inf, 0.0), (0.0, 0.25), (0.25, 0.5), (0.5, 1.0), (1.0, np.inf)) # real next margins in check 2
 K_ACTIONS = 64 # sampled actions for the safest-action risk
 N_DATA = 200_000 # dataset rows scored in check 2
 N_BANK = 100_000 # dataset rows searched for the nearest neighbour in check 3
@@ -34,9 +36,9 @@ DATA_CHUNK = 8192 # rows per network call on the dataset
 EPISODE_CHUNK = 256 # rows per network call on an episode
 
 CONTROLLER_COLOURS = {"SCP": "tab:blue", "MPPI": "tab:orange", "CEM": "tab:green"}
-VERDICT_COLOURS = {"no violation": "tab:green", "critic saw no risk": "tab:purple", "warned late": "tab:orange",
+VERDICT_COLOURS = {"no violation": "tab:green", "no warning": "tab:purple", "warned late": "tab:orange",
                    "over the threshold throughout": "tab:red"}
-SWEEP_LABELS = {"p": "safety threshold", "J": "sampled sequences per iteration"}
+SWEEP_LABELS = {"eps": "margin buffer eps", "J": "sampled sequences per iteration"}
 
 # Loading saved episodes
 
@@ -53,7 +55,7 @@ def return_to_go(rewards, gamma):
     return g
 
 def sweep_value(tag):
-    # "e1/p_0.1" -> ("p", 0.1)
+    # "e1/eps_0.05" -> ("eps", 0.05)
     prefix, value = tag.rsplit("/", 1)[-1].rsplit("_", 1)
     return prefix, float(value)
 
@@ -72,7 +74,7 @@ def check_threshold(ep, tau):
     if not violated:
         verdict = "no violation"
     elif final_run == 0:
-        verdict = "critic saw no risk"
+        verdict = "no warning"
     elif early.size and early_frac > EARLY_OVER:
         verdict = "over the threshold throughout"
     else:
@@ -111,14 +113,18 @@ def _encode(encoder, obs):
     return encoder(obs)
 
 @nnx.jit
-def _risk(safety_critic, z, u):
-    return safety_critic(z, u).squeeze(-1)
+def _risk(barrier, z, u):
+    return barrier(z, u).squeeze(-1)
 
 @nnx.jit
-def _safest(safety_critic, z, u):
+def _safest(barrier, z, u):
     # Lowest risk over the K sampled actions of each state, u: (B * K, d_u)
-    q = safety_critic(jnp.repeat(z, K_ACTIONS, axis=0), u).reshape(z.shape[0], K_ACTIONS)
+    q = barrier(jnp.repeat(z, K_ACTIONS, axis=0), u).reshape(z.shape[0], K_ACTIONS)
     return q.min(axis=-1)
+
+@nnx.jit
+def _margin_next(dynamics, margin_fn, z, u):
+    return margin_fn(dynamics(z, u)).squeeze(-1)
 
 @jax.jit
 def _nearest(bank_z, bank_sq, z):
@@ -138,25 +144,35 @@ def in_chunks(fn, arrays, size):
         out.append(np.asarray(fn(*[jnp.asarray(p) for p in part]))[:k])
     return np.concatenate(out)
 
-class Critic:
-    # The world model's encoder and safety critic, and a bank of dataset latents for nearest-neighbour search
+class Safety:
+    # The world model's encoder, dynamics and margin head, the planners' margin barrier, and a bank of dataset latents
+    # for nearest-neighbour search
     def __init__(self, world_model, action_bounds, d_u):
-        self.encoder, self.safety_critic = world_model.encoder, world_model.safety_critic
+        self.encoder, self.dynamics, self.margin_fn = world_model.encoder, world_model.dynamics, world_model.margin_fn
         self.bounds, self.d_u = action_bounds, d_u
         self.rng = np.random.default_rng(0)
+        self.barrier = None
+
+    def set_barrier(self, eps, alpha):
+        # The barrier of one experiment config, as the planners used it
+        self.barrier = MarginBarrier(self.dynamics, self.margin_fn, eps, alpha)
 
     def encode(self, obs, size):
         return in_chunks(lambda o: _encode(self.encoder, o), [obs], size)
 
     def risk(self, z, u, size):
-        return in_chunks(lambda zz, uu: _risk(self.safety_critic, zz, uu), [z, u], size)
+        return in_chunks(lambda zz, uu: _risk(self.barrier, zz, uu), [z, u], size)
 
     def safest_risk(self, z, size):
-        # Lowest risk over K uniformly sampled actions: the floor the critic allows at each state
+        # Lowest risk over K uniformly sampled actions: the floor the barrier allows at each state
         def fn(zz):
             u = self.rng.uniform(self.bounds[0], self.bounds[1], (zz.shape[0] * K_ACTIONS, self.d_u))
-            return _safest(self.safety_critic, zz, jnp.asarray(u))
+            return _safest(self.barrier, zz, jnp.asarray(u))
         return in_chunks(fn, [z], size)
+
+    def margin_next(self, z, u, size):
+        # The margin head's prediction for the next state, as the barrier uses it
+        return in_chunks(lambda zz, uu: _margin_next(self.dynamics, self.margin_fn, zz, uu), [z, u], size)
 
     def set_bank(self, obs, actions):
         self.bank_z = jnp.asarray(self.encode(obs, DATA_CHUNK))
@@ -167,36 +183,32 @@ class Critic:
         nn = in_chunks(lambda zz: _nearest(self.bank_z, self.bank_sq, zz), [z], size)
         return self.bank_u[nn]
 
-def check_dataset(critic, data, taus):
-    # Check 2: the critic's risk on the dataset, at the data's actions and at the safest sampled action
+def check_dataset(safety, data, sources):
+    # Check 2: the margin head's one-step prediction at the dataset's actions against the real next state's margin
     n = len(data["rewards"])
     idx = np.random.default_rng(0).choice(n, min(N_DATA, n), replace=False)
-    episode = episode_ids(data)
-    last_row = np.r_[np.flatnonzero(np.diff(episode)), n - 1] # last row of each trajectory
-    steps_to_end = last_row[episode] - np.arange(n)
-    ends_in_violation = (data["costs"][last_row] > 0)[episode]
-    far = (~ends_in_violation | (steps_to_end >= FAR))[idx]
+    z = safety.encode(data["observations"][idx], DATA_CHUNK)
+    pred = safety.margin_next(z, data["actions"][idx], DATA_CHUNK)
+    real = safety_margin(data["next_observations"][idx], sources)
+    print(f"Check 2 - the margin head's one-step prediction on {len(idx)} dataset rows, by the real next margin")
+    print(f"  {'real margin':>14s}  {'rows':>7s}  {'bias':>7s}  {'rms error':>9s}  {'wrong side of 0':>15s}")
+    for lo, hi in MARGIN_BANDS:
+        sel = (real >= lo) & (real < hi)
+        if sel.any():
+            err = pred[sel] - real[sel]
+            wrong = (pred[sel] > 0) != (real[sel] > 0) # a missed violation, or a false alarm
+            print(f"  [{lo:5.2f}, {hi:5.2f})  {sel.sum():7d}  {err.mean():+7.3f}  {np.sqrt(np.mean(err ** 2)):9.3f}  "
+                  f"{wrong.mean():15.1%}")
+    return pred, real
 
-    z = critic.encode(data["observations"][idx], DATA_CHUNK)
-    q_data = critic.risk(z, data["actions"][idx], DATA_CHUNK)
-    q_min = critic.safest_risk(z, DATA_CHUNK)
-    print(f"Check 2 - the critic on {len(idx)} dataset rows ({far.mean():.0%} at least {FAR} steps from a violation): "
-          f"share with risk over each threshold")
-    print(f"  {'threshold':>9s}  {'dataset action':>14s}  {'... far from violations':>23s}  {'safest action':>13s}  "
-          f"{'... far from violations':>23s}")
-    for tau in taus:
-        print(f"  {tau:9g}  {np.mean(q_data > tau):14.1%}  {np.mean(q_data[far] > tau):23.1%}  "
-              f"{np.mean(q_min > tau):13.1%}  {np.mean(q_min[far] > tau):23.1%}")
-    return q_data, q_min, far
-
-def check_visited(critic, ep):
+def check_visited(safety, ep):
     # Check 3: at each visited state, risk at the executed action, at the safest sampled action and at the action of the
     # nearest dataset state
-    z = critic.encode(ep["obs"], EPISODE_CHUNK)
+    z = safety.encode(ep["obs"], EPISODE_CHUNK)
     return {
-        "exec": critic.risk(z, ep["actions"], EPISODE_CHUNK),
-        "safest": critic.safest_risk(z, EPISODE_CHUNK),
-        "nearest": critic.risk(z, critic.nearest_action(z, EPISODE_CHUNK), EPISODE_CHUNK)
+        "exec": safety.risk(z, ep["actions"], EPISODE_CHUNK),
+        "safest": safety.safest_risk(z, EPISODE_CHUNK),
+        "nearest": safety.risk(z, safety.nearest_action(z, EPISODE_CHUNK), EPISODE_CHUNK)
     }
 
 # Figures
@@ -206,7 +218,7 @@ def plot_episode(path, controller, seed, ep, tau, gamma, over, result, visited=N
     is_scp = "info_iterations" in ep
     fig, axes = plt.subplots(4 if is_scp else 3, 1, figsize=(12, 11 if is_scp else 8.5), sharex=True)
 
-    # Planned risk against the threshold, with the critic's floor and the nearest dataset action's risk
+    # Planned barrier risk against its threshold of 0, with the safest sampled action's and the nearest dataset action's
     ax = axes[0]
     ax.plot(steps, ep["info_pred_risk"][:, 0], lw=1, label="planned risk, executed step")
     ax.plot(steps, ep["info_pred_risk"].max(axis=1), lw=1, label="planned risk, plan maximum")
@@ -253,20 +265,19 @@ def plot_episode(path, controller, seed, ep, tau, gamma, over, result, visited=N
     fig.savefig(path, dpi=120)
     plt.close(fig)
 
-def plot_dataset(path, dataset, taus):
-    # Check 2: the critic's risk on the dataset, with every threshold of the experiment
-    q_data, q_min, far = dataset
-    fig, ax = plt.subplots(figsize=(8, 5))
-    bins = np.linspace(min(0.0, q_data.min(), q_min.min()), max(1.0, q_data.max(), q_min.max()), 51) # output not clipped to [0, 1]
-    ax.hist(q_data, bins=bins, histtype="step", density=True, label="dataset action")
-    ax.hist(q_min, bins=bins, histtype="step", density=True, label="safest sampled action")
-    ax.hist(q_min[far], bins=bins, histtype="step", density=True, label=f"safest, >= {FAR} steps from a violation")
-    for tau in taus:
-        ax.axvline(tau, color="k", ls="--", lw=0.8)
-    ax.set_yscale("log")
-    ax.set_xlabel("critic risk")
-    ax.set_title("Check 2: the critic's risk on the dataset (dashed: thresholds)")
-    ax.legend(fontsize=8)
+def plot_dataset(path, dataset):
+    # Check 2: predicted against real next margin on the dataset
+    pred, real = dataset
+    fig, ax = plt.subplots(figsize=(7, 6))
+    hb = ax.hexbin(real, pred, gridsize=60, bins="log", mincnt=1)
+    lims = [min(real.min(), pred.min()), max(real.max(), pred.max())]
+    ax.plot(lims, lims, "k--", lw=1)
+    ax.axhline(0.0, color="red", lw=0.8)
+    ax.axvline(0.0, color="red", lw=0.8)
+    fig.colorbar(hb, label="rows")
+    ax.set_xlabel("real next margin")
+    ax.set_ylabel("predicted next margin")
+    ax.set_title("Check 2: the margin head on the dataset (dashed: exact)")
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
@@ -380,7 +391,7 @@ def point_summary(entry):
         "sem_return": float(returns.std() / np.sqrt(len(returns))),
         "median_plan_time": float(np.median(np.concatenate([ep["plan_times"] for ep in episodes]))),
         "plans_over_threshold": float(over.mean()),
-        "critic_saw_no_risk": float(np.mean([r["verdict"] == "critic saw no risk" for r in rows])),
+        "no_warning": float(np.mean([r["verdict"] == "no warning" for r in rows])),
         "warned_late": float(np.mean([r["verdict"] == "warned late" for r in rows])),
         "over_throughout": float(np.mean([r["verdict"] == "over the threshold throughout" for r in rows])),
         "planned_minus_earned": float(np.median(np.concatenate(
@@ -392,11 +403,11 @@ def point_summary(entry):
     return summary
 
 def plot_sweep(path, title, sweep):
-    # Each controller across the sweep points (e.g. the thresholds of E1)
+    # Each controller across the sweep points (e.g. the margin buffers of E1)
     prefix = sweep_value(sweep[0][0])[0]
     panels = [("violation_rate", "episodes with a violation"), ("mean_return", "mean episode return (± s.e.)"),
               ("median_plan_time", "median plan time (s)"), ("plans_over_threshold", "plans over the threshold"),
-              ("critic_saw_no_risk", "violated, last plan within the threshold"),
+              ("no_warning", "violated, last plan within the threshold"),
               ("over_throughout", "violated, plans over the threshold throughout"),
               ("planned_minus_earned", "median planned minus earned return"),
               ("no_safe_action", "visited steps with no safe sampled action"),
@@ -434,7 +445,7 @@ def plot_sweep(path, title, sweep):
 
 # Running the analysis
 
-def analyse_point(results_dir, title, controllers, critic=None, episode_figures=True):
+def analyse_point(results_dir, title, controllers, safety=None, episode_figures=True):
     # Check 1 (and check 3) for every episode of every controller at one sweep point, their figures, and the comparison
     out_dir = results_dir / "analysis"
     out_dir.mkdir(exist_ok=True)
@@ -445,19 +456,21 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
             print(f"  {controller}: no results")
             continue
         cfg = yaml.safe_load(open(cfg_path))
-        tau, gamma = cfg["safety_threshold"], cfg["discount"]
+        tau, gamma = TAU, cfg["discount"]
         episodes = load_episodes(results_dir, controller)
         if not episodes or "info_pred_risk" not in episodes[0][1]:
             print(f"  {controller}: no planner logs (only runs made with sweep_runner have them)")
             continue
 
+        if safety is not None:
+            safety.set_barrier(cfg["margin_eps"], cfg["barrier_alpha"])
         rows, visited_all = [], []
         for seed, ep in episodes:
             result, over = check_threshold(ep, tau)
             result = {"seed": seed, **result}
             visited = None
-            if critic is not None:
-                visited = check_visited(critic, ep)
+            if safety is not None:
+                visited = check_visited(safety, ep)
                 result.update({
                     "steps_no_safe_action": float(np.mean(visited["safest"] > tau)),
                     "median_exec_minus_nearest": float(np.median(visited["exec"] - visited["nearest"])),
@@ -474,19 +487,18 @@ def analyse_point(results_dir, title, controllers, critic=None, episode_figures=
             w.writerows(rows)
 
         point[controller] = {"tau": tau, "gamma": gamma, "rows": rows, "episodes": [ep for _, ep in episodes],
-                             "visited": visited_all if critic is not None else None}
+                             "visited": visited_all if safety is not None else None}
         verdicts = [r["verdict"] for r in rows]
         line = (f"  {controller:5s} {len(rows)} episodes, {np.mean([r['violated'] for r in rows]):.0%} violated, "
                 f"mean return {np.mean([r['return'] for r in rows]):.2f} | "
                 + ", ".join(f"{v}: {verdicts.count(v)}" for v in VERDICT_COLOURS if v in verdicts))
-        if critic is not None:
+        if safety is not None:
             # The executed-step risk recomputed here should match what the planner logged
             line += f" | recomputed vs logged risk {max(r['max_abs_exec_vs_planned'] for r in rows):.1e}"
         print(line)
 
     if point:
-        tau = point[next(iter(point))]["tau"]
-        plot_comparison(out_dir / "comparison.png", f"{title} (threshold {tau})", point)
+        plot_comparison(out_dir / "comparison.png", title, point)
     return point
 
 def analyse_experiment(experiment, tags, controllers, model_checks=True, episode_figures=True):
@@ -501,16 +513,15 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
     print(f"\n{experiment}")
 
     # Checks 2 and 3 need the world model, which every config of the experiment shares
-    critic = None
+    safety = None
     if model_checks:
         cfg = yaml.safe_load(open(configs[0]))
         world_model, data = load_world_model(cfg)
-        critic = Critic(world_model, cfg["action_bounds"], cfg["d_u"])
-        taus = sorted({yaml.safe_load(open(p))["safety_threshold"] for p in configs})
-        dataset = check_dataset(critic, data, taus)
-        plot_dataset(out_dir / "check2_critic_on_dataset.png", dataset, taus)
+        safety = Safety(world_model, cfg["action_bounds"], cfg["d_u"])
+        dataset = check_dataset(safety, data, cfg["margin_sources"])
+        plot_dataset(out_dir / "check2_margin_on_dataset.png", dataset)
         rows = np.random.default_rng(1).choice(len(data["rewards"]), min(N_BANK, len(data["rewards"])), replace=False)
-        critic.set_bank(data["observations"][rows], data["actions"][rows])
+        safety.set_bank(data["observations"][rows], data["actions"][rows])
 
     # Every sweep point, then each sweep (e.g. e1, e2) across its points
     sweeps = {}
@@ -519,7 +530,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
             print(f"{tag}: not found")
             continue
         print(f"{tag}:")
-        point = analyse_point(exp_dir / tag, f"{Path(experiment).name}: {tag}", controllers, critic, episode_figures)
+        point = analyse_point(exp_dir / tag, f"{Path(experiment).name}: {tag}", controllers, safety, episode_figures)
         if point:
             sweeps.setdefault(tag.split("/")[0], []).append((tag, point))
 
@@ -540,7 +551,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
 if __name__ == "__main__":
     # Experiment folders under src/save_data/experiments, and the sweep points saved in each (as run_e1.py saves them)
     EXPERIMENTS = {
-        "T5_pointgoal1_c_1_5_seed_0": [f"e1/p_{p}" for p in [0.5, 0.3, 0.2, 0.1, 0.05, 0.02]],
+        "M1_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.0, 0.025, 0.05, 0.1, 0.2]],
     }
     CONTROLLERS = ["SCP", "MPPI", "CEM"]
     MODEL_CHECKS = True # checks 2 and 3 load the world model

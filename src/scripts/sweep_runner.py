@@ -134,7 +134,8 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
         rows.append({
             "world_model": cfg["data_dir"],
             "controller": cfg["controller"],
-            "safety_threshold": cfg["safety_threshold"],
+            "margin_eps": cfg["margin_eps"],
+            "barrier_alpha": cfg["barrier_alpha"],
             "num_seqs": cfg.get("num_seqs", float("nan")),
             **summarise(summary, trajectory, agent.info_log, cfg["sim_max_steps"]),
         })

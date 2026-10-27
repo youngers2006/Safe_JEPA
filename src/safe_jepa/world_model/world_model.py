@@ -2,27 +2,25 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import optax
-from functools import partial
 
 # import modules
-from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor, QSafetyCritic
+from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor
 from ..nn.variables import SpectralStat
 from .encoder import Encoder
 
 class TrainableBundle(nnx.Module):
-    def __init__(self, encoder, dynamics, value_fn, value_Q, safety_critic, reward_fn):
+    def __init__(self, encoder, dynamics, value_fn, value_Q, reward_fn, margin_fn):
         self.encoder = encoder
         self.dynamics = dynamics
         self.value_fn = value_fn
         self.value_Q = value_Q
-        self.safety_critic = safety_critic
         self.reward_fn = reward_fn
+        self.margin_fn = margin_fn
 
 class TargetBundle(nnx.Module):
-    def __init__(self, encoder, value_Q, safety_critic):
+    def __init__(self, encoder, value_Q):
         self.encoder = encoder
         self.value_Q = value_Q
-        self.safety_critic = safety_critic
 
 def expectile_regression_loss(u, tau):
     return jnp.where(u > 0, tau, 1 - tau) * (u **2)
@@ -43,21 +41,16 @@ class WorldModel(nnx.Module):
         self.lambda_dyn = cfg["lambda_dyn"]
         self.lambda_v = cfg["lambda_v"]
         self.lambda_r = cfg["lambda_r"]
-        self.lambda_s = cfg["lambda_s"]
+        self.lambda_m = cfg["lambda_m"]
         self.lambda_var = cfg["lambda_var"]
         self.lambda_cov = cfg["lambda_cov"]
         self.tau = cfg["tau"]
 
         lr = cfg["lr"]
         self.discount = cfg["discount"]
-        self.safety_discount = cfg["safety_discount"]
         self.gamma = cfg["gamma"] # VicReg variance threshold
-        self.cql_alpha = cfg["alpha"] # CQL penalty weight
-        self.violation_weight = cfg["violation_weight"]
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
         self.rho = cfg["rho"] # Weight rho^t on losses at rollout step t
-        self.safety_discount = cfg.get("safety_discount", cfg["discount"]) # discount of the safety critic's target
-        self.safety_target = cfg.get("safety_target", "min") # "data": bootstrap from the dataset's next action, "min": from the safest sampled action
 
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
@@ -83,21 +76,9 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        self.safety_critic = QSafetyCritic(
-            cfg=cfg["SafetyCriticParams"],
-            rngs=rngs      
-        )
-        
-        self.target_safety_critic = QSafetyCritic(
-            cfg=cfg["SafetyCriticParams"],
-            rngs=rngs
-        )
-
         nnx.update(self.target_encoder, nnx.state(self.encoder, nnx.Param))
         nnx.update(self.target_value_Q, nnx.state(self.value_Q, nnx.Param))
         nnx.update(self.target_value_Q, nnx.state(self.value_Q, SpectralStat))
-        nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, nnx.Param))
-        nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
 
         self.dynamics = DynamicsPredictor(
             cfg=cfg["DynamicsParams"],
@@ -114,18 +95,23 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
+        # Hazard margin head: distance from the latent's state to the nearest hazard's edge (<= 0 is a violation)
+        self.margin_fn = ValueNet(
+            cfg=cfg["MarginParams"],
+            rngs=rngs
+        )
+
         self.trainable_nodes = TrainableBundle(
             self.encoder, 
             self.dynamics, 
             self.value_fn,
             self.value_Q,
-            self.safety_critic, 
-            self.reward_fn
+            self.reward_fn,
+            self.margin_fn
         )
         self.target_nodes = TargetBundle(
             self.target_encoder, 
-            self.target_value_Q, 
-            self.target_safety_critic
+            self.target_value_Q
         )
         self.optimiser = nnx.Optimizer(
             self.trainable_nodes, 
@@ -167,43 +153,20 @@ class WorldModel(nnx.Module):
         nnx.update(self.target_value_Q, nnx.state(self.value_Q, SpectralStat))
 
     @nnx.jit
-    def update_target_safety_critic(self, tau: float = 0.01) -> None:
-        # Extract both param sets
-        online_params = nnx.state(self.safety_critic, nnx.Param)
-        target_params = nnx.state(self.target_safety_critic, nnx.Param)
-
-        # Use moving average to update target encoder
-        new_target_params = optax.incremental_update(
-            new_tensors=online_params,
-            old_tensors=target_params,
-            step_size=tau
-        )
-
-        # Update the target encoder state
-        nnx.update(self.target_safety_critic, new_target_params)
-        nnx.update(self.target_safety_critic, nnx.state(self.safety_critic, SpectralStat))
-
-    @nnx.jit
     def update_target_networks(self, tau_vals:tuple[float, ...]) -> None:
         self.update_target_encoder(tau_vals[0])
-        self.update_target_safety_critic(tau_vals[1])
-        self.update_target_value_Q(tau_vals[2])
+        self.update_target_value_Q(tau_vals[1])
 
-    @partial(nnx.jit, static_argnames=("Q_minima_samples", "action_bounds"))
+    @nnx.jit
     def train_step(
         self,
         obs: jax.Array, # (B, H, obs_dim)
         next_obs: jax.Array, # (B, H, obs_dim)
         action: jax.Array, # (B, H, d_u)
         reward: jax.Array, # (B, H)
-        safety_cost: jax.Array, # (B, H)
+        margin: jax.Array, # (B, H) hazard margin at next_obs
         terminal: jax.Array, # (B, H)
-        mask: jax.Array, # (B, H)
-        key: jax.Array,
-        Q_minima_samples: int = 64,
-        action_bounds: tuple[float, float] = (-1.0, 1.0),
-        next_action: jax.Array | None = None, # (B, H, d_u), the dataset's action at each next state
-        next_valid: jax.Array | None = None # (B, H), 1 where that action continues the same trajectory
+        mask: jax.Array # (B, H)
     ) -> dict:
         # B windows of H consecutive transitions
         B, H, d_u = action.shape
@@ -221,39 +184,14 @@ class WorldModel(nnx.Module):
             reward + self.discount * (1.0 - terminal) * self.value_fn(next_z_target).squeeze(axis=-1)
         ) # (B, H)
 
-        # Create safety targets
-        sampled_actions = jax.random.uniform(
-            key,
-            shape=(B * H * Q_minima_samples, action.shape[-1]),
-            minval=action_bounds[0], 
-            maxval=action_bounds[1],
-        )
-
-        use_data = self.safety_target == "data"
-        if use_data and next_action is None:
-            raise ValueError('safety_target "data" needs next_action and next_valid (from train_world_model._sample)')
-        q_target = self.target_safety_critic.compute_targets(
-            self.target_safety_critic, 
-            next_z_target.reshape(B * H, -1), 
-            sampled_actions,
-            safety_cost.reshape(-1), 
-            terminal.reshape(-1), 
-            self.safety_discount, 
-            Q_minima_samples,
-            next_action=next_action.reshape(B * H, -1) if use_data else None,
-            next_valid=next_valid.reshape(-1) if use_data else None
-        ).reshape(B, H)
-
-        sampled_actions = sampled_actions.reshape(B, H, Q_minima_samples, d_u)
-
         def loss_fn(trainable_partition: TrainableBundle, target_partition: TargetBundle) -> dict:
             # Extract trainable networks
             enc = trainable_partition.encoder
             dyn = trainable_partition.dynamics
             val_fn = trainable_partition.value_fn
             val_fn_Q = trainable_partition.value_Q
-            safety_Q = trainable_partition.safety_critic
             rew_fn = trainable_partition.reward_fn
+            margin_fn = trainable_partition.margin_fn
 
             # Extract target networks
             target_val_fn_Q = target_partition.value_Q
@@ -278,6 +216,10 @@ class WorldModel(nnx.Module):
                 r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
                 loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
 
+                # Margin Loss on the predicted next latent, so the head is trained on the latents the planner sees
+                m_pred = margin_fn(next_z, update_spectral_norm=sn).squeeze(axis=-1)
+                loss_m = masked_mean((m_pred - margin[:, t]) ** 2, m)
+
                 # Value Loss
                 # Get value prediction
                 v_pred = val_fn(z, update_spectral_norm=sn).squeeze(axis=-1)
@@ -296,27 +238,13 @@ class WorldModel(nnx.Module):
 
                 loss_v = loss_v_q + loss_v_v
 
-                # Compute safety constraint loss
-                loss_s, q_aux_t = safety_Q.compute_loss(
-                    z,
-                    a,
-                    q_target[:, t],
-                    sampled_actions[:, t].reshape(-1, d_u),
-                    action_bounds,
-                    self.cql_alpha,
-                    Q_minima_samples,
-                    self.violation_weight,
-                    mask=m,
-                    update_spectral_norm=sn
-                )
-
                 # Total world model loss
                 total_loss = total_loss + self.rho ** t * (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
-                            self.lambda_s * loss_s + self.lambda_r * loss_r)
+                            self.lambda_m * loss_m + self.lambda_r * loss_r)
                 w_sum = w_sum + self.rho ** t
 
                 if t == 0:
-                    loss_z_0, loss_v_0, loss_s_0, loss_r_0, q_aux = loss_z, loss_v, loss_s, loss_r, q_aux_t
+                    loss_z_0, loss_v_0, loss_m_0, loss_r_0 = loss_z, loss_v, loss_m, loss_r
                 step_metrics[f"loss_dyn_t{t}"] = loss_z
 
                 z = next_z
@@ -346,14 +274,11 @@ class WorldModel(nnx.Module):
                 "loss_total": total_loss,
                 "loss_dyn": loss_z_0,
                 "loss_v": loss_v_0,
-                "loss_safety": loss_s_0,
+                "loss_margin": loss_m_0,
                 "loss_var": loss_var,
                 "loss_cov": loss_cov,
                 "loss_r": loss_r_0,
-                **q_aux,
                 **step_metrics,
-                "q_target_min": jnp.min(q_target),
-                "q_target_max": jnp.max(q_target),
                 "sigma_dyn_0":  dyn.layers[0].sigma.value
             }
             return total_loss, metrics
