@@ -31,8 +31,13 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
     cfg["ValueQParams"]["d_out"] = 1
     cfg["MarginParams"]["d_in"] = d_z
-    cfg["MarginParams"]["d_out"] = len(cfg["margin_constraints"])
-    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
+    cfg["MarginParams"]["d_out"] = 1
+    nets = ["DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"]
+    if cfg.get("goal_head", False):
+        cfg["GoalParams"]["d_in"] = d_z + act_dim
+        cfg["GoalParams"]["d_out"] = 1
+        nets.append("GoalParams")
+    for sub in nets:
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
 
@@ -55,14 +60,9 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
 def safety_margin(obs, sources):
     return np.min([3.0 * (1.0 - obs[:, lo:hi].max(axis=1)) - contact for lo, hi, contact in sources], axis=0)
 
-# How each kind of constraint's margin is computed from observations: label name -> fn(obs, constraint config)
-MARGIN_LABELS = {
-    "lidar": lambda obs, c: safety_margin(obs, c["sources"]),
-}
-
-def margin_labels(obs, constraints):
-    # One column per constraint, in the order of margin_constraints
-    return np.stack([MARGIN_LABELS[c["label"]](obs, c) for c in constraints], axis=-1)
+def margin_labels(obs, cfg):
+    # The margin head's targets: the margin, with values above margin_clip trained as margin_clip
+    return np.minimum(safety_margin(obs, cfg["margin_sources"]), cfg.get("margin_clip", np.inf))
 
 def episode_ids(data_dict):
     ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
@@ -104,11 +104,15 @@ def main(cfg_filename):
     # Augment datadict
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
-    data_dict["margins"] = margin_labels(data_dict["next_observations"], cfg["margin_constraints"])
-    for k, c in enumerate(cfg["margin_constraints"]):
-        m_k = data_dict["margins"][:, k]
-        print(f"margin {k} ({c['label']}) <= 0 on {np.mean(m_k[data_dict['costs'] > 0] <= 0):.1%} of cost rows "
-              f"and {np.mean(m_k[data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+    data_dict["margins"] = margin_labels(data_dict["next_observations"], cfg)
+    print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
+          f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+    if cfg.get("goal_head", False):
+        # goal_weight = s (1 - p) / ((1 - s) p) gives the goal rows a share s of the weighted goal loss
+        p_goal = np.mean(data_dict["rewards"] > cfg["goal_threshold"])
+        print(f"{100 * p_goal:.2f}% goal rows, largest |reward| on the others "
+              f"{np.abs(data_dict['rewards'][data_dict['rewards'] <= cfg['goal_threshold']]).max():.3f}; "
+              f"goal_weight for a 15% share: {0.15 * (1 - p_goal) / (0.85 * max(p_goal, 1e-12)):.0f}")
 
     # Add additional data
     cfg = resolve_dims(
@@ -181,5 +185,6 @@ def main(cfg_filename):
     return 0
 
 if __name__ == "__main__":
-    main("configs/wmTraining/pg1_c_1_5_model.yaml")
-    main("configs/wmTraining/pg1_c_inf_model.yaml")
+    main("configs/wmTraining/pg1_c_1_5_model_m3.yaml")
+    main("configs/wmTraining/pg1_c_1_5_model_m4.yaml")
+    main("configs/wmTraining/pg1_c_1_5_model_m5.yaml")

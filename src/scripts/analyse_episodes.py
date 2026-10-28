@@ -124,7 +124,7 @@ def _safest(barrier, z, u):
 
 @nnx.jit
 def _margin_next(dynamics, margin_fn, z, u):
-    return margin_fn(dynamics(z, u))
+    return margin_fn(dynamics(z, u)).squeeze(-1)
 
 @jax.jit
 def _nearest(bank_z, bank_sq, z):
@@ -147,16 +147,15 @@ def in_chunks(fn, arrays, size):
 class Safety:
     # The world model's encoder, dynamics and margin head, the planners' margin barrier, and a bank of dataset latents
     # for nearest-neighbour search
-    def __init__(self, world_model, cfg):
+    def __init__(self, world_model, action_bounds, d_u):
         self.encoder, self.dynamics, self.margin_fn = world_model.encoder, world_model.dynamics, world_model.margin_fn
-        self.bounds, self.d_u = cfg["action_bounds"], cfg["d_u"]
-        self.constraints = cfg["margin_constraints"]
+        self.bounds, self.d_u = action_bounds, d_u
         self.rng = np.random.default_rng(0)
         self.barrier = None
 
     def set_barrier(self, eps, alpha):
         # The barrier of one experiment config, as the planners used it
-        self.barrier = MarginBarrier(self.dynamics, self.margin_fn, eps, [c["scale"] for c in self.constraints], alpha)
+        self.barrier = MarginBarrier(self.dynamics, self.margin_fn, eps, alpha)
 
     def encode(self, obs, size):
         return in_chunks(lambda o: _encode(self.encoder, o), [obs], size)
@@ -184,25 +183,22 @@ class Safety:
         nn = in_chunks(lambda zz: _nearest(self.bank_z, self.bank_sq, zz), [z], size)
         return self.bank_u[nn]
 
-def check_dataset(safety, data):
+def check_dataset(safety, data, cfg):
     # Check 2: the margin head's one-step prediction at the dataset's actions against the real next state's margin
     n = len(data["rewards"])
     idx = np.random.default_rng(0).choice(n, min(N_DATA, n), replace=False)
     z = safety.encode(data["observations"][idx], DATA_CHUNK)
     pred = safety.margin_next(z, data["actions"][idx], DATA_CHUNK)
-    real = margin_labels(data["next_observations"][idx], safety.constraints)
-    for k, c in enumerate(safety.constraints):
-        # Bands of the real margin in units of the constraint's typical size
-        print(f"Check 2 - margin {k} ({c['label']}): one-step prediction on {len(idx)} dataset rows, by the real next margin")
-        print(f"  {'real margin':>14s}  {'rows':>7s}  {'bias':>7s}  {'rms error':>9s}  {'wrong side of 0':>15s}")
-        for lo, hi in MARGIN_BANDS:
-            lo, hi = lo * c["scale"], hi * c["scale"]
-            sel = (real[:, k] >= lo) & (real[:, k] < hi)
-            if sel.any():
-                err = pred[sel, k] - real[sel, k]
-                wrong = (pred[sel, k] > 0) != (real[sel, k] > 0) # a missed violation, or a false alarm
-                print(f"  [{lo:5.2f}, {hi:5.2f})  {sel.sum():7d}  {err.mean():+7.3f}  {np.sqrt(np.mean(err ** 2)):9.3f}  "
-                      f"{wrong.mean():15.1%}")
+    real = margin_labels(data["next_observations"][idx], cfg) # as the head was trained, clipped at margin_clip
+    print(f"Check 2 - the margin head's one-step prediction on {len(idx)} dataset rows, by the real next margin")
+    print(f"  {'real margin':>14s}  {'rows':>7s}  {'bias':>7s}  {'rms error':>9s}  {'wrong side of 0':>15s}")
+    for lo, hi in MARGIN_BANDS:
+        sel = (real >= lo) & (real < hi)
+        if sel.any():
+            err = pred[sel] - real[sel]
+            wrong = (pred[sel] > 0) != (real[sel] > 0) # a missed violation, or a false alarm
+            print(f"  [{lo:5.2f}, {hi:5.2f})  {sel.sum():7d}  {err.mean():+7.3f}  {np.sqrt(np.mean(err ** 2)):9.3f}  "
+                  f"{wrong.mean():15.1%}")
     return pred, real
 
 def check_visited(safety, ep):
@@ -269,20 +265,19 @@ def plot_episode(path, controller, seed, ep, tau, gamma, over, result, visited=N
     fig.savefig(path, dpi=120)
     plt.close(fig)
 
-def plot_dataset(path, dataset, constraints):
-    # Check 2: predicted against real next margin on the dataset, one panel per constraint
+def plot_dataset(path, dataset):
+    # Check 2: predicted against real next margin on the dataset
     pred, real = dataset
-    fig, axes = plt.subplots(1, len(constraints), figsize=(7 * len(constraints), 6), squeeze=False)
-    for k, (ax, c) in enumerate(zip(axes[0], constraints)):
-        hb = ax.hexbin(real[:, k], pred[:, k], gridsize=60, bins="log", mincnt=1)
-        lims = [min(real[:, k].min(), pred[:, k].min()), max(real[:, k].max(), pred[:, k].max())]
-        ax.plot(lims, lims, "k--", lw=1)
-        ax.axhline(0.0, color="red", lw=0.8)
-        ax.axvline(0.0, color="red", lw=0.8)
-        fig.colorbar(hb, ax=ax, label="rows")
-        ax.set_xlabel("real next margin")
-        ax.set_ylabel("predicted next margin")
-        ax.set_title(f"Check 2: margin {k} ({c['label']}) on the dataset (dashed: exact)")
+    fig, ax = plt.subplots(figsize=(7, 6))
+    hb = ax.hexbin(real, pred, gridsize=60, bins="log", mincnt=1)
+    lims = [min(real.min(), pred.min()), max(real.max(), pred.max())]
+    ax.plot(lims, lims, "k--", lw=1)
+    ax.axhline(0.0, color="red", lw=0.8)
+    ax.axvline(0.0, color="red", lw=0.8)
+    fig.colorbar(hb, label="rows")
+    ax.set_xlabel("real next margin")
+    ax.set_ylabel("predicted next margin")
+    ax.set_title("Check 2: the margin head on the dataset (dashed: exact)")
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
@@ -522,9 +517,9 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
     if model_checks:
         cfg = yaml.safe_load(open(configs[0]))
         world_model, data = load_world_model(cfg)
-        safety = Safety(world_model, cfg)
-        dataset = check_dataset(safety, data)
-        plot_dataset(out_dir / "check2_margin_on_dataset.png", dataset, safety.constraints)
+        safety = Safety(world_model, cfg["action_bounds"], cfg["d_u"])
+        dataset = check_dataset(safety, data, cfg)
+        plot_dataset(out_dir / "check2_margin_on_dataset.png", dataset)
         rows = np.random.default_rng(1).choice(len(data["rewards"]), min(N_BANK, len(data["rewards"])), replace=False)
         safety.set_bank(data["observations"][rows], data["actions"][rows])
 
@@ -556,7 +551,8 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
 if __name__ == "__main__":
     # Experiment folders under src/save_data/experiments, and the sweep points saved in each (as run_e1.py saves them)
     EXPERIMENTS = {
-        "M1_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.0, 0.025, 0.05, 0.1, 0.2]],
+        f"{model}_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.1, 0.2, 0.3, 0.5]]
+        for model in ("M3", "M4", "M5")
     }
     CONTROLLERS = ["SCP", "MPPI", "CEM"]
     MODEL_CHECKS = True # checks 2 and 3 load the world model

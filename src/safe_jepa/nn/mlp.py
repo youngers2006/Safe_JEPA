@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
@@ -127,21 +128,16 @@ class RewardPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class MarginBarrier(nnx.Module):
-    # One discrete-time barrier per output of the margin head: h_k = (margin_k - eps_k) / scale_k must satisfy
-    # h_k(f(z, u)) >= (1 - alpha) h_k(z). Dividing by scale_k leaves each condition unchanged but puts the constraints'
-    # violations in comparable units, so the largest one is returned as the risk (risk <= 0 means all are met)
-    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: tuple, scale: tuple, alpha: float):
+    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: float, alpha: float):
         self.dynamics = dynamics
         self.margin_fn = margin_fn
-        self.eps = tuple(eps)
-        self.scale = tuple(scale)
+        self.eps = eps
         self.alpha = alpha
 
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        eps, scale = jnp.asarray(self.eps), jnp.asarray(self.scale)
-        h_now = (self.margin_fn(z, update_spectral_norm=False) - eps) / scale
-        h_next = (self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - eps) / scale
-        return jnp.max((1.0 - self.alpha) * h_now - h_next, axis=-1, keepdims=True)
+        h_now = self.margin_fn(z, update_spectral_norm=False) - self.eps
+        h_next = self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - self.eps
+        return (1.0 - self.alpha) * h_now - h_next
 
 class MarginNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
@@ -171,3 +167,21 @@ class MarginNet(nnx.Module):
             z = nnx.silu(z)
         
         return self.output_layer(z, update_spectral_norm)
+
+class GoalPredictor(RewardPredictor):
+    # Logit of reaching the goal on a step, from (z, u): the reward head's network, built from GoalParams
+    pass
+
+class ExpectedReward(nnx.Module):
+    # The planners' reward with the goal head: the dense reward plus the goal bonus times the probability of reaching
+    # the goal on the step. Training weights goal rows by goal_weight, which raises the optimal logit by
+    # log(goal_weight), so the probability takes it off
+    def __init__(self, reward_fn: RewardPredictor, goal_fn: GoalPredictor, goal_reward: float, goal_weight: float):
+        self.reward_fn = reward_fn
+        self.goal_fn = goal_fn
+        self.goal_reward = goal_reward
+        self.log_goal_weight = math.log(goal_weight)
+
+    def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
+        p_goal = jax.nn.sigmoid(self.goal_fn(z, u, update_spectral_norm=False) - self.log_goal_weight)
+        return self.reward_fn(z, u, update_spectral_norm=False) + self.goal_reward * p_goal
