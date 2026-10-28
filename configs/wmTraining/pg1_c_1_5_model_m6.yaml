@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "src/datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "M4_pointgoal1_c_1_5_seed_0"        # one subdir per sweep point
+data_dir: "M6_pointgoal1_c_1_5_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1 # split by TRAJECTORY, not transition
 
@@ -20,12 +20,9 @@ margin_sources: [[28, 44, 0.2]] # [First Lidar column, Last Lidar column + 1, co
 margin_clip: 1.0 # margins above this are trained as this: the barrier cannot bind this far from a hazard
 margin_edge_weight: 4.0 # rows near a hazard edge weigh 1 + margin_edge_weight * exp(-margin / margin_edge_scale)
 margin_edge_scale: 0.2
-margin_stop_grad: false # true: the margin head reads the latent without training the encoder or the dynamics
-goal_head: true # true: a separate goal head, and the reward head learns only the dense reward
+dense_reward: true # the reward head learns only the dense reward; the goal bonus is left to the value function
 goal_threshold: 0.5 # reward above this marks a step that reached the goal (the dataset has no goal flag)
 goal_reward: 1.0 # Safety-Gymnasium's goal bonus
-goal_weight: 30 # weight on goal rows in the goal loss: the "goal_weight for a 15% share" printed at load
-lambda_goal: 1.0
 
 # loss weights
 lambda_dyn: 1.0
@@ -58,11 +55,11 @@ ValueQParams:
 RewardParams:
   hidden_features: [256, 256]
   lipschitz_bound: 1.5
+  two_hot: false # true: the reward as a distribution over bins in symlog space, by cross-entropy (DreamerV3, TD-MPC2); use lambda_r 0.1
+  num_bins: 101
+  vmin: -1.0 # bin range in symlog space
+  vmax: 1.0
 
 MarginParams:
   hidden_features: [256, 256]
   lipschitz_bound: 1.5
-
-GoalParams:
-  hidden_features: [256, 256]
-  lipschitz_bound: .inf # reaching the goal is a step change, which a Lipschitz cap would smear over many steps

@@ -7,9 +7,7 @@ sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from sweep_runner import run_point
 
-WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model_m3.yaml",
-           "configs/wmTraining/pg1_c_1_5_model_m4.yaml",
-           "configs/wmTraining/pg1_c_1_5_model_m5.yaml"]
+WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model_m6.yaml"]
 COMMON = "configs/Planner/common.yaml"
 PLANNERS = ["configs/Planner/scp.yaml",
             "configs/Planner/mppi.yaml",

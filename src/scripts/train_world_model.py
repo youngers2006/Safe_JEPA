@@ -32,12 +32,7 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueQParams"]["d_out"] = 1
     cfg["MarginParams"]["d_in"] = d_z
     cfg["MarginParams"]["d_out"] = 1
-    nets = ["DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"]
-    if cfg.get("goal_head", False):
-        cfg["GoalParams"]["d_in"] = d_z + act_dim
-        cfg["GoalParams"]["d_out"] = 1
-        nets.append("GoalParams")
-    for sub in nets:
+    for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
 
@@ -107,12 +102,6 @@ def main(cfg_filename):
     data_dict["margins"] = margin_labels(data_dict["next_observations"], cfg)
     print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
           f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
-    if cfg.get("goal_head", False):
-        # goal_weight = s (1 - p) / ((1 - s) p) gives the goal rows a share s of the weighted goal loss
-        p_goal = np.mean(data_dict["rewards"] > cfg["goal_threshold"])
-        print(f"{100 * p_goal:.2f}% goal rows, largest |reward| on the others "
-              f"{np.abs(data_dict['rewards'][data_dict['rewards'] <= cfg['goal_threshold']]).max():.3f}; "
-              f"goal_weight for a 15% share: {0.15 * (1 - p_goal) / (0.85 * max(p_goal, 1e-12)):.0f}")
 
     # Add additional data
     cfg = resolve_dims(
@@ -185,6 +174,4 @@ def main(cfg_filename):
     return 0
 
 if __name__ == "__main__":
-    main("configs/wmTraining/pg1_c_1_5_model_m3.yaml")
-    main("configs/wmTraining/pg1_c_1_5_model_m4.yaml")
-    main("configs/wmTraining/pg1_c_1_5_model_m5.yaml")
+    main("configs/wmTraining/pg1_c_1_5_model_m6.yaml")

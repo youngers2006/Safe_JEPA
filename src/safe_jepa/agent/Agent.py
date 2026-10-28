@@ -5,7 +5,7 @@ import flax.nnx as nnx
 import numpy as np
 
 from ..world_model.world_model import WorldModel
-from ..nn.mlp import MarginBarrier, ExpectedReward
+from ..nn.mlp import MarginBarrier
 from ..SCP_control.SCPController import SCPController
 from ..Sampling_control.SamplingController import SamplingController
 
@@ -19,19 +19,9 @@ class SafeJEPAAgent:
         # Instantiate world model
         self.world_model = WorldModel(cfg, obs_mean, obs_std, rngs=rngs)
 
-        # Reward for the planners: with the goal head, the dense reward plus the goal bonus times its probability
-        reward_fn = self.world_model.reward_fn
-        if cfg.get("goal_head", False):
-            reward_fn = ExpectedReward(
-                self.world_model.reward_fn,
-                self.world_model.goal_fn,
-                cfg["goal_reward"],
-                cfg["goal_weight"]
-            )
-
         # Store tuple of references to wm networks
         self.wm_networks = (
-            reward_fn,
+            self.world_model.reward_fn,
             self.world_model.value_fn,
             self.world_model.dynamics,
             MarginBarrier(

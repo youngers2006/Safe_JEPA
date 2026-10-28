@@ -551,8 +551,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
 if __name__ == "__main__":
     # Experiment folders under src/save_data/experiments, and the sweep points saved in each (as run_e1.py saves them)
     EXPERIMENTS = {
-        f"{model}_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.1, 0.2, 0.3, 0.5]]
-        for model in ("M3", "M4", "M5")
+        "M6_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.1, 0.2, 0.3, 0.5]],
     }
     CONTROLLERS = ["SCP", "MPPI", "CEM"]
     MODEL_CHECKS = True # checks 2 and 3 load the world model
