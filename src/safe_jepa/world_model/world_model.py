@@ -100,16 +100,11 @@ class WorldModel(nnx.Module):
             rngs=rngs
         )
 
-        # Margin training weights rows near a hazard edge by 1 + margin_edge_weight * exp(-margin / margin_edge_scale)
+        # Margin loss: each constraint's error in units of its scale, and rows near a constraint's edge weighted by
+        # 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
+        self.margin_scale = tuple(c["scale"] for c in cfg["margin_constraints"])
         self.margin_edge_weight = cfg.get("margin_edge_weight", 0.0)
         self.margin_edge_scale = cfg.get("margin_edge_scale", 0.2)
-
-        # With dense_reward the reward head learns only the dense reward: the goal bonus (goal_reward, which lifts the
-        # reward above goal_threshold; the dataset has no goal flag) is left to the value function
-        self.dense_reward = cfg.get("dense_reward", False)
-        if self.dense_reward:
-            self.goal_threshold = cfg["goal_threshold"]
-            self.goal_reward = cfg["goal_reward"]
 
         self.trainable_nodes = TrainableBundle(
             self.encoder, 
@@ -174,7 +169,7 @@ class WorldModel(nnx.Module):
         next_obs: jax.Array, # (B, H, obs_dim)
         action: jax.Array, # (B, H, d_u)
         reward: jax.Array, # (B, H)
-        margin: jax.Array, # (B, H) hazard margin at next_obs
+        margin: jax.Array, # (B, H, K) margin of each constraint at next_obs
         terminal: jax.Array, # (B, H)
         mask: jax.Array # (B, H)
     ) -> dict:
@@ -222,11 +217,9 @@ class WorldModel(nnx.Module):
                 next_z = dyn(z, a, update_spectral_norm=sn)
                 loss_z = masked_mean(jnp.mean((next_z - next_z_target[:, t]) ** 2, axis=-1), m)
 
-                # Reward Loss (squared error, or cross-entropy with the two-hot head)
-                r_target = reward[:, t]
-                if self.dense_reward:
-                    r_target = r_target - self.goal_reward * (r_target > self.goal_threshold)
-                loss_r = masked_mean(rew_fn.loss(z, a, r_target, update_spectral_norm=sn), m)
+                # Reward Loss
+                r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
+                loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
 
                 # Value Loss
                 # Get value prediction
@@ -246,10 +239,13 @@ class WorldModel(nnx.Module):
 
                 loss_v = loss_v_q + loss_v_v
 
-                # Compute margin constraint loss, weighting rows near a hazard edge up
-                m_pred = margin_fn(next_z, update_spectral_norm=sn).squeeze(axis=-1)
-                w_m = m * (1.0 + self.margin_edge_weight * jnp.exp(-jnp.maximum(margin[:, t], 0.0) / self.margin_edge_scale))
-                loss_m = jnp.sum(w_m * (m_pred - margin[:, t]) ** 2) / jnp.maximum(jnp.sum(w_m), 1e-8)
+                # Compute margin constraint loss, weighting rows near a constraint's edge up
+                m_pred = margin_fn(next_z, update_spectral_norm=sn) # (B, K)
+                scale = jnp.asarray(self.margin_scale)
+                w_m = m[:, None] * (1.0 + self.margin_edge_weight * jnp.exp(
+                    -jnp.maximum(margin[:, t], 0.0) / (self.margin_edge_scale * scale)
+                ))
+                loss_m = jnp.sum(w_m * ((m_pred - margin[:, t]) / scale) ** 2) / jnp.maximum(jnp.sum(w_m), 1e-8)
                 
                 # Total world model loss
                 total_loss = total_loss + self.rho ** t * (self.lambda_dyn * loss_z + self.lambda_v * loss_v + 
@@ -258,8 +254,6 @@ class WorldModel(nnx.Module):
 
                 if t == 0:
                     loss_z_0, loss_v_0, loss_m_0, loss_r_0 = loss_z, loss_v, loss_m, loss_r
-                    # Squared error of the predicted (expected) reward against its target, comparable across heads
-                    r_mse_0 = masked_mean((rew_fn(z, a).squeeze(axis=-1) - r_target) ** 2, m)
                 step_metrics[f"loss_dyn_t{t}"] = loss_z
 
                 z = next_z
@@ -293,7 +287,6 @@ class WorldModel(nnx.Module):
                 "loss_var": loss_var,
                 "loss_cov": loss_cov,
                 "loss_r": loss_r_0,
-                "reward_mse": r_mse_0,
                 **step_metrics,
                 "sigma_dyn_0":  dyn.layers[0].sigma.value
             }

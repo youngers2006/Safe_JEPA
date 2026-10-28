@@ -58,5 +58,5 @@ def check(cfg_path):
           f"return mean {g.mean():.3f} std {g.std():.3f}")
 
 if __name__ == "__main__":
-    for cfg_path in ["configs/wmTraining/pg1_c_1_5_model_m6.yaml"]:
+    for cfg_path in ["configs/wmTraining/pg1_c_1_5_model.yaml"]:
         check(cfg_path)

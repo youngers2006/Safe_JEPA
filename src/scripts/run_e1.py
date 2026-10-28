@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from sweep_runner import run_point
 
-WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model_m6.yaml"]
+WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model.yaml"]
 COMMON = "configs/Planner/common.yaml"
 PLANNERS = ["configs/Planner/scp.yaml",
             "configs/Planner/mppi.yaml",
@@ -21,7 +21,7 @@ def main():
         for eps in tqdm(MARGIN_EPS, leave=True):
             for planner in tqdm(PLANNERS, leave=False):
                 run_point(SEEDS, wm_cfg, COMMON, planner, ENV,
-                          {"margin_eps": eps}, f"e1/eps_{eps}")
+                          {"margin_eps": [eps]}, f"e1/eps_{eps}")
 
 if __name__ == "__main__":
     main()
