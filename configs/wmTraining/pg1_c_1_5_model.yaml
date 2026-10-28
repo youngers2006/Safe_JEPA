@@ -16,7 +16,9 @@ rho: 0.9 # weight rho^t on the losses at rollout step t
 d_latent: 32
 discount: 0.99
 action_bounds: [-1.0, 1.0]
-margin_sources: [[28, 44, 0.2]] # [First Lidar column, Last Lidar column + 1, contact distance]
+margin_constraints: {label: lidar, sources: [[28, 44, 0.2]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's edge; sources: [first lidar column, last + 1, contact distance]
+margin_edge_weight: 4.0 # rows near a constraint's edge weigh 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
+margin_edge_scale: 0.2
 
 # loss weights
 lambda_dyn: 1.0

@@ -2,6 +2,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+import numpy as np
 
 from .layers import SpectralNormLinear
 
@@ -127,16 +128,25 @@ class RewardPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class MarginBarrier(nnx.Module):
-    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps: float, alpha: float):
+    def __init__(
+            self, 
+            dynamics: DynamicsPredictor, 
+            margin_fn: nnx.Module, 
+            eps,
+            scale,
+            alpha: float
+        ):
         self.dynamics = dynamics
         self.margin_fn = margin_fn
-        self.eps = eps
+        self.eps = tuple(np.atleast_1d(eps).tolist())
+        self.scale = tuple(scale)
         self.alpha = alpha
 
     def __call__(self, z: jax.Array, u: jax.Array, update_spectral_norm: bool = False) -> jax.Array:
-        h_now = self.margin_fn(z, update_spectral_norm=False) - self.eps
-        h_next = self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - self.eps
-        return (1.0 - self.alpha) * h_now - h_next
+        eps, scale = jnp.asarray(self.eps), jnp.asarray(self.scale)
+        h_now = (self.margin_fn(z, update_spectral_norm=False) - eps) / scale
+        h_next = (self.margin_fn(self.dynamics(z, u, update_spectral_norm=False), update_spectral_norm=False) - eps) / scale
+        return jnp.max((1.0 - self.alpha) * h_now - h_next, axis=-1, keepdims=True)
 
 class MarginNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):

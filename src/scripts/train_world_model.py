@@ -30,8 +30,9 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["ValueParams"]["d_out"] = 1
     cfg["ValueQParams"]["d_in"] = d_z + act_dim
     cfg["ValueQParams"]["d_out"] = 1
+    cfg["margin_constraints"] = margin_constraints(cfg)
     cfg["MarginParams"]["d_in"] = d_z
-    cfg["MarginParams"]["d_out"] = 1
+    cfg["MarginParams"]["d_out"] = len(cfg["margin_constraints"])
     for sub in ("DynamicsParams", "ValueParams", "ValueQParams", "RewardParams", "MarginParams"):
         cfg[sub]["hidden_features"] = tuple(cfg[sub]["hidden_features"])
     return cfg
@@ -54,6 +55,22 @@ def write_metrics(history: list[list[dict]], path: str | Path) -> None:
 
 def safety_margin(obs, sources):
     return np.min([3.0 * (1.0 - obs[:, lo:hi].max(axis=1)) - contact for lo, hi, contact in sources], axis=0)
+
+def margin_constraints(cfg):
+    # The margin head's constraints; configs from before margin_constraints have one, built from margin_sources
+    return cfg.get("margin_constraints") or [{"label": "lidar", "sources": cfg["margin_sources"], "scale": 1.0}]
+
+# How each kind of constraint's margin is computed from observations: label name -> fn(obs, constraint config)
+MARGIN_LABELS = {
+    "lidar": lambda obs, c: safety_margin(obs, c["sources"]),
+}
+
+def margin_labels(obs, constraints):
+    # The margin head's targets, one column per constraint in the order of margin_constraints, each clipped at the
+    # constraint's clip: margins further from its edge than this are trained as this
+    return np.stack([
+        np.minimum(MARGIN_LABELS[c["label"]](obs, c), c.get("clip", np.inf)) for c in constraints
+    ], axis=-1)
 
 def episode_ids(data_dict):
     ends = data_dict["terminals"].astype(bool) | data_dict["timeouts"].astype(bool)
@@ -95,9 +112,11 @@ def main(cfg_filename):
     # Augment datadict
     data_dict["episode"] = episode_ids(data_dict)
     print(f"{data_dict['episode'][-1] + 1} trajectories, {data_dict['observations'].shape[0]} transitions")
-    data_dict["margins"] = safety_margin(data_dict["next_observations"], cfg["margin_sources"])
-    print(f"margin <= 0 on {np.mean(data_dict['margins'][data_dict['costs'] > 0] <= 0):.1%} of cost rows "
-          f"and {np.mean(data_dict['margins'][data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+    data_dict["margins"] = margin_labels(data_dict["next_observations"], margin_constraints(cfg))
+    for k, c in enumerate(margin_constraints(cfg)):
+        m_k = data_dict["margins"][:, k]
+        print(f"margin {k} ({c['label']}) <= 0 on {np.mean(m_k[data_dict['costs'] > 0] <= 0):.1%} of cost rows "
+              f"and {np.mean(m_k[data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
 
     # Add additional data
     cfg = resolve_dims(

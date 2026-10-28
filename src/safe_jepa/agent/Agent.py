@@ -27,7 +27,8 @@ class SafeJEPAAgent:
             MarginBarrier(
                 self.world_model.dynamics, 
                 self.world_model.margin_fn, 
-                cfg["margin_eps"], 
+                cfg["margin_eps"],
+                [c["scale"] for c in cfg["margin_constraints"]],
                 cfg["barrier_alpha"]
             ),
         )
