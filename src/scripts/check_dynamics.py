@@ -34,16 +34,19 @@ def check(cfg_path):
     starts = rng.choice(np.flatnonzero(ep[:-H] == ep[H:]), N_WINDOWS, replace=False)
     z_real = [np.asarray(_encode(world_model, jnp.asarray(data["observations"][starts + k]))) for k in range(H + 1)]
 
-    # Rollout error against predicting no change (z_k = z_0)
-    z = jnp.asarray(z_real[0])
-    err_model, err_still = [], []
-    for k in range(H):
-        z = _step(world_model, z, jnp.asarray(data["actions"][starts + k]))
-        err_model.append(np.mean((np.asarray(z) - z_real[k + 1]) ** 2))
-        err_still.append(np.mean((z_real[0] - z_real[k + 1]) ** 2))
+    # Rollout error against predicting no change (z_k = z_0), and with the windows' action sequences shuffled between
+    # windows: a model that uses the action does clearly worse with the wrong actions
+    def rollout_error(rows):
+        z, err = jnp.asarray(z_real[0]), []
+        for k in range(H):
+            z = _step(world_model, z, jnp.asarray(data["actions"][rows + k]))
+            err.append(np.mean((np.asarray(z) - z_real[k + 1]) ** 2))
+        return err
+    err_model, err_shuffled = rollout_error(starts), rollout_error(rng.permutation(starts))
+    err_still = [np.mean((z_real[0] - z_real[k + 1]) ** 2) for k in range(H)]
     print(f"\n{cfg['data_dir']}: {N_WINDOWS} windows of {H} steps")
-    print("  rollout MSE per latent dim, model vs predicting no change: " + ", ".join(
-        f"step {k + 1} {err_model[k]:.4f} vs {err_still[k]:.4f}" for k in (0, 1, 4, H - 1)))
+    print("  rollout MSE per latent dim, model vs predicting no change vs model with shuffled actions: " + ", ".join(
+        f"step {k + 1} {err_model[k]:.4f} vs {err_still[k]:.4f} vs {err_shuffled[k]:.4f}" for k in (0, 1, 4, H - 1)))
 
     # How much the predicted next latent depends on the action: its spread over random actions from the same latents
     z0 = jnp.asarray(z_real[0][:500])
