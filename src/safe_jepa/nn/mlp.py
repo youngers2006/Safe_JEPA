@@ -6,34 +6,29 @@ import numpy as np
 
 from .layers import SpectralNormLinear
 
-MAXMIN_DELTA = 0.05 # pairs closer than this act as tied; smooth_maxmin's Jacobian is sqrt(2) / delta-Lipschitz
+MAXMIN_DELTA = 0.05
 
 def smooth_maxmin(x: jax.Array) -> jax.Array:
-    # Pairs unit i with unit i + h/2 and returns a smooth (max, min) of each pair: ((a + b + r) / 2, (a + b - r) / 2),
-    # with r = sqrt((a - b)^2 + delta^2) a smoothed |a - b|. Its Jacobian's singular values are 1 and |a - b| / r <= 1,
-    # so it is 1-Lipschitz and keeps a gradient's norm except on nearly tied pairs; unlike MaxMin it is smooth
     a, b = jnp.split(x, 2, axis=-1)
     s, r = a + b, jnp.sqrt((a - b) ** 2 + MAXMIN_DELTA ** 2)
     return jnp.concatenate([(s + r) / 2, (s - r) / 2], axis=-1)
 
 def per_layer_bound(network_bound: float, n_hidden: int) -> float:
-    # The activation is 1-Lipschitz, so the bound is split evenly over the n_hidden + 1 linear layers
     return network_bound ** (1 / (n_hidden + 1))
 
 class DynamicsPredictor(nnx.Module):
-    # Residual: next_z = z + g(z, u). Lip(next_z) <= 1 + Lip(g), so g is bounded by lipschitz_bound - 1 and
-    # lipschitz_bound stays the bound of the whole dynamics
     def __init__(self, cfg, rngs: nnx.Rngs):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
-        if lipschitz_bound < 1.0:
-            raise ValueError(f"Residual dynamics need lipschitz_bound >= 1, got {lipschitz_bound}")
-        layer_bound = per_layer_bound(lipschitz_bound - 1.0, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
+
+        if lipschitz_bound < 1.0:
+            raise ValueError(f"Residual dynamics need lipschitz_bound >= 1, got {lipschitz_bound}")
+        layer_bound = per_layer_bound(lipschitz_bound - 1.0, len(hidden_features))
         
         for h in hidden_features:
             temp_layers.append(

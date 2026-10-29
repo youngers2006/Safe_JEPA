@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 import flax.nnx as nnx
+import numpy as np
 
 from ..nn.variables import NormStat
 from ..nn.stems import ConvStem, MLPStem
@@ -16,7 +16,6 @@ class Encoder(nnx.Module):
             self.stem = ConvStem(cfg["in_channels"], rngs=rngs)
             feature_dim = cfg["flattened_dim"]
         elif cfg["obs_type"] == "state":
-            # The encoder reads only the observation columns in obs_keep (the config's obs_drop lists the others)
             self.obs_keep = tuple(cfg["obs_keep"])
             self.stem = MLPStem(len(self.obs_keep), cfg["d_hidden"], rngs=rngs)
             feature_dim = cfg["d_hidden"]
