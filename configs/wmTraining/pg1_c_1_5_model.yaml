@@ -16,6 +16,9 @@ rho: 0.9 # weight rho^t on the losses at rollout step t
 d_latent: 32
 discount: 0.99
 action_bounds: [-1.0, 1.0]
+# Observation columns the encoder ignores: the accelerometer (0-2: contact noise, and acceleration follows from the
+# state and action) and the columns constant for a planar robot (velocimeter z, gyro x and y, magnetometer z)
+obs_drop: [0, 1, 2, 5, 6, 7, 11]
 margin_constraints: # one output of the margin head per constraint: its label, scale and clip
   - {label: lidar, sources: [[28, 44, 0.2]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's edge; sources: [first lidar column, last + 1, contact distance]
 margin_edge_weight: 4.0 # rows near a constraint's edge weigh 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))

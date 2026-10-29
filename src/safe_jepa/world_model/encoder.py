@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import flax.nnx as nnx
 
 from ..nn.variables import NormStat
@@ -11,10 +12,13 @@ class Encoder(nnx.Module):
         self.sigma = NormStat(jnp.asarray(sigma,  dtype=jnp.float32))
 
         if cfg["obs_type"] == "vision":
+            self.obs_keep = None
             self.stem = ConvStem(cfg["in_channels"], rngs=rngs)
             feature_dim = cfg["flattened_dim"]
         elif cfg["obs_type"] == "state":
-            self.stem = MLPStem(cfg["obs_dim"], cfg["d_hidden"], rngs=rngs)
+            # The encoder reads only the observation columns in obs_keep (the config's obs_drop lists the others)
+            self.obs_keep = tuple(cfg["obs_keep"])
+            self.stem = MLPStem(len(self.obs_keep), cfg["d_hidden"], rngs=rngs)
             feature_dim = cfg["d_hidden"]
         else:
             raise ValueError(f"unknown obs_type: {cfg['obs_type']}")
@@ -30,6 +34,8 @@ class Encoder(nnx.Module):
 
         # Standardise observation
         x = (x - mu) / jnp.maximum(sigma, 1e-6)
+        if self.obs_keep is not None:
+            x = x[..., np.asarray(self.obs_keep)]
         
         # Run stem network
         x = self.stem(x)
