@@ -56,6 +56,10 @@ class WorldModel(nnx.Module):
         self.margin_edge_weight = cfg["margin_edge_weight"]
         self.margin_edge_scale = cfg["margin_edge_scale"]
 
+        self.dense_reward = cfg["dense_reward"]
+        self.goal_threshold = cfg["goal_threshold"]
+        self.goal_reward = cfg["goal_reward"]
+
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
             mu=obs_mean,
@@ -216,8 +220,11 @@ class WorldModel(nnx.Module):
                 loss_z = masked_mean(jnp.mean((next_z - next_z_target[:, t]) ** 2, axis=-1), m)
 
                 # Reward Loss
+                r_target = reward[:, t]
+                if self.dense_reward:
+                    r_target = r_target - self.goal_reward * (r_target > self.goal_threshold)
                 r_pred = rew_fn(z, a, update_spectral_norm=sn).squeeze(axis=-1)
-                loss_r = masked_mean((r_pred - reward[:, t]) ** 2, m)
+                loss_r = masked_mean((r_pred - r_target) ** 2, m)
 
                 # Value Loss
                 # Get value prediction

@@ -6,10 +6,15 @@ import numpy as np
 
 from .layers import SpectralNormLinear
 
-SILU_LIPSCHITZ = 1.09984
+MAXMIN_DELTA = 0.05
+
+def smooth_maxmin(x: jax.Array) -> jax.Array:
+    a, b = jnp.split(x, 2, axis=-1)
+    s, r = a + b, jnp.sqrt((a - b) ** 2 + MAXMIN_DELTA ** 2)
+    return jnp.concatenate([(s + r) / 2, (s - r) / 2], axis=-1)
 
 def per_layer_bound(network_bound: float, n_hidden: int) -> float:
-    return (network_bound / SILU_LIPSCHITZ ** n_hidden) ** (1 / (n_hidden + 1))
+    return network_bound ** (1 / (n_hidden + 1))
 
 class DynamicsPredictor(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
@@ -37,9 +42,9 @@ class DynamicsPredictor(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x, update_spectral_norm)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
         
-        return self.output_layer(x, update_spectral_norm)
+        return z + self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
@@ -66,7 +71,7 @@ class ValueNet(nnx.Module):
             linear_layer = self.layers[l]
 
             z = linear_layer(z, update_spectral_norm)
-            z = nnx.silu(z)
+            z = smooth_maxmin(z)
         
         return self.output_layer(z, update_spectral_norm)
 
@@ -92,7 +97,7 @@ class ValueQNet(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
 
         return self.output_layer(x)
 
@@ -123,7 +128,7 @@ class RewardPredictor(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x, update_spectral_norm)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
         
         return self.output_layer(x, update_spectral_norm)
 
@@ -173,6 +178,6 @@ class MarginNet(nnx.Module):
             linear_layer = self.layers[l]
 
             z = linear_layer(z, update_spectral_norm)
-            z = nnx.silu(z)
+            z = smooth_maxmin(z)
         
         return self.output_layer(z, update_spectral_norm)

@@ -117,6 +117,10 @@ def main(cfg_filename):
         m_k = data_dict["margins"][:, k]
         print(f"margin {k} ({c['label']}) <= 0 on {np.mean(m_k[data_dict['costs'] > 0] <= 0):.1%} of cost rows "
               f"and {np.mean(m_k[data_dict['costs'] == 0] <= 0):.1%} of cost-free rows")
+    goal_rows = data_dict["rewards"] > cfg["goal_threshold"]
+    print(f"{goal_rows.mean():.2%} goal rows; largest |reward| on the others "
+          f"{np.abs(data_dict['rewards'][~goal_rows]).max():.3f}, smallest goal-row reward "
+          f"{data_dict['rewards'][goal_rows].min():.3f}")
 
     # Add additional data
     cfg = resolve_dims(
