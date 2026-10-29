@@ -178,7 +178,7 @@ class SCPController():
                 )
                 matrices = tuple(np.asarray(m) for m in jax_matrices)
 
-            # Run solver to setup and solve the QP
+            # Run solver to setup and solve SOCP
             u_opt, z_opt, ok = self.SCP_solver.solve_problem(
                 matrices,
                 z_c_np,
@@ -193,11 +193,15 @@ class SCPController():
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
                 continue
 
+            # Judge the step on the rollout of its actions. Accepting the subproblem's own z leaves a dynamics defect
+            # (the linearisation error) that the merit charges at w_dyn, so the trust region shrinks with w_dyn and
+            # the model's curvature; on the rollout the defect is zero, and the linear model keeps the subproblem's z
+            z_sub = z_opt
+            z_opt, _, _ = self.rollout(z_c, u_opt, wm_networks)
+
             # Convergence criteria
-            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox), bounded at the fixed step of w_prox_init.
-            # ||G_t|| shrinks as w_prox falls, so with w_prox carried over at its floor the plain test passes after a few
-            # iterations whether or not the plan has converged; 2 max(w_prox, w_prox_init) ||step|| does not loosen
-            step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
+            # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
+            step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_sub[1:] - z_ref[1:]) ** 2)
             prox_grad = 2.0 * max(self.hyperparams['w_prox'], self.w_prox_init) * np.sqrt(step_sq)
             if prox_grad <= self.tol:
                 stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
@@ -209,7 +213,7 @@ class SCPController():
             )
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
-                matrices, z_opt, u_opt
+                matrices, z_sub, u_opt
             )
             J_new, defect_new, risk_new = self.merit(
                 z_opt, u_opt, wm_networks
