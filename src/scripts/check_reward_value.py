@@ -43,15 +43,17 @@ def check(cfg_path):
     r = data["rewards"][idx]
     g = return_to_go(data["rewards"], data["terminals"].astype(bool), episode_ids(data), cfg["discount"])[idx]
 
-    goal = r > 0.5 # the goal bonus is +1; the dense reward is the step's progress towards the goal
+    goal = r > cfg["goal_threshold"] # the goal bonus lifts these rows; the rest are the step's progress
     dense = ~goal
+    r_target = r - cfg["goal_reward"] * goal if cfg["dense_reward"] else r # what the reward head was trained on
     print(f"\n{cfg['data_dir']}: {len(idx)} dataset rows, {goal.mean():.2%} with the goal bonus")
-    print(f"  reward: MSE {np.mean((r_pred - r) ** 2):.2e} against the reward's variance {r.var():.2e} "
+    print(f"  reward: MSE {np.mean((r_pred - r_target) ** 2):.2e} against its target's variance {r_target.var():.2e} "
           f"(MSE equal to the variance = predicting a constant)")
     print(f"  reward, dense rows: correlation {np.corrcoef(r_pred[dense], r[dense])[0, 1]:+.3f}, "
           f"RMS error {np.sqrt(np.mean((r_pred[dense] - r[dense]) ** 2)):.4f} against std {r[dense].std():.4f}, "
           f"sign right on {np.mean(np.sign(r_pred[dense]) == np.sign(r[dense])):.1%}")
-    print(f"  reward, goal rows: predicted mean {r_pred[goal].mean():+.3f} (real 1 + progress), "
+    print(f"  reward, goal rows: predicted mean {r_pred[goal].mean():+.3f} against its target's mean "
+          f"{r_target[goal].mean():+.3f}, "
           f"other rows' predicted mean {r_pred[dense].mean():+.4f}")
     print(f"  value against the discounted return earned: correlation {np.corrcoef(v_pred, g)[0, 1]:+.3f}, "
           f"bias {np.mean(v_pred - g):+.3f}, RMS error {np.sqrt(np.mean((v_pred - g) ** 2)):.3f}, "
