@@ -1,7 +1,7 @@
 #  run
 seed: 0
 dataset_filename: "src/datasets/FilteredSafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
-data_dir: "M6_pointgoal1_c_1_5_seed_0"        # one subdir per sweep point
+data_dir: "M1_pointgoal1_c_1_5_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1 # split by TRAJECTORY, not transition
 
@@ -16,8 +16,7 @@ rho: 0.9 # weight rho^t on the losses at rollout step t
 d_latent: 32
 discount: 0.99
 action_bounds: [-1.0, 1.0]
-margin_constraints: # one output of the margin head per constraint: its label, scale and clip
-  - {label: lidar, sources: [[28, 44, 0.2]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's edge; sources: [first lidar column, last + 1, contact distance]
+margin_constraints: {label: lidar, sources: [[28, 44, 0.2]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's edge; sources: [first lidar column, last + 1, contact distance]
 margin_edge_weight: 4.0 # rows near a constraint's edge weigh 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
 margin_edge_scale: 0.2
 

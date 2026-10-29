@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from safe_jepa.world_model.world_model import WorldModel
 from safe_jepa.nn.mlp import MarginBarrier
-from train_world_model import resolve_dims, episode_ids, margin_labels, margin_constraints
+from train_world_model import resolve_dims, margin_labels, margin_constraints
 
 RESULTS_PATH = ROOT / "src/save_data/experiments"
 
@@ -556,7 +556,7 @@ def analyse_experiment(experiment, tags, controllers, model_checks=True, episode
 if __name__ == "__main__":
     # Experiment folders under src/save_data/experiments, and the sweep points saved in each (as run_e1.py saves them)
     EXPERIMENTS = {
-        "M6_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.1, 0.2, 0.3, 0.5]],
+        "M1_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.0, 0.025, 0.05, 0.1, 0.2]],
     }
     CONTROLLERS = ["SCP", "MPPI", "CEM"]
     MODEL_CHECKS = True # checks 2 and 3 load the world model

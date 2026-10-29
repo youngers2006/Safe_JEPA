@@ -52,6 +52,10 @@ class WorldModel(nnx.Module):
         self.ER_tau = cfg["ER_tau"] # Expectile regression weighting
         self.rho = cfg["rho"] # Weight rho^t on losses at rollout step t
 
+        self.margin_scale = tuple(c["scale"] for c in cfg["margin_constraints"])
+        self.margin_edge_weight = cfg["margin_edge_weight"]
+        self.margin_edge_scale = cfg["margin_edge_scale"]
+
         self.encoder = Encoder(
             cfg=cfg["EncoderParams"],
             mu=obs_mean,
@@ -99,12 +103,6 @@ class WorldModel(nnx.Module):
             cfg=cfg["MarginParams"],
             rngs=rngs
         )
-
-        # Margin loss: each constraint's error in units of its scale, and rows near a constraint's edge weighted by
-        # 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
-        self.margin_scale = tuple(c["scale"] for c in cfg["margin_constraints"])
-        self.margin_edge_weight = cfg.get("margin_edge_weight", 0.0)
-        self.margin_edge_scale = cfg.get("margin_edge_scale", 0.2)
 
         self.trainable_nodes = TrainableBundle(
             self.encoder, 
@@ -169,7 +167,7 @@ class WorldModel(nnx.Module):
         next_obs: jax.Array, # (B, H, obs_dim)
         action: jax.Array, # (B, H, d_u)
         reward: jax.Array, # (B, H)
-        margin: jax.Array, # (B, H, K) margin of each constraint at next_obs
+        margin: jax.Array, # (B, H, K) hazard margin at next_obs
         terminal: jax.Array, # (B, H)
         mask: jax.Array # (B, H)
     ) -> dict:
@@ -239,12 +237,10 @@ class WorldModel(nnx.Module):
 
                 loss_v = loss_v_q + loss_v_v
 
-                # Compute margin constraint loss, weighting rows near a constraint's edge up
+                # Compute margin constraint loss
                 m_pred = margin_fn(next_z, update_spectral_norm=sn) # (B, K)
                 scale = jnp.asarray(self.margin_scale)
-                w_m = m[:, None] * (1.0 + self.margin_edge_weight * jnp.exp(
-                    -jnp.maximum(margin[:, t], 0.0) / (self.margin_edge_scale * scale)
-                ))
+                w_m = m[:, None] * (1.0 + self.margin_edge_weight * jnp.exp(-jnp.maximum(margin[:, t], 0.0) / (self.margin_edge_scale * scale)))
                 loss_m = jnp.sum(w_m * ((m_pred - margin[:, t]) / scale) ** 2) / jnp.maximum(jnp.sum(w_m), 1e-8)
                 
                 # Total world model loss

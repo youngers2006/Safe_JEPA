@@ -128,13 +128,17 @@ class RewardPredictor(nnx.Module):
         return self.output_layer(x, update_spectral_norm)
 
 class MarginBarrier(nnx.Module):
-    # One discrete-time barrier per output of the margin head: h_k = (margin_k - eps_k) / scale_k must satisfy
-    # h_k(f(z, u)) >= (1 - alpha) h_k(z). Dividing by scale_k leaves each condition unchanged but puts the constraints'
-    # violations in comparable units, so the largest one is returned as the risk (risk <= 0 means all are met)
-    def __init__(self, dynamics: DynamicsPredictor, margin_fn: nnx.Module, eps, scale, alpha: float):
+    def __init__(
+            self, 
+            dynamics: DynamicsPredictor, 
+            margin_fn: nnx.Module, 
+            eps,
+            scale,
+            alpha: float
+        ):
         self.dynamics = dynamics
         self.margin_fn = margin_fn
-        self.eps = tuple(np.atleast_1d(eps).tolist()) # one buffer per constraint (a single value: one constraint)
+        self.eps = tuple(np.atleast_1d(eps).tolist())
         self.scale = tuple(scale)
         self.alpha = alpha
 
