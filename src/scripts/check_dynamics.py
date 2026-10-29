@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from analyse_episodes import load_world_model
-from train_world_model import episode_ids, margin_labels, margin_constraints
+from train_world_model import episode_ids, margin_labels, margin_constraints, val_rows
 
 N_WINDOWS = 2000 # windows of H + 1 consecutive dataset rows from one trajectory
 H = 10 # rollout steps checked (the planning horizon)
@@ -39,7 +39,8 @@ def check(cfg_path):
     world_model, data = load_world_model(cfg)
     ep = episode_ids(data)
     rng = np.random.default_rng(0)
-    starts = rng.choice(np.flatnonzero(ep[:-H] == ep[H:]), N_WINDOWS, replace=False)
+    val = val_rows(ep, cfg) # windows from the held-out trajectories only
+    starts = rng.choice(np.flatnonzero((ep[:-H] == ep[H:]) & val[:-H]), N_WINDOWS, replace=False)
     z_real = [np.asarray(_encode(world_model, jnp.asarray(data["observations"][starts + k]))) for k in range(H + 1)]
 
     # Rollout error against predicting no change (z_k = z_0), and with the windows' action sequences shuffled between

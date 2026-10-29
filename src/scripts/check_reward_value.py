@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src/scripts"))
 
 from analyse_episodes import load_world_model
-from train_world_model import episode_ids
+from train_world_model import episode_ids, val_rows
 
 N_ROWS = 200_000 # dataset rows checked
 CHUNK = 8192
@@ -32,8 +32,8 @@ def return_to_go(rewards, terminals, episode, gamma):
 def check(cfg_path):
     cfg = yaml.safe_load(open(ROOT / cfg_path))
     world_model, data = load_world_model(cfg)
-    n = len(data["rewards"])
-    idx = np.sort(np.random.default_rng(0).choice(n, min(N_ROWS, n), replace=False))
+    held_out = np.flatnonzero(val_rows(episode_ids(data), cfg)) # rows of the held-out trajectories only
+    idx = np.sort(np.random.default_rng(0).choice(held_out, min(N_ROWS, len(held_out)), replace=False))
     r_pred, v_pred = [], []
     for i in range(0, len(idx), CHUNK):
         rows = idx[i:i + CHUNK]
