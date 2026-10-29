@@ -30,6 +30,10 @@ def _step(world_model, z, u):
 def _margin(world_model, z):
     return world_model.margin_fn(z)
 
+@nnx.jit
+def _value(world_model, z):
+    return world_model.value_fn(z).squeeze(-1)
+
 def check(cfg_path):
     cfg = yaml.safe_load(open(ROOT / cfg_path))
     world_model, data = load_world_model(cfg)
@@ -68,6 +72,14 @@ def check(cfg_path):
                         f"{d[near].mean():+.3f}/{np.sqrt(np.mean(d[near] ** 2)):.3f}")
         print(f"  margin {c} ({con['label']}) on the rollout, bias/RMS error on all rows | on rows with real margin "
               f"< 0.3 scale: " + ", ".join(line))
+
+    # What a plan's terminal value sees: V on the rolled-out latents against V on the real latents reached
+    v_real = [np.asarray(_value(world_model, jnp.asarray(z_real[k + 1]))) for k in range(H)]
+    v_pred = [np.asarray(_value(world_model, jnp.asarray(z_model[k]))) for k in range(H)]
+    print(f"  value on the rollout against the value of the real latents reached, bias/RMS error (their std "
+          f"{v_real[H - 1].std():.3f}): " + ", ".join(
+        f"step {k + 1} {np.mean(v_pred[k] - v_real[k]):+.3f}/{np.sqrt(np.mean((v_pred[k] - v_real[k]) ** 2)):.3f}"
+        for k in (0, 1, 4, H - 1)))
 
     # How much the predicted next latent depends on the action: its spread over random actions from the same latents
     z0 = jnp.asarray(z_real[0][:500])
