@@ -17,6 +17,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from safe_jepa.world_model.world_model import WorldModel
 from safe_jepa.nn.layers import SpectralNormLinear
 
+VAL_BATCHES = 50
+
 def resolve_dims(cfg, obs_dim, act_dim):
     d_z = cfg["d_latent"]
     cfg["EncoderParams"]["obs_type"] = cfg["obs_type"]
@@ -81,6 +83,14 @@ def episode_ids(data_dict):
     )
     return np.concatenate([[0], np.cumsum(~(~ends[:-1] & joins))])
 
+def val_rows(episode, cfg):
+    # Rows of the trajectories held out for validation: a val_frac share of the trajectories, chosen by the seed, so no
+    # validation window shares a trajectory with a training one
+    n_episodes = int(episode[-1]) + 1
+    n_val = int(round(cfg["val_frac"] * n_episodes))
+    held_out = np.random.default_rng(cfg["seed"]).choice(n_episodes, n_val, replace=False)
+    return np.isin(episode, held_out)
+
 @partial(jax.jit, static_argnames=("batch_size", "horizon"))
 def _sample(data_dict, key, batch_size, horizon):
     n = data_dict["observations"].shape[0]
@@ -96,6 +106,13 @@ def _sample(data_dict, key, batch_size, horizon):
 def get_batches(data_dict, batch_size, N, key, epoch, horizon):
     for i in range(N):
         yield _sample(data_dict, jax.random.fold_in(key, i + epoch * N), batch_size, horizon)
+
+def validate(world_model, val_dict, key, batch_size, horizon):
+    # Mean of each training loss over VAL_BATCHES held-out batches, without changing the model
+    metrics = [world_model.train_step(b["observations"], b["next_observations"], b["actions"], b["rewards"],
+                                      b["margins"], b["terminals"], b["mask"], update=False)
+               for b, _ in get_batches(val_dict, batch_size, VAL_BATCHES, key, 0, horizon)]
+    return {k: float(np.mean([m[k] for m in metrics])) for k in metrics[0]}
 
 def main(cfg_filename):
     # Load training config
@@ -123,6 +140,12 @@ def main(cfg_filename):
           f"{np.abs(data_dict['rewards'][~goal_rows]).max():.3f}, smallest goal-row reward "
           f"{data_dict['rewards'][goal_rows].min():.3f}")
 
+    # Hold out whole trajectories for validation
+    val = val_rows(data_dict["episode"], cfg)
+    val_dict = {k: v[val] for k, v in data_dict.items()}
+    data_dict = {k: v[~val] for k, v in data_dict.items()}
+    print(f"validation: {len(np.unique(val_dict['episode']))} trajectories held out ({val.mean():.1%} of transitions)")
+
     # Add additional data
     cfg = resolve_dims(
         cfg,
@@ -148,11 +171,14 @@ def main(cfg_filename):
 
     # Transfer data
     data_dict = {k: jnp.asarray(v) for k, v in data_dict.items()}
+    val_dict = {k: jnp.asarray(v) for k, v in val_dict.items()}
+    val_key = jax.random.key(cfg["seed"] + 1)
 
     # Run training loop
     print("Beginning Training Loop ... ")
     horizon = cfg["train_horizon"]
     metrics_log = []
+    val_log = []
     for epoch in tqdm(range(cfg["epochs"]), desc=f"Epochs", leave=True):
         metrics_log_epoch = []
         for i, (batch, _) in enumerate(tqdm(get_batches(data_dict, cfg["batch_size"], 
@@ -168,6 +194,9 @@ def main(cfg_filename):
                 obs, next_obs, actions, rewards, margins, terminals, mask)
             metrics_log_epoch.append(jax.device_get(metrics))
         metrics_log.append(metrics_log_epoch)
+        val_log.append([validate(world_model, val_dict, val_key, cfg["batch_size"], horizon)])
+        tqdm.write(f"epoch {epoch} validation: " + ", ".join(f"{k} {val_log[-1][0][k]:.3g}" for k in (
+            "loss_total", "loss_dyn", f"loss_dyn_t{horizon - 1}", "loss_margin", "loss_r", "loss_v")))
     print("Training Loop Completed.")
 
     print("Saving Metrics")
@@ -175,6 +204,7 @@ def main(cfg_filename):
     save_path_metrics = ROOT / "src/save_data" / cfg["data_dir"] / "Metrics"
     save_path_metrics.mkdir(parents=True, exist_ok=True)
     write_metrics(metrics_log, save_path_metrics / "metrics.csv")
+    write_metrics(val_log, save_path_metrics / "val_metrics.csv")
     print("Metrics Saved")
 
     print("Saving Model")

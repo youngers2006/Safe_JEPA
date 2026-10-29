@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import optax
+from functools import partial
 
 # import modules
 from ..nn.mlp import ValueNet, ValueQNet, DynamicsPredictor, RewardPredictor, MarginNet
@@ -164,7 +165,7 @@ class WorldModel(nnx.Module):
         self.update_target_encoder(tau_vals[0])
         self.update_target_value_Q(tau_vals[1])
 
-    @nnx.jit
+    @partial(nnx.jit, static_argnames="update")
     def train_step(
         self,
         obs: jax.Array, # (B, H, obs_dim)
@@ -173,7 +174,8 @@ class WorldModel(nnx.Module):
         reward: jax.Array, # (B, H)
         margin: jax.Array, # (B, H, K) hazard margin at next_obs
         terminal: jax.Array, # (B, H)
-        mask: jax.Array # (B, H)
+        mask: jax.Array, # (B, H)
+        update: bool = True
     ) -> dict:
         # B windows of H consecutive transitions
         B, H, d_u = action.shape
@@ -213,7 +215,7 @@ class WorldModel(nnx.Module):
             step_metrics = {}
             for t in range(H):
                 a, m = action[:, t], mask[:, t]
-                sn = (t == 0) # spectral norm update done once per train step
+                sn = (t == 0) and update # spectral norm update done once per train step
 
                 # Get next z prediction
                 next_z = dyn(z, a, update_spectral_norm=sn)
@@ -294,6 +296,9 @@ class WorldModel(nnx.Module):
                 "sigma_dyn_0":  dyn.layers[0].sigma.value
             }
             return total_loss, metrics
+
+        if not update:
+            return loss_fn(self.trainable_nodes, self.target_nodes)[1]
 
         # Calculate losses and 
         grad_fn = nnx.value_and_grad(loss_fn, argnums=0, has_aux=True)

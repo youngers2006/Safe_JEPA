@@ -193,6 +193,10 @@ class SCPController():
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
                 continue
 
+            # Second order Maratos correction
+            z_sub = z_opt
+            z_opt, _, _ = self.rollout(z_c, u_opt, wm_networks)
+
             # Convergence criteria
             # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
             step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
