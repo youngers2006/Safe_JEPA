@@ -22,10 +22,13 @@ class DynamicsPredictor(nnx.Module):
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
-        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
+
+        if lipschitz_bound < 1.0:
+            raise ValueError(f"Residual dynamics need lipschitz_bound >= 1, got {lipschitz_bound}")
+        layer_bound = per_layer_bound(lipschitz_bound - 1.0, len(hidden_features))
         
         for h in hidden_features:
             temp_layers.append(
