@@ -33,10 +33,9 @@ def evaluate_sequences(z0, u_seq, r_fn, v_fn, f_fn, Q_fn, safety_threshold, disc
     pred_return = pred_return + (discount ** horizon) * v_fn(z_terminal, update_spectral_norm=False).squeeze(axis=-1)
     traj_reward = pred_return - rho_u * jnp.sum(u_seq ** 2, axis=(1, 2))
 
-    # Total Feasibility
-    violations = (q_safe.squeeze(axis=-1) > safety_threshold).T # (J, N)
-    traj_violations = jnp.sum(violations, axis=-1) # (J,)
-    traj_feasibility = (traj_violations == 0.0) # (J,)
+    # Feasibility, and by how much each step's risk exceeds the threshold (0 where it is met)
+    violations = jnp.maximum(q_safe.squeeze(axis=-1) - safety_threshold, 0.0).T # (J, N)
+    traj_feasibility = jnp.all(violations == 0.0, axis=-1) # (J,)
 
     predictions = {
         "return": pred_return, # (J,)
