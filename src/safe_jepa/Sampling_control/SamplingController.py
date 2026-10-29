@@ -41,7 +41,9 @@ class SamplingController():
         return jnp.clip(seqs, self.u_bounds[0], self.u_bounds[1])
 
     def rank_policies(self, r_seq: jax.Array, feasible: jax.Array, viols: jax.Array, top_k: int):
-        # If any trajectories are feasible then penalise infeasibility heavily, if all trajectories are infeasible then score by total violations
+        # If any trajectories are feasible then penalise infeasibility heavily. If none are, score by the total amount the
+        # risk exceeds the threshold (SCP's L1 slack penalty), so plans that brake or turn away rank above those that
+        # carry on; a count of violated steps ties whenever every step of every plan is violated
         any_feas = feasible.any()
         scores = jnp.where(
             any_feas,
