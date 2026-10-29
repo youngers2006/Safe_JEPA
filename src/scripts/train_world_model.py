@@ -22,6 +22,7 @@ def resolve_dims(cfg, obs_dim, act_dim):
     cfg["EncoderParams"]["obs_type"] = cfg["obs_type"]
     cfg["EncoderParams"]["obs_dim"] = obs_dim
     cfg["EncoderParams"]["d_latent"] = d_z
+    cfg["EncoderParams"]["obs_keep"] = [i for i in range(obs_dim) if i not in cfg["obs_drop"]]
     cfg["DynamicsParams"]["d_in"] = d_z + act_dim
     cfg["DynamicsParams"]["d_out"] = d_z
     cfg["RewardParams"]["d_in"] = d_z + act_dim
