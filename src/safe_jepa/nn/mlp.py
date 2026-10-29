@@ -12,12 +12,16 @@ def per_layer_bound(network_bound: float, n_hidden: int) -> float:
     return (network_bound / SILU_LIPSCHITZ ** n_hidden) ** (1 / (n_hidden + 1))
 
 class DynamicsPredictor(nnx.Module):
+    # Residual: next_z = z + g(z, u). Lip(next_z) <= 1 + Lip(g), so g is bounded by lipschitz_bound - 1 and
+    # lipschitz_bound stays the bound of the whole dynamics
     def __init__(self, cfg, rngs: nnx.Rngs):
         d_in = cfg["d_in"]
         hidden_features = cfg["hidden_features"]
         d_out = cfg["d_out"]
         lipschitz_bound = cfg["lipschitz_bound"]
-        layer_bound = per_layer_bound(lipschitz_bound, len(hidden_features))
+        if lipschitz_bound < 1.0:
+            raise ValueError(f"Residual dynamics need lipschitz_bound >= 1, got {lipschitz_bound}")
+        layer_bound = per_layer_bound(lipschitz_bound - 1.0, len(hidden_features))
         self.hidden_features = hidden_features
         temp_layers = []
         current_dim = d_in
@@ -39,7 +43,7 @@ class DynamicsPredictor(nnx.Module):
             x = linear_layer(x, update_spectral_norm)
             x = nnx.silu(x)
         
-        return self.output_layer(x, update_spectral_norm)
+        return z + self.output_layer(x, update_spectral_norm)
 
 class ValueNet(nnx.Module):
     def __init__(self, cfg, rngs: nnx.Rngs):
