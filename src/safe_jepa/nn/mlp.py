@@ -6,10 +6,19 @@ import numpy as np
 
 from .layers import SpectralNormLinear
 
-SILU_LIPSCHITZ = 1.09984
+MAXMIN_DELTA = 0.05 # pairs closer than this act as tied; smooth_maxmin's Jacobian is sqrt(2) / delta-Lipschitz
+
+def smooth_maxmin(x: jax.Array) -> jax.Array:
+    # Pairs unit i with unit i + h/2 and returns a smooth (max, min) of each pair: ((a + b + r) / 2, (a + b - r) / 2),
+    # with r = sqrt((a - b)^2 + delta^2) a smoothed |a - b|. Its Jacobian's singular values are 1 and |a - b| / r <= 1,
+    # so it is 1-Lipschitz and keeps a gradient's norm except on nearly tied pairs; unlike MaxMin it is smooth
+    a, b = jnp.split(x, 2, axis=-1)
+    s, r = a + b, jnp.sqrt((a - b) ** 2 + MAXMIN_DELTA ** 2)
+    return jnp.concatenate([(s + r) / 2, (s - r) / 2], axis=-1)
 
 def per_layer_bound(network_bound: float, n_hidden: int) -> float:
-    return (network_bound / SILU_LIPSCHITZ ** n_hidden) ** (1 / (n_hidden + 1))
+    # The activation is 1-Lipschitz, so the bound is split evenly over the n_hidden + 1 linear layers
+    return network_bound ** (1 / (n_hidden + 1))
 
 class DynamicsPredictor(nnx.Module):
     # Residual: next_z = z + g(z, u). Lip(next_z) <= 1 + Lip(g), so g is bounded by lipschitz_bound - 1 and
@@ -41,7 +50,7 @@ class DynamicsPredictor(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x, update_spectral_norm)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
         
         return z + self.output_layer(x, update_spectral_norm)
 
@@ -70,7 +79,7 @@ class ValueNet(nnx.Module):
             linear_layer = self.layers[l]
 
             z = linear_layer(z, update_spectral_norm)
-            z = nnx.silu(z)
+            z = smooth_maxmin(z)
         
         return self.output_layer(z, update_spectral_norm)
 
@@ -96,7 +105,7 @@ class ValueQNet(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
 
         return self.output_layer(x)
 
@@ -127,7 +136,7 @@ class RewardPredictor(nnx.Module):
             linear_layer = self.layers[l]
 
             x = linear_layer(x, update_spectral_norm)
-            x = nnx.silu(x)
+            x = smooth_maxmin(x)
         
         return self.output_layer(x, update_spectral_norm)
 
@@ -177,6 +186,6 @@ class MarginNet(nnx.Module):
             linear_layer = self.layers[l]
 
             z = linear_layer(z, update_spectral_norm)
-            z = nnx.silu(z)
+            z = smooth_maxmin(z)
         
         return self.output_layer(z, update_spectral_norm)
