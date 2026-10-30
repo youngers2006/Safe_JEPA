@@ -4,7 +4,7 @@ import numpy as np
 import cvxpy as cp
 from jax.experimental import enable_x64
 
-from .SCPSolver import SCPSolver
+from .SCPSolver import SCPSolver, DirectSCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn, rollout_fn
 from ..Sampling_control.evaluate_sequences import plan_summary
@@ -48,15 +48,28 @@ class SCPController():
         self.rollout_fn = rollout_fn
 
         # Solver parameters
-        self.SCP_solver = SCPSolver(
-            self.horizon,
-            self.d_z, 
-            self.d_u, 
-            self.hyperparams['discount'],
-            self.hyperparams['rho_u'],
-            self.u_bounds[0], 
-            self.u_bounds[1]
-        )
+        if cfg["solver"] == "direct":
+            self.SCP_solver = DirectSCPSolver(
+                self.horizon,
+                self.d_z, 
+                self.d_u, 
+                self.hyperparams['discount'],
+                self.hyperparams['rho_u'],
+                self.u_bounds[0], 
+                self.u_bounds[1]
+            )
+        elif cfg["solver"] == "cvxpy":
+            self.SCP_solver = SCPSolver(
+                self.horizon,
+                self.d_z, 
+                self.d_u, 
+                self.hyperparams['discount'],
+                self.hyperparams['rho_u'],
+                self.u_bounds[0], 
+                self.u_bounds[1]
+            )
+        else:
+            raise ValueError(f"{cfg["solver"]} is not a valid solver.")
 
         # Flag to trigger initial warm start
         self.is_first_step = True
