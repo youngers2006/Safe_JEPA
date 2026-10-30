@@ -9,7 +9,7 @@ from sweep_runner import run_point
 
 WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model.yaml"]
 COMMON = "configs/Planner/common.yaml"
-SAMPLERS = ["configs/Planner/cem.yaml", "configs/Planner/mppi.yaml"]
+SAMPLERS = ["configs/Planner/mppi.yaml"] # the sampler SCP+MPPI starts from
 ENV = "SafetyPointGoal1-v0"
 SEEDS = list(range(30))
 BUDGETS = [64, 256, 512, 2048, 8192, 32768, 131072]
