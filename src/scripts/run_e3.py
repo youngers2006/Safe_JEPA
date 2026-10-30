@@ -9,7 +9,9 @@ from sweep_runner import run_point
 
 # Lipschitz ablation: E1's eps 0.2 point with world models that differ from the main one only in lipschitz_bound. The
 # main (c 1.5) model's arm is E1's own eps 0.2 point, so only the other models are run, with E1's seeds
-WM_CFGS = ["configs/wmTraining/pg1_c_1_2_model.yaml", "configs/wmTraining/pg1_c_inf_model.yaml"]
+# Bounds on the command line, e.g. python run_e3.py inf, so each model can run on its own machine; without them, both
+MODELS = {"1.2": "configs/wmTraining/pg1_c_1_2_model.yaml", "inf": "configs/wmTraining/pg1_c_inf_model.yaml"}
+WM_CFGS = [MODELS[a] for a in sys.argv[1:]] or list(MODELS.values())
 COMMON = "configs/Planner/common.yaml"
 PLANNERS = [("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"}), # saved as SCP+MPPI
             ("configs/Planner/mppi.yaml", {})]
