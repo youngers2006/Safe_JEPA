@@ -44,19 +44,19 @@ EncoderParams:
 
 DynamicsParams:
   hidden_features: [256, 256]
-  lipschitz_bound: 1.5 # inf turns lipschitz bounding off
+  lipschitz_bound: 1.2 # inf turns lipschitz bounding off
 
 ValueParams:
   hidden_features: [256, 256]
-  lipschitz_bound: 1.5
+  lipschitz_bound: 1.2
 
 ValueQParams:
   hidden_features: [256, 256]
 
 RewardParams:
   hidden_features: [256, 256]
-  lipschitz_bound: 1.5
+  lipschitz_bound: 1.2
 
 MarginParams:
   hidden_features: [256, 256]
-  lipschitz_bound: 1.5
+  lipschitz_bound: 1.2
