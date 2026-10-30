@@ -12,7 +12,7 @@ COMMON = "configs/Planner/common.yaml"
 PLANNERS = {"MPPI": ("configs/Planner/mppi.yaml", {}),
             "CEM": ("configs/Planner/cem.yaml", {})}
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(30))
+SEEDS = list(range(20))
 MARGIN_EPS = [0.1, 0.2, 0.3, 0.5] # distance kept from every hazard's edge
 
 def main():
