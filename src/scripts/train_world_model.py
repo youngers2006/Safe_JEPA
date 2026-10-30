@@ -225,4 +225,5 @@ def main(cfg_filename):
 
 if __name__ == "__main__":
     main("configs/wmTraining/pg1_c_1_5_model.yaml")
+    main("configs/wmTraining/pg1_c_1_2_model.yaml")
     main("configs/wmTraining/pg1_c_inf_model.yaml")
