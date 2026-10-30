@@ -224,6 +224,7 @@ def main(cfg_filename):
     return 0
 
 if __name__ == "__main__":
+    # Comment out as needed
     main("configs/wmTraining/pg1_c_1_5_model.yaml")
     main("configs/wmTraining/pg1_c_1_2_model.yaml")
     main("configs/wmTraining/pg1_c_inf_model.yaml")

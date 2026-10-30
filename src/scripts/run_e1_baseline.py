@@ -19,7 +19,7 @@ MARGIN_EPS = [0.0, 0.1, 0.2, 0.3, 0.5] # distance kept from every hazard's edge
 def main():
     for wm_cfg in WM_CFGS:
         for eps in tqdm(MARGIN_EPS, leave=True):
-            for planner, overrides in tqdm(PLANNERS, leave=False):
+            for planner, overrides in tqdm(PLANNERS.values(), leave=False):
                 run_point(SEEDS, wm_cfg, COMMON, planner, ENV,
                           {"margin_eps": eps, **overrides}, f"e1/eps_{eps}")
 
