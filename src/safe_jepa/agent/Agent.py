@@ -53,7 +53,7 @@ class SafeJEPAAgent:
         return SamplingController(control_cfg)
 
     def make_seed_sampler(self):
-        path = self.cfg["seed_sampler"]
+        path = self.cfg.get("seed_sampler")
         if self.controller_type != "SCP" or not path:
             return None
         with open(ROOT / path) as f:
@@ -77,7 +77,7 @@ class SafeJEPAAgent:
             if self.seed_sampler is not None:
                 self.key, sub = jax.random.split(self.key)
                 _, self.q_prev, seed_info = self.seed_sampler.step(z_c, self.wm_networks, sub, q_prev=self.q_prev)
-            u_seed = np.asarray(seed_info["plan"], dtype=np.float64)
+                u_seed = np.asarray(seed_info["plan"], dtype=np.float64)
             u, info = self.controller.step(z_c, self.wm_networks, u_seed)
         else:
             self.key, sub = jax.random.split(self.key)

@@ -11,7 +11,7 @@ WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model.yaml"]
 COMMON = "configs/Planner/common.yaml"
 SAMPLERS = ["configs/Planner/cem.yaml", "configs/Planner/mppi.yaml"]
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(30))
+SEEDS = list(range(20))
 BUDGETS = [64, 256, 512, 2048, 8192, 32768, 131072]
 ELITE_FRAC = 64 / 512 # held fixed, so top_k scales with the budget
 
