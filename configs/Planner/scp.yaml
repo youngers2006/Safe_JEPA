@@ -3,7 +3,7 @@ w_dyn: 1000.0
 w_safe: 100.0 
 w_prox: 1.0 # initial trust region weight
 scp_iters: 40 # scp max iters per timestep
-tol: 1.0e-3 # early stopping criteria
+tol: 1.0e-2 # early stopping criteria
 w_prox_min: 1.0e-2 # floor on the trust region weight
 feas_tol: 1.0e-4 # max allowed dynamics defect / risk excess for "converged"
 rho_lower: 0.25 # reject and tighten trust region threshold
