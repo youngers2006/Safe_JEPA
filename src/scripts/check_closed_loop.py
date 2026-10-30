@@ -76,8 +76,12 @@ def check(experiment, tags, controllers):
                 continue
             errs, reals, late_errs, late_reals = {}, {}, {}, {}
             leads, lead_margins, lead_speeds = [], [], []
+            acts, late_acts = [], [] # executed actions, and those in the last LATE_WINDOW steps before a violation
             for _, ep in episodes:
                 T = len(ep["actions"])
+                acts.append(ep["actions"])
+                if bool(ep["violations"][-1]):
+                    late_acts.append(ep["actions"][-LATE_WINDOW:])
                 err, m_real = rollout_margin_errors(world_model, ep, constraints, n)
                 violated = bool(ep["violations"][-1])
                 for j, e in enumerate(err):
@@ -101,6 +105,14 @@ def check(experiment, tags, controllers):
                 if leads:
                     print(f"  {'':5s} margin {c}, last {LATE_WINDOW} steps before a violation: "
                           f"{summary(late_errs, late_reals, c, con['scale'])}")
+            # How the executed actions look: an optimiser that exploits the model tends to saturate and switch actions
+            def action_stats(seqs):
+                sat = np.mean(np.concatenate([np.any(np.abs(a) >= 0.99, axis=-1) for a in seqs]))
+                change = np.mean(np.concatenate(
+                    [np.linalg.norm(np.diff(a, axis=0), axis=-1) for a in seqs if len(a) > 1]))
+                return f"{sat:.0%} of actions at a bound, mean change between steps {change:.3f}"
+            print(f"  {'':5s} actions: {action_stats(acts)}"
+                  + (f"; last {LATE_WINDOW} steps before a violation: {action_stats(late_acts)}" if late_acts else ""))
             if leads:
                 warned = [l for l in leads if l > 0]
                 print(f"  {'':5s} {len(leads)} violated: plans over the threshold for the last "
@@ -109,7 +121,7 @@ def check(experiment, tags, controllers):
                          f"{np.median(lead_speeds):.2f} m/s (medians)" if warned else ""))
 
 if __name__ == "__main__":
-    EXPERIMENT = "M1_pointgoal1_c_1_5_seed_0"
-    TAGS = [f"e1/eps_{eps}" for eps in [0.0, 0.1, 0.2, 0.3, 0.5]]
+    EXPERIMENT = "M2_pointgoal1_c_1_5_seed_0"
+    TAGS = [f"e1/eps_{eps}" for eps in [0.0, 0.1, 0.2, 0.3]]
     CONTROLLERS = ["SCP", "MPPI", "CEM"]
     check(EXPERIMENT, TAGS, CONTROLLERS)
