@@ -9,3 +9,4 @@ feas_tol: 1.0e-4 # max allowed dynamics defect / risk excess for "converged"
 rho_lower: 0.25 # reject and tighten trust region threshold
 rho_upper: 0.75 # loosen traust region threshold
 solver: "direct"
+seed_sampler: null

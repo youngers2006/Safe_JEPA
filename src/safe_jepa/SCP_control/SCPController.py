@@ -150,7 +150,7 @@ class SCPController():
     def is_feasible(self, max_defect: float, max_risk: float) -> bool:
         return max_defect <= self.feas_tol and max_risk <= self.hyperparams['tau'] + self.feas_tol
 
-    def _step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+    def _step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...], u_seed: np.ndarray | None = None) -> jax.Array:
         # Extract networks
         r_fn, v_fn, f_fn, Q_fn = wm_networks
 
@@ -169,6 +169,15 @@ class SCPController():
         # Initialise trajectory by rolling u_ref out from the observation so z_ref obeys the dynamics
         z_ref, _, _ = self.rollout(z_c, u_ref, wm_networks)
         J_ref, defect_ref, risk_ref = self.merit(z_ref, u_ref, wm_networks)
+
+        start = "shifted"
+        if u_seed is not None:
+            z_seed, _, _ = self.rollout(z_c, u_seed, wm_networks)
+            J_seed, defect_seed, risk_seed = self.merit(z_seed, u_seed, wm_networks)
+            if J_seed < J_ref:
+                u_ref, z_ref = np.array(u_seed, dtype=np.float64), z_seed
+                J_ref, defect_ref, risk_ref = J_seed, defect_seed, risk_seed
+                start = "sampled"
 
         z_c_np = np.asarray(z_c)
         stop_reason = "max_iters"
@@ -258,6 +267,7 @@ class SCPController():
 
         info = {
             "iterations": iteration + 1,
+            "start": start,
             "stop_reason": stop_reason,
             "certified": certified,
             "prox_grad": prox_grad,
@@ -274,7 +284,7 @@ class SCPController():
         self.w_prox_warm = self.hyperparams["w_prox"]
         return jnp.asarray(u_ref[0, :]), info
 
-    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...]) -> jax.Array:
+    def step(self, z_c: jax.Array, wm_networks: tuple[jax.Array, ...], u_seed: np.ndarray | None = None) -> jax.Array:
         with enable_x64():
-            u, info = self._step(jnp.asarray(z_c, dtype=jnp.float64), wm_networks)
+            u, info = self._step(jnp.asarray(z_c, dtype=jnp.float64), wm_networks, u_seed)
         return jnp.asarray(u, dtype=jnp.float32), info

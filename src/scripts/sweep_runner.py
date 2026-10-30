@@ -45,6 +45,14 @@ class RecordingAgent:
     def __setattr__(self, name, value):   # run_sim sets agent.key
         setattr(self._agent, name, value)
 
+def planner_name(cfg):
+    # SCP started from a sampler's plan is saved apart from pure SCP, e.g. as "SCP+CEM"
+    seed = cfg.get("seed_sampler")
+    if not seed:
+        return cfg["controller"]
+    with open(ROOT / seed) as f:
+        return f"{cfg['controller']}+{yaml.safe_load(f)['controller']}"
+
 def build_cfg(wm_cfg, common_cfg, planner_cfg, obs_dim, overrides=None):
     """load_cfg refuses a key defined twice, so sweeps override after the merge."""
     cfg = load_cfg(ROOT / wm_cfg, ROOT / common_cfg, ROOT / planner_cfg)
@@ -122,18 +130,19 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
 
     out_dir = ROOT / "src/save_data/experiments" / cfg["data_dir"] / tag
     out_dir.mkdir(parents=True, exist_ok=True)
-    with open(out_dir / f"{cfg['controller']}_config.yaml", "w") as f:
+    name = planner_name(cfg)
+    with open(out_dir / f"{name}_config.yaml", "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
-    out_file = out_dir / f"{cfg['controller']}_seeds_{seeds[0]}-{seeds[-1]}.csv"
+    out_file = out_dir / f"{name}_seeds_{seeds[0]}-{seeds[-1]}.csv"
 
     warmup(agent, env, seeds[0])
 
     rows = []
-    for seed in tqdm(seeds, desc=f"{tag} {cfg['controller']}", leave=True):
+    for seed in tqdm(seeds, desc=f"{tag} {name}", leave=True):
         summary, trajectory = run_sim(agent, env, seed, cfg["sim_max_steps"])
         rows.append({
             "world_model": cfg["data_dir"],
-            "controller": cfg["controller"],
+            "controller": name,
             "margin_eps": cfg["margin_eps"],
             "barrier_alpha": cfg["barrier_alpha"],
             "num_seqs": cfg.get("num_seqs", float("nan")),
@@ -141,7 +150,7 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
         })
         print(rows[-1], flush=True)
 
-        np.savez_compressed(out_dir / f"{cfg['controller']}_seed_{seed}.npz",
+        np.savez_compressed(out_dir / f"{name}_seed_{seed}.npz",
                             **trajectory, **_info_arrays(agent.info_log))
 
         with open(out_file, "w", newline="") as f:
