@@ -69,7 +69,7 @@ class SCPController():
                 self.u_bounds[1]
             )
         else:
-            raise ValueError(f"{cfg["solver"]} is not a valid solver.")
+            raise ValueError(f"{cfg['solver']} is not a valid solver.")
 
         # Flag to trigger initial warm start
         self.is_first_step = True
