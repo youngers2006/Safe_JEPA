@@ -142,5 +142,5 @@ def check(experiment, tags, controllers):
 if __name__ == "__main__":
     EXPERIMENT = "M2_pointgoal1_c_1_5_seed_0"
     TAGS = [f"e1/eps_{eps}" for eps in [0.0, 0.1, 0.2, 0.3]]
-    CONTROLLERS = ["SCP", "MPPI", "CEM"]
+    CONTROLLERS = ["SCP", "SCP+CEM", "MPPI", "CEM"]
     check(EXPERIMENT, TAGS, CONTROLLERS)

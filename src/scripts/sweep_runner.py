@@ -64,6 +64,14 @@ def make_agent(cfg, obs_dim):
     nnx.update(agent.world_model, ocp.StandardCheckpointer().restore(ckpt_path, target))
     return agent
 
+def planner_name(cfg):
+    # SCP started from a sampler's plan is saved apart from pure SCP, e.g. as "SCP+CEM"
+    seed = cfg.get("seed_sampler")
+    if not seed:
+        return cfg["controller"]
+    with open(ROOT / seed) as f:
+        return f"{cfg['controller']}+{yaml.safe_load(f)['controller']}"
+
 def warmup(agent, env, seed):
     """One discarded act() so JIT compilation stays out of the timed loop.
     Without it the first call lands in plan_time_p99."""
@@ -97,6 +105,8 @@ def summarise(summary, trajectory, info_log, max_steps):
     out["scp_last_rejected_rate"] = _mean_of(info_log, "last_rejected")
     sr = [str(d["stop_reason"]) for d in info_log if "stop_reason" in d]
     out["scp_converged_rate"] = float(np.mean([r != "max_iters" for r in sr])) if sr else float("nan")
+    starts = [str(d["start"]) for d in info_log if "start" in d]
+    out["scp_sampled_start_rate"] = float(np.mean([s == "sampled" for s in starts])) if starts else float("nan")
     out["pred_return"] = _mean_of(info_log, "pred_return")
     out["pred_max_risk"] = _mean_of(info_log, "pred_max_risk")
     out["pred_feasible_rate"] = _mean_of(info_log, "pred_feasible")
@@ -122,18 +132,19 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
 
     out_dir = ROOT / "src/save_data/experiments" / cfg["data_dir"] / tag
     out_dir.mkdir(parents=True, exist_ok=True)
-    with open(out_dir / f"{cfg['controller']}_config.yaml", "w") as f:
+    name = planner_name(cfg)
+    with open(out_dir / f"{name}_config.yaml", "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
-    out_file = out_dir / f"{cfg['controller']}_seeds_{seeds[0]}-{seeds[-1]}.csv"
+    out_file = out_dir / f"{name}_seeds_{seeds[0]}-{seeds[-1]}.csv"
 
     warmup(agent, env, seeds[0])
 
     rows = []
-    for seed in tqdm(seeds, desc=f"{tag} {cfg['controller']}", leave=True):
+    for seed in tqdm(seeds, desc=f"{tag} {name}", leave=True):
         summary, trajectory = run_sim(agent, env, seed, cfg["sim_max_steps"])
         rows.append({
             "world_model": cfg["data_dir"],
-            "controller": cfg["controller"],
+            "controller": name,
             "margin_eps": cfg["margin_eps"],
             "barrier_alpha": cfg["barrier_alpha"],
             "num_seqs": cfg.get("num_seqs", float("nan")),
@@ -141,7 +152,7 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
         })
         print(rows[-1], flush=True)
 
-        np.savez_compressed(out_dir / f"{cfg['controller']}_seed_{seed}.npz",
+        np.savez_compressed(out_dir / f"{name}_seed_{seed}.npz",
                             **trajectory, **_info_arrays(agent.info_log))
 
         with open(out_file, "w", newline="") as f:
