@@ -17,6 +17,7 @@ H = 10 # rollout steps checked (the planning horizon)
 STEPS = (1, 2, 5, 10) # rollout steps reported
 NEAR = 0.3 # rows with a real margin below this (times the constraint's scale) count as near the edge
 VEL_COLS = [3, 4] # velocimeter x, y in the raw observation
+EDGE_SLACK = 0.01
 
 @nnx.jit
 def _encode(world_model, obs):
@@ -76,8 +77,20 @@ def check(experiment, tags, controllers):
                 continue
             errs, reals, late_errs, late_reals = {}, {}, {}, {}
             leads, lead_margins, lead_speeds = [], [], []
+            acts, late_acts = [], [] # executed actions, and those in the last LATE_WINDOW steps before a violation
+            slack, stops, late_stops = [], [], [] # planned slack near the edge; SCP's stop reasons
             for _, ep in episodes:
                 T = len(ep["actions"])
+                acts.append(ep["actions"])
+                if bool(ep["violations"][-1]):
+                    late_acts.append(ep["actions"][-LATE_WINDOW:])
+                # Room the executed plan leaves under the threshold at its worst step, at visited states near the edge
+                near = margin_labels(ep["obs"], constraints)[:, 0] < NEAR * constraints[0]["scale"]
+                slack.append(TAU - ep["info_pred_risk"].max(axis=1)[near])
+                if "info_stop_reason" in ep:
+                    stops.append(ep["info_stop_reason"])
+                    if bool(ep["violations"][-1]):
+                        late_stops.append(ep["info_stop_reason"][-LATE_WINDOW:])
                 err, m_real = rollout_margin_errors(world_model, ep, constraints, n)
                 violated = bool(ep["violations"][-1])
                 for j, e in enumerate(err):
@@ -101,6 +114,25 @@ def check(experiment, tags, controllers):
                 if leads:
                     print(f"  {'':5s} margin {c}, last {LATE_WINDOW} steps before a violation: "
                           f"{summary(late_errs, late_reals, c, con['scale'])}")
+
+            def action_stats(seqs):
+                sat = np.mean(np.concatenate([np.any(np.abs(a) >= 0.99, axis=-1) for a in seqs]))
+                change = np.mean(np.concatenate(
+                    [np.linalg.norm(np.diff(a, axis=0), axis=-1) for a in seqs if len(a) > 1]))
+                return f"{sat:.0%} of actions at a bound, mean change between steps {change:.3f}"
+            print(f"  {'':5s} actions: {action_stats(acts)}"
+                  + (f"; last {LATE_WINDOW} steps before a violation: {action_stats(late_acts)}" if late_acts else ""))
+            slack = np.concatenate(slack)
+            if slack.size:
+                print(f"  {'':5s} plans near the edge: {np.mean(slack < EDGE_SLACK):.0%} with the barrier binding "
+                      f"(within {EDGE_SLACK} of the threshold), median room under the threshold {np.median(slack):.3f}")
+            def stop_stats(seqs):
+                r = np.concatenate(seqs)
+                return ", ".join(f"{k} {np.mean(r == k):.0%}" for k in np.unique(r))
+            if stops:
+                late = f"; last {LATE_WINDOW} steps before a violation: {stop_stats(late_stops)}" if late_stops else ""
+                print(f"  {'':5s} SCP stops: {stop_stats(stops)}{late}")
+                
             if leads:
                 warned = [l for l in leads if l > 0]
                 print(f"  {'':5s} {len(leads)} violated: plans over the threshold for the last "
