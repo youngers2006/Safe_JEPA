@@ -12,7 +12,9 @@ from sweep_runner import run_point
 WM_CFGS = {20: "configs/wmTraining/pg1_c_1_5_model_h20.yaml",
            30: "configs/wmTraining/pg1_c_1_5_model_h30.yaml"}
 COMMON = "configs/Planner/common.yaml"
-PLANNERS = {"SCP+MPPI": ("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"})}
+PLANNERS = {"MPPI": ("configs/Planner/mppi.yaml", {}),
+            "CEM": ("configs/Planner/cem.yaml", {}),
+            "SCP": ("configs/Planner/scp.yaml", {})}
 ENV = "SafetyPointGoal1-v0"
 SEEDS = list(range(10))
 MARGIN_EPS = 0.2
