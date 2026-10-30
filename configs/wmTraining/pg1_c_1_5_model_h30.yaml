@@ -1,0 +1,62 @@
+#  run
+seed: 0
+dataset_filename: "src/datasets/SafetyPointGoal1Gymnasium_v0_100_2022.hdf5"
+data_dir: "M2_pointgoal1_c_1_5_seed_0_h30"        # one subdir per sweep point
+obs_type: "state"
+val_frac: 0.1 # split by TRAJECTORY, not transition
+
+epochs: 250
+num_batches: 1000 # ~= n_transitions / batch_size
+batch_size: 256
+lr: 3.0e-4
+train_horizon: 31 # consecutive transitions per training window (1 = one-step training, as before)
+rho: 0.99 # weight rho^t on the losses at rollout step t
+
+# problem 
+d_latent: 32
+discount: 0.99
+action_bounds: [-1.0, 1.0]
+margin_constraints: 
+  - {label: lidar, sources: [[28, 44, 0.2]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's edge; sources: [first lidar column, last + 1, contact distance]
+margin_edge_weight: 4.0 # rows near a constraint's edge weigh 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
+margin_edge_scale: 0.2
+dense_reward: true # the reward head learns only the dense reward; the goal bonus is left to the value function
+goal_threshold: 0.5 # reward above this marks a step that reached the goal (the dataset has no goal flag)
+goal_reward: 1.0 # Safety-Gymnasium's goal bonus
+obs_drop: [0, 1, 2, 5, 6, 7, 11]
+
+# loss weights
+lambda_dyn: 1.0
+lambda_v: 0.5
+lambda_r: 1.0
+lambda_m: 1.0
+lambda_var: 1.0
+lambda_cov: 0.04
+gamma: 0.5 # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
+ER_tau: 0.7
+
+tau: [0.01, 0.005] # (encoder, value)
+
+#  sub-networks
+EncoderParams:
+  d_hidden: 256
+  in_channels: 3 # vision only
+
+DynamicsParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: 1.5 # inf turns lipschitz bounding off
+
+ValueParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: 1.5
+
+ValueQParams:
+  hidden_features: [256, 256]
+
+RewardParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: 1.5
+
+MarginParams:
+  hidden_features: [256, 256]
+  lipschitz_bound: 1.5
