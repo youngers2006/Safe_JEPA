@@ -199,7 +199,7 @@ class SCPController():
 
             # Convergence criteria
             # Prox-gradient norm |G_t|| = ||step|| / t with t = 1 / (2 w_prox)
-            step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_opt[1:] - z_ref[1:]) ** 2)
+            step_sq = np.sum((u_opt - u_ref) ** 2) + np.sum((z_sub[1:] - z_ref[1:]) ** 2)
             prox_grad = 2.0 * max(self.hyperparams['w_prox'], self.w_prox_init) * np.sqrt(step_sq)
             if prox_grad <= self.tol:
                 stop_reason = "converged" if self.is_feasible(defect_ref, risk_ref) else "converged_infeasible"
@@ -207,7 +207,7 @@ class SCPController():
 
             # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
-                matrices, z_ref, u_ref
+                matrices, z_sub, u_ref
             )
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
