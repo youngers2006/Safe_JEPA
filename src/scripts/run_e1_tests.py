@@ -9,12 +9,13 @@ from sweep_runner import run_point
 
 WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model.yaml"]
 COMMON = "configs/Planner/common.yaml"
-PLANNERS = ["configs/Planner/scp.yaml",
-            "configs/Planner/mppi.yaml",
-            "configs/Planner/cem.yaml"]
+PLANNERS = {"SCP+MPPI": ("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"}),
+            "MPPI": ("configs/Planner/mppi.yaml", {}),
+            "CEM": ("configs/Planner/cem.yaml", {}),
+            "SCP": ("configs/Planner/scp.yaml", {})}
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(30))
-MARGIN_EPS = [0.0, 0.1, 0.2, 0.3, 0.5] # distance kept from every hazard's edge
+SEEDS = list(range(5))
+MARGIN_EPS = [0.2] # distance kept from every hazard's edge
 
 def main():
     for wm_cfg in WM_CFGS:
