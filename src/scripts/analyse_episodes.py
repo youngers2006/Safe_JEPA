@@ -39,7 +39,7 @@ CONTROLLER_COLOURS = {"SCP": "tab:blue", "SCP+MPPI": "tab:purple", "SCP+CEM": "t
                       "CEM": "tab:green"}
 VERDICT_COLOURS = {"no violation": "tab:green", "no warning": "tab:purple", "warned late": "tab:orange",
                    "over the threshold throughout": "tab:red"}
-SWEEP_LABELS = {"eps": "margin buffer eps", "J": "sampled sequences per iteration"}
+SWEEP_LABELS = {"eps": "margin buffer eps", "J": "sampled sequences per iteration", "H": "planning horizon (steps)"}
 
 # Loading saved episodes
 
