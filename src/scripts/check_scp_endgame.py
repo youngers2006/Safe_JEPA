@@ -26,6 +26,7 @@ SAMPLER_KEYS = 3 # sampler runs per state, the best kept: a fair search for a fe
 
 def load_cfg(path, obs_dim):
     cfg = yaml.safe_load(open(path))
+    cfg.setdefault("solver", "cvxpy") # runs saved before the solver choice used cvxpy
     return resolve_dims(cfg, obs_dim, cfg["d_u"])
 
 def outcome(risk, ret):
