@@ -1,59 +1,62 @@
 #  run
 seed: 0
-dataset_filename: "src/datasets/FilteredSafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
-data_dir: "T5_pointgoal2_c_inf_seed_0"        # one subdir per sweep point
+dataset_filename: "src/datasets/SafetyPointGoal2Gymnasium_v0_200_3442.hdf5"
+data_dir: "M2_pointgoal2_c_inf_seed_0"        # one subdir per sweep point
 obs_type: "state"
 val_frac: 0.1 # split by TRAJECTORY, not transition
 
-epochs: 100
-num_batches: 1500        # ~= n_transitions / batch_size
+epochs: 250
+num_batches: 1500 # ~= n_transitions / batch_size
 batch_size: 256
 lr: 3.0e-4
-train_horizon: 10 # consecutive transitions per training window (1 = one-step training, as before)
+train_horizon: 11 # consecutive transitions per training window (1 = one-step training, as before)
 rho: 0.9 # weight rho^t on the losses at rollout step t
 
 # problem 
 d_latent: 32
 discount: 0.99
-safety_discount: 0.95
 action_bounds: [-1.0, 1.0]
-Q_minima_samples: 64
+margin_constraints: 
+  - {label: lidar, sources: [[28, 44, 0.2], [44, 60, 0.3]], scale: 1.0, clip: 1.0} # metres to the nearest hazard's or vase's edge (vases are costly in level 2); sources: [first lidar column, last + 1, contact distance]
+margin_edge_weight: 4.0 # rows near a constraint's edge weigh 1 + margin_edge_weight * exp(-margin / (margin_edge_scale * scale))
+margin_edge_scale: 0.2
+dense_reward: true # the reward head learns only the dense reward; the goal bonus is left to the value function
+goal_threshold: 0.5 # reward above this marks a step that reached the goal (the dataset has no goal flag)
+goal_reward: 1.0 # Safety-Gymnasium's goal bonus
+obs_drop: [0, 1, 2, 5, 6, 7, 11]
 
 # loss weights
 lambda_dyn: 1.0
 lambda_v: 0.5
 lambda_r: 1.0
-lambda_s: 1.0
+lambda_m: 1.0
 lambda_var: 1.0
 lambda_cov: 0.04
-gamma: 0.5                         # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
-alpha: 0.05   # CQL weight
-violation_weight: 65    # Bellman weight on high-risk targets
+gamma: 0.5 # VICReg variance target, tanh latent compression requires this be 0-0.5 to be reachable
 ER_tau: 0.7
 
-tau: [0.01, 0.005, 0.005]          # (encoder, safety critic, value)
+tau: [0.01, 0.005] # (encoder, value)
 
 #  sub-networks
 EncoderParams:
   d_hidden: 256
-  in_channels: 3                   # vision only
-
-ValueQParams:
-  hidden_features: [256, 256]
+  in_channels: 3 # vision only
 
 DynamicsParams:
   hidden_features: [256, 256]
-  lipschitz_bound: .inf            # inf turns lipschitz bounding off
+  lipschitz_bound: .inf # inf turns lipschitz bounding off
 
 ValueParams:
   hidden_features: [256, 256]
   lipschitz_bound: .inf
 
+ValueQParams:
+  hidden_features: [256, 256]
+
 RewardParams:
   hidden_features: [256, 256]
   lipschitz_bound: .inf
 
-SafetyCriticParams:
+MarginParams:
   hidden_features: [256, 256]
   lipschitz_bound: .inf
-  softmin_beta: 3.0
