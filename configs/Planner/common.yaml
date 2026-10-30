@@ -3,4 +3,4 @@ d_u: 2 # action dimension (2 for PointGoal)
 margin_eps: [0.2] # distance kept from every hazard's edge, for model error
 barrier_alpha: 0.05 # fraction of the margin above margin_eps the plan may lose per step
 sim_max_steps: 1000 # max steps per episode
-rho_u: 0.01 # action magnitude penalty
+rho_u: 0.0001 # action magnitude penalty
