@@ -15,7 +15,7 @@ PLANNERS = {"SCP+MPPI": ("configs/Planner/scp.yaml", {"seed_sampler": "configs/P
             "SCP": ("configs/Planner/scp.yaml", {})}
 ENV = "SafetyPointGoal1-v0"
 SEEDS = list(range(5))
-MARGIN_EPS = [0.2] # distance kept from every hazard's edge
+MARGIN_EPS = [0.1, 0.2] # distance kept from every hazard's edge
 
 def main():
     for wm_cfg in WM_CFGS:
