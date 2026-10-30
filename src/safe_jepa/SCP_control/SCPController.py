@@ -5,6 +5,7 @@ import cvxpy as cp
 from jax.experimental import enable_x64
 
 from .SCPSolver import SCPSolver
+from .SCPSolverDirect import DirectSCPSolver
 from .get_jacobians import get_jacobians
 from .nonlinear_cost_fn import nonlinear_cost_fn, rollout_fn
 from ..Sampling_control.evaluate_sequences import plan_summary
@@ -47,8 +48,9 @@ class SCPController():
         self.nonlinear_cost_fn = nonlinear_cost_fn
         self.rollout_fn = rollout_fn
 
-        # Solver parameters
-        self.SCP_solver = SCPSolver(
+        # Solver parameters ("direct": the subproblem built for Clarabel directly; "cvxpy": the same through cvxpy)
+        solver = {"direct": DirectSCPSolver, "cvxpy": SCPSolver}[cfg["solver"]]
+        self.SCP_solver = solver(
             self.horizon,
             self.d_z, 
             self.d_u, 
@@ -193,9 +195,7 @@ class SCPController():
                 self.hyperparams['w_prox'] = 2.0 * self.hyperparams['w_prox']
                 continue
 
-            # Judge the step on the rollout of its actions. Accepting the subproblem's own z leaves a dynamics defect
-            # (the linearisation error) that the merit charges at w_dyn, so the trust region shrinks with w_dyn and
-            # the model's curvature; on the rollout the defect is zero, and the linear model keeps the subproblem's z
+            # Second order Maratos correction
             z_sub = z_opt
             z_opt, _, _ = self.rollout(z_c, u_opt, wm_networks)
 
