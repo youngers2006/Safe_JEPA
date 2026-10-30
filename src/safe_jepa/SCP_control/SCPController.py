@@ -207,11 +207,11 @@ class SCPController():
 
             # Compute reference trajectory costs with the model and linearised system
             linear_cost_old = self.linear_cost_fn(
-                matrices, z_sub, u_ref
+                matrices, z_ref, u_ref
             )
             # Compute optimal trajectory costs with model and linearised system
             linear_cost_new = self.linear_cost_fn(
-                matrices, z_opt, u_opt
+                matrices, z_sub, u_opt
             )
             J_new, defect_new, risk_new = self.merit(
                 z_opt, u_opt, wm_networks
