@@ -35,7 +35,8 @@ N_BANK = 100_000 # dataset rows searched for the nearest neighbour in check 3
 DATA_CHUNK = 8192 # rows per network call on the dataset
 EPISODE_CHUNK = 256 # rows per network call on an episode
 
-CONTROLLER_COLOURS = {"SCP": "tab:blue", "SCP+CEM": "tab:purple", "MPPI": "tab:orange", "CEM": "tab:green"}
+CONTROLLER_COLOURS = {"SCP": "tab:blue", "SCP+MPPI": "tab:purple", "SCP+CEM": "tab:red", "MPPI": "tab:orange",
+                      "CEM": "tab:green"}
 VERDICT_COLOURS = {"no violation": "tab:green", "no warning": "tab:purple", "warned late": "tab:orange",
                    "over the threshold throughout": "tab:red"}
 SWEEP_LABELS = {"eps": "margin buffer eps", "J": "sampled sequences per iteration"}
@@ -558,7 +559,7 @@ if __name__ == "__main__":
     EXPERIMENTS = {
         "M1_pointgoal1_c_1_5_seed_0": [f"e1/eps_{eps}" for eps in [0.0, 0.025, 0.05, 0.1, 0.2]],
     }
-    CONTROLLERS = ["SCP", "SCP+CEM", "MPPI", "CEM"]
+    CONTROLLERS = ["SCP", "SCP+MPPI", "MPPI", "CEM"]
     MODEL_CHECKS = True # checks 2 and 3 load the world model
     EPISODE_FIGURES = True # one figure per episode
 

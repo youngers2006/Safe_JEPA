@@ -10,7 +10,7 @@ from sweep_runner import run_point
 WM_CFGS = ["configs/wmTraining/pg1_c_1_5_model.yaml"]
 COMMON = "configs/Planner/common.yaml"
 PLANNERS = [("configs/Planner/scp.yaml", {}),
-            ("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/cem.yaml"}), # saved as SCP+CEM
+            ("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"}), # saved as SCP+MPPI
             ("configs/Planner/mppi.yaml", {}),
             ("configs/Planner/cem.yaml", {})]
 ENV = "SafetyPointGoal1-v0"
