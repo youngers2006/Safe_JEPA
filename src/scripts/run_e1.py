@@ -14,11 +14,12 @@ PLANNERS = {"SCP+MPPI": ("configs/Planner/scp.yaml", {"seed_sampler": "configs/P
             "CEM": ("configs/Planner/cem.yaml", {}),
             "SCP": ("configs/Planner/scp.yaml", {})} # pure SCP, the ablation
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(30))
-# Command line: margin_eps values and planner names, so each runs in its own process, e.g. python run_e1.py 0.2 SCP.
-# Without values, every margin_eps (the distance kept from every hazard's edge); without names, all but pure SCP
+# Command line: margin_eps values, planner names and a seed range, so runs can be split across processes, e.g.
+# python run_e1.py 0.2 SCP 10:20. Without values, every margin_eps (the distance kept from every hazard's edge); without
+# names, all but pure SCP; without a range, seeds 0 to 19
 ARGS = sys.argv[1:]
-MARGIN_EPS = [float(a) for a in ARGS if a not in PLANNERS] or [0.0, 0.1, 0.2, 0.3]
+SEEDS = next((list(range(*map(int, a.split(":")))) for a in ARGS if ":" in a), list(range(20)))
+MARGIN_EPS = [float(a) for a in ARGS if a not in PLANNERS and ":" not in a] or [0.0, 0.1, 0.2, 0.3]
 RUN = [a for a in ARGS if a in PLANNERS] or ["SCP+MPPI", "MPPI", "CEM"]
 
 def main():

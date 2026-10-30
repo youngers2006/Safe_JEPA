@@ -14,7 +14,7 @@ COMMON = "configs/Planner/common.yaml"
 PLANNERS = [("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"}), # saved as SCP+MPPI
             ("configs/Planner/mppi.yaml", {})]
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(30))
+SEEDS = list(range(20))
 MARGIN_EPS = 0.2
 
 def main():
