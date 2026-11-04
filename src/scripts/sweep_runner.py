@@ -123,7 +123,7 @@ def _info_arrays(info_log):
     return out
 
 def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
-              overrides, tag, render_mode=None):
+              overrides, tag, render_mode=None, name=None):
     env = sgym.make(env_name, render_mode=render_mode)
     obs_dim = env.observation_space.shape[0]
 
@@ -132,7 +132,7 @@ def run_point(seeds, wm_cfg, common_cfg, planner_cfg, env_name,
 
     out_dir = ROOT / "src/save_data/experiments" / cfg["data_dir"] / tag
     out_dir.mkdir(parents=True, exist_ok=True)
-    name = planner_name(cfg)
+    name = name or planner_name(cfg) # an explicit name keeps e.g. MPPI@32768 apart from MPPI
     with open(out_dir / f"{name}_config.yaml", "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
     out_file = out_dir / f"{name}_seeds_{seeds[0]}-{seeds[-1]}.csv"

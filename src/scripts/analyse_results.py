@@ -252,13 +252,21 @@ def pooled(rows):
 # Figures
 
 def ordered(planners):
-    return [p for p in PLANNER_ORDER if p in planners] + sorted(p for p in planners if p not in PLANNER_ORDER)
+    # PLANNER_ORDER first, each sampler followed by its other budgets (e.g. MPPI, then MPPI@32768), then the rest
+    base = lambda p: p.split("@")[0]
+    budget = lambda p: int(p.split("@")[1]) if "@" in p and p.split("@")[1].isdigit() else 0
+    rank = lambda p: PLANNER_ORDER.index(base(p)) if base(p) in PLANNER_ORDER else len(PLANNER_ORDER)
+    return sorted(planners, key=lambda p: (rank(p), base(p), budget(p)))
+
+def style(planner):
+    # A sampler at another budget (e.g. MPPI@32768) takes its sampler's colour, dashed
+    return {"color": COLOURS.get(planner.split("@")[0], "grey"), "ls": "--" if "@" in planner else "-"}
 
 def errorbar(ax, x, rows, key, planner, offset=0.0, **kw):
     y = np.array([r[key] for r in rows])
     lo, hi = np.array([r[f"{key}_lo"] for r in rows]), np.array([r[f"{key}_hi"] for r in rows])
-    ax.errorbar(np.asarray(x) + offset, y, yerr=[y - lo, hi - y], marker="o", capsize=3,
-                color=COLOURS.get(planner), label=planner, **kw)
+    ax.errorbar(np.asarray(x) + offset, y, yerr=[y - lo, hi - y], marker="o", capsize=3, label=planner,
+                **{**style(planner), **kw})
 
 def plot_e1(path, title, pts, summary):
     values, name = [p["value"] for p in pts], pts[0]["name"]
@@ -272,7 +280,7 @@ def plot_e1(path, title, pts, summary):
         errorbar(axes[0], xs, rows, "rate", pl, off)
         errorbar(axes[1], xs, rows, "return", pl, off)
         errorbar(axes[2], xs, rows, "goals", pl, off)
-        axes[3].plot([r["rate"] for r in rows], [r["return"] for r in rows], "o-", color=COLOURS.get(pl), label=pl)
+        axes[3].plot([r["rate"] for r in rows], [r["return"] for r in rows], marker="o", label=pl, **style(pl))
         for x, r in zip(xs, rows):
             axes[3].annotate(f"{x:g}", (r["rate"], r["return"]), fontsize=7, xytext=(3, 3), textcoords="offset points")
     for ax, label in zip(axes, ["violation rate (95% Wilson interval)", "episode return (95% bootstrap interval)",
@@ -294,7 +302,7 @@ def plot_survival(path, title, pts, tests):
             steps, viol = np.array([e["steps"] for e in eps]), np.array([e["violated"] for e in eps])
             t = np.arange(steps.max() + 1)
             ax.step(t, 1 - np.mean(viol[None] & (steps[None] <= t[:, None]), axis=1), where="post",
-                    color=COLOURS.get(pl), label=f"{pl} ({viol.sum()}/{len(viol)})")
+                    label=f"{pl} ({viol.sum()}/{len(viol)})", **style(pl))
         t = tests.get((p["data_dir"], p["tag"], "MPPI"))
         ax.set_title(f"{p['name']} {p['value']:g}" + (f", vs MPPI log-rank p={t['p_logrank']:.2g}" if t else ""),
                      fontsize=9)
@@ -410,7 +418,7 @@ def plot_certificates(path, title, pts, summary):
         rows = [summary[(p["data_dir"], p["tag"], pl)] for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS]
         for j, key in enumerate(("viol_soon_after_safe", "viol_soon_after_unsafe")):
             axes[1].bar(i + 0.4 * j - 0.2, nan_stat(np.mean, [r.get(key, np.nan) for r in rows]), width=0.4,
-                        color=COLOURS.get(pl), alpha=1.0 if j == 0 else 0.4, hatch=None if j == 0 else "//")
+                        color=style(pl)["color"], alpha=1.0 if j == 0 else 0.4, hatch=None if j == 0 else "//")
     axes[1].set_xticks(range(len(planners)))
     axes[1].set_xticklabels(planners)
     axes[1].set_ylabel(f"share of steps followed by a violation within one horizon (eps >= {POOL_MIN_EPS})")
@@ -496,13 +504,13 @@ def main():
         pts.sort(key=lambda p: p["value"])
         model, name = pts[0]["model"], pts[0]["name"]
         lines += ["", f"=== {model} ({data_dir}), {sweep} ===",
-                  f"{name:>5s} {'planner':9s} {'n':>3s} {'violations':>10s} {'rate [95% CI]':>18s} "
+                  f"{name:>5s} {'planner':11s} {'n':>3s} {'violations':>10s} {'rate [95% CI]':>18s} "
                   f"{'return [95% CI]':>22s} {'goals':>6s} {'plan time':>9s} {'latent-safe':>11s} {'certified':>9s} "
                   f"{'sampled start':>13s}"]
         for p in pts:
             for pl in ordered(p["planners"]):
                 r = summary[(data_dir, p["tag"], pl)]
-                lines.append(f"{p['value']:5g} {pl:9s} {r['n']:3d} {r['violations']:>4d}/{r['n']:<5d} "
+                lines.append(f"{p['value']:5g} {pl:11s} {r['n']:3d} {r['violations']:>4d}/{r['n']:<5d} "
                              f"{r['rate']:5.2f} [{r['rate_lo']:.2f}, {r['rate_hi']:.2f}] "
                              f"{r['return']:7.2f} [{r['return_lo']:6.2f}, {r['return_hi']:6.2f}] {r['goals']:6.2f} "
                              f"{fmt_time(r['plan_time_med'])} {r.get('latent_safe', np.nan):11.2f} "
@@ -542,7 +550,7 @@ def main():
             rows = [summary[(data_dir, p["tag"], pl)] for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS]
             vals = {k: nan_stat(np.mean, [r.get(k, np.nan) for r in rows])
                     for k in ("viol_soon_after_safe", "viol_soon_after_unsafe", "violations_warned")}
-            lines.append(f"    {pl:9s} {vals['viol_soon_after_safe']:.4f} / {vals['viol_soon_after_unsafe']:.4f}, "
+            lines.append(f"    {pl:11s} {vals['viol_soon_after_safe']:.4f} / {vals['viol_soon_after_unsafe']:.4f}, "
                          f"warned {vals['violations_warned']:.2f}")
         title, stem = f"{model}: {sweep}", f"{sweep}_{data_dir}"
         plot_e1(out / f"{stem}.png", title, pts, summary)
@@ -558,13 +566,13 @@ def main():
                       and np.isclose(p["eps"], e2_pts[0]["eps"])), None)
         model = e2_pts[0]["model"]
         lines += ["", f"=== {model} ({data_dir}): E2 at eps {e2_pts[0]['eps']:g} ===",
-                  f"{'planner':9s} {'sequences':>9s} {'n':>3s} {'rate [95% CI]':>18s} {'return':>7s} "
+                  f"{'planner':11s} {'sequences':>9s} {'n':>3s} {'rate [95% CI]':>18s} {'return':>7s} "
                   f"{'plan time logged / idle':>24s}"]
         for p in e2_pts:
             for pl in ordered(p["planners"]):
                 r = summary[(data_dir, p["tag"], pl)]
                 idle = timing.get((data_dir, pl, int(p["value"])))
-                lines.append(f"{pl:9s} {int(p['value']):9d} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
+                lines.append(f"{pl:11s} {int(p['value']):9d} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
                              f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_med']:10.3f}s / "
                              f"{'-' if idle is None else f'{idle:.3f}s'}")
         if e1_pt is not None:
@@ -572,7 +580,7 @@ def main():
                 if pl in e1_pt["planners"]:
                     r = summary[(data_dir, e1_pt["tag"], pl)]
                     idle = timing.get((data_dir, pl, None))
-                    lines.append(f"{pl:9s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
+                    lines.append(f"{pl:11s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
                                  f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_med']:10.3f}s / "
                                  f"{'-' if idle is None else f'{idle:.3f}s'}")
         plot_e2(out / f"e2_eps{e2_pts[0]['eps']:g}_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
