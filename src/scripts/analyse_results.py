@@ -120,8 +120,9 @@ def episode_summary(path):
     return ep
 
 def tag_parts(tag):
-    # "e1/eps_0.2" -> ("e1", "eps", 0.2); "timing/mppi_J_512" -> ("timing", "mppi_J_512", nan)
-    sweep, _, rest = tag.partition("/")
+    # The last folder names the swept value, the rest the sweep: "e1/eps_0.2" -> ("e1", "eps", 0.2),
+    # "e2/eps_0.5/J_512" -> ("e2/eps_0.5", "J", 512); "timing/mppi_J_512" -> ("timing", "mppi_J_512", nan)
+    sweep, _, rest = tag.rpartition("/")
     m = re.fullmatch(r"([A-Za-z]+)_(-?[\d.]+(?:e-?\d+)?)", rest)
     return (sweep, m.group(1), float(m.group(2))) if m else (sweep, rest, np.nan)
 
@@ -339,7 +340,7 @@ def plot_e2(path, model, e2_pts, e1_pt, summary, timing):
         ax.set_xlabel("plan time per step (s); filled: idle timing, hollow: logged during the runs")
         ax.set_ylabel(label)
         ax.legend(fontsize=8)
-    fig.suptitle(f"{model}: E2, plan time against safety and return")
+    fig.suptitle(f"{model}: E2 at eps {e2_pts[0]['eps']:g}, plan time against safety and return")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -427,6 +428,9 @@ def fmt_time(t):
 def fmt_p(p):
     return "nan" if p is None or np.isnan(p) else (f"{p:.3f}" if p >= 1e-3 else f"{p:.1e}")
 
+def is_e2(p):
+    return p["sweep"] == "e2" or p["sweep"].startswith("e2/")
+
 def write_csv(path, rows):
     if not rows:
         return
@@ -479,7 +483,7 @@ def main():
     # grouped by world model and sweep
     e1 = {}
     for p in points:
-        if p["sweep"] not in ("e2", "timing") and not np.isnan(p["eps"]):
+        if not is_e2(p) and p["sweep"] != "timing" and not np.isnan(p["eps"]):
             e1.setdefault((p["task"], p["bound"], p["horizon"], p["data_dir"], p["sweep"]), []).append(p)
     same_model = {}
     for task, bound, horizon, data_dir, sweep in e1:
@@ -546,9 +550,9 @@ def main():
         if any(pl in p["planners"] for p in pts for pl in ("SCP+MPPI", "SCP")):
             plot_certificates(out / f"certificates_{stem}.png", title, pts, summary)
 
-    # E2: samplers over their budgets, with the same model's E1 point at E2's margin_eps
-    for data_dir in sorted({p["data_dir"] for p in points if p["sweep"] == "e2"}):
-        e2_pts = sorted((p for p in points if p["sweep"] == "e2" and p["data_dir"] == data_dir),
+    # E2: samplers over their budgets at each margin_eps run, with the same model's E1 point at that margin_eps
+    for data_dir, sweep in sorted({(p["data_dir"], p["sweep"]) for p in points if is_e2(p)}):
+        e2_pts = sorted((p for p in points if p["sweep"] == sweep and p["data_dir"] == data_dir),
                         key=lambda p: p["value"])
         e1_pt = next((p for p in points if p["data_dir"] == data_dir and p["sweep"] == "e1"
                       and np.isclose(p["eps"], e2_pts[0]["eps"])), None)
@@ -571,7 +575,7 @@ def main():
                     lines.append(f"{pl:9s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
                                  f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_med']:10.3f}s / "
                                  f"{'-' if idle is None else f'{idle:.3f}s'}")
-        plot_e2(out / f"e2_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
+        plot_e2(out / f"e2_eps{e2_pts[0]['eps']:g}_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
 
     # Lipschitz bound: the horizon-10 models of each task, by bound, on E1
     for task in sorted({k[0] for k in e1}):
