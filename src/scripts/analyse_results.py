@@ -321,7 +321,7 @@ def plot_e2(path, model, e2_pts, e1_pt, summary, timing):
     # single points. Filled markers use idle-machine timing (check_timing.py), hollow ones the times logged in the runs
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     def time_of(pt, pl, J):
-        t = timing.get((pt["data_dir"], pl, J))
+        t = timing.get((pt["data_dir"], pl, J) if J is not None else (pt["data_dir"], pl, None, pt["eps"]))
         return ((t.mean(), True) if t is not None
                 else (summary[(pt["data_dir"], pt["tag"], pl)]["plan_time_mean"], False))
     for pl in ordered({pl for p in e2_pts for pl in p["planners"]}):
@@ -480,36 +480,44 @@ def main():
                     if t is not None:
                         tests[(p["data_dir"], p["tag"], pl)] = t
 
-    # Idle-machine plan times from check_timing.py: (data_dir, planner, sampled sequences or None) -> every timed step
+    # Idle-machine plan times from check_timing.py, every timed step: (data_dir, sampler, sampled sequences) for the
+    # samplers, whose time barely depends on margin_eps, and (data_dir, planner, None, margin_eps) for SCP
     timing = {}
     for p in points:
         if p["sweep"] == "timing":
             m = re.search(r"_J_(\d+)", p["name"])
+            e = re.search(r"_eps(-?[\d.]+)$", p["name"])
             for pl, episodes in p["planners"].items():
-                t = np.concatenate([e["plan_times"] for e in episodes.values()])
+                t = np.concatenate([e_["plan_times"] for e_ in episodes.values()])
                 if np.any(~np.isnan(t)):
-                    timing[(p["data_dir"], pl, int(m.group(1)) if m else None)] = t[~np.isnan(t)]
+                    key = ((p["data_dir"], pl, int(m.group(1))) if m else
+                           (p["data_dir"], pl, None, float(e.group(1)) if e else 0.2))
+                    timing[key] = t[~np.isnan(t)]
     for data_dir in sorted({k[0] for k in timing}):
-        # A sampler's time is nearly constant while SCP+MPPI's varies with its iterations: the matched budget is the
-        # smallest whose mean is at least SCP+MPPI's (at least as much compute per episode)
+        # A sampler's time is nearly constant while SCP+MPPI's varies with its iterations and with margin_eps: the
+        # matched budget is the smallest whose mean is at least SCP+MPPI's at its slowest eps (at least as much compute
+        # per episode at every eps)
         lines += ["", f"=== Plan time per step (s), idle timing runs ({data_dir}) ===",
-                  f"{'planner':11s} {'sequences':>9s} {'steps':>6s} {'median':>7s} {'mean':>7s} {'p90':>7s} "
-                  f"{'p99':>7s}"]
+                  f"{'planner':11s} {'sequences':>9s} {'eps':>5s} {'steps':>6s} {'median':>7s} {'mean':>7s} "
+                  f"{'p90':>7s} {'p99':>7s}"]
         keys = sorted((k for k in timing if k[0] == data_dir), key=lambda k: (
-            PLANNER_ORDER.index(k[1]) if k[1] in PLANNER_ORDER else len(PLANNER_ORDER), k[2] or 0))
-        for _, pl, J in keys:
-            t = timing[(data_dir, pl, J)]
-            lines.append(f"{pl:11s} {'-' if J is None else J:>9} {len(t):6d} {np.median(t):7.3f} {t.mean():7.3f} "
-                         f"{np.percentile(t, 90):7.3f} {np.percentile(t, 99):7.3f}")
-        ref = timing.get((data_dir, MAIN, None))
+            PLANNER_ORDER.index(k[1]) if k[1] in PLANNER_ORDER else len(PLANNER_ORDER), k[2] or 0,
+            k[3] if len(k) > 3 else 0))
+        for k in keys:
+            t, J = timing[k], k[2]
+            lines.append(f"{k[1]:11s} {'-' if J is None else J:>9} {'-' if len(k) < 4 else f'{k[3]:g}':>5} "
+                         f"{len(t):6d} {np.median(t):7.3f} {t.mean():7.3f} {np.percentile(t, 90):7.3f} "
+                         f"{np.percentile(t, 99):7.3f}")
+        refs = [timing[k] for k in keys if k[1] == MAIN and k[2] is None]
+        ref = max(refs, key=np.mean) if refs else None
         for s in ("MPPI", "CEM"):
-            budgets = sorted(J for d, pl, J in timing if d == data_dir and pl == s and J is not None)
+            budgets = sorted(k[2] for k in timing if k[0] == data_dir and k[1] == s and k[2] is not None)
             matched = [J for J in budgets if ref is not None and timing[(data_dir, s, J)].mean() >= ref.mean()]
             if ref is not None and matched:
                 t = timing[(data_dir, s, matched[0])]
                 lines.append(f"  {s}: matched budget {matched[0]} (mean {t.mean():.3f} s, at least {MAIN}'s "
-                             f"{ref.mean():.3f} s); {MAIN} planned for longer than that on "
-                             f"{np.mean(ref > t.mean()):.1%} of steps")
+                             f"{ref.mean():.3f} s at its slowest eps); {MAIN} planned for longer than that on "
+                             f"{np.mean(ref > t.mean()):.1%} of its steps there")
             elif ref is not None and budgets:
                 lines.append(f"  {s}: no budget reaches {MAIN}'s mean ({ref.mean():.3f} s)")
 
@@ -605,7 +613,7 @@ def main():
             for pl in ("SCP+MPPI", "SCP"):
                 if pl in e1_pt["planners"]:
                     r = summary[(data_dir, e1_pt["tag"], pl)]
-                    idle = timing.get((data_dir, pl, None))
+                    idle = timing.get((data_dir, pl, None, e1_pt["eps"]))
                     lines.append(f"{pl:11s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
                                  f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_mean']:15.3f}s / "
                                  f"{'-' if idle is None else f'{idle.mean():.3f}s'}")
