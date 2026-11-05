@@ -194,7 +194,8 @@ def planner_row(episodes, horizon):
            "return": ret.mean(), "return_lo": boot_ci(ret)[0], "return_hi": boot_ci(ret)[1],
            "goals": goals.mean(), "goals_lo": boot_ci(goals)[0], "goals_hi": boot_ci(goals)[1],
            "steps": np.mean([e["steps"] for e in eps]),
-           "plan_time_med": nan_stat(np.median, pt), "plan_time_p90": nan_stat(np.percentile, pt, 90)}
+           "plan_time_med": nan_stat(np.median, pt), "plan_time_mean": nan_stat(np.mean, pt),
+           "plan_time_p90": nan_stat(np.percentile, pt, 90), "plan_time_p99": nan_stat(np.percentile, pt, 99)}
     # Latent safety: the share of executed plans that met the barrier in the model, and how often a violation followed
     # within one horizon of a plan that did or did not
     if all("latent_safe" in e for e in eps):
@@ -317,11 +318,12 @@ def plot_survival(path, title, pts, tests):
 
 def plot_e2(path, model, e2_pts, e1_pt, summary, timing):
     # Violation rate and return against plan time per step: the samplers over their budgets, SCP+MPPI and SCP as
-    # single points. Filled markers use idle-machine timing (run_timing.py), hollow ones the times logged in the runs
+    # single points. Filled markers use idle-machine timing (check_timing.py), hollow ones the times logged in the runs
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     def time_of(pt, pl, J):
         t = timing.get((pt["data_dir"], pl, J))
-        return (t, True) if t is not None else (summary[(pt["data_dir"], pt["tag"], pl)]["plan_time_med"], False)
+        return ((t.mean(), True) if t is not None
+                else (summary[(pt["data_dir"], pt["tag"], pl)]["plan_time_mean"], False))
     for pl in ordered({pl for p in e2_pts for pl in p["planners"]}):
         pts = sorted((p for p in e2_pts if pl in p["planners"]), key=lambda p: p["value"])
         xs, idle = zip(*[time_of(p, pl, int(p["value"])) for p in pts])
@@ -345,7 +347,7 @@ def plot_e2(path, model, e2_pts, e1_pt, summary, timing):
                             label=f"{pl} (E1, eps {e1_pt['eps']:g})")
     for ax, label in zip(axes, ("violation rate (95% Wilson interval)", "episode return (95% bootstrap interval)")):
         ax.set_xscale("log")
-        ax.set_xlabel("plan time per step (s); filled: idle timing, hollow: logged during the runs")
+        ax.set_xlabel("mean plan time per step (s); filled: idle timing, hollow: logged during the runs")
         ax.set_ylabel(label)
         ax.legend(fontsize=8)
     fig.suptitle(f"{model}: E2 at eps {e2_pts[0]['eps']:g}, plan time against safety and return")
@@ -478,14 +480,38 @@ def main():
                     if t is not None:
                         tests[(p["data_dir"], p["tag"], pl)] = t
 
-    # Idle-machine plan times from run_timing.py: (data_dir, planner, sampled sequences or None) -> median per step
+    # Idle-machine plan times from check_timing.py: (data_dir, planner, sampled sequences or None) -> every timed step
     timing = {}
     for p in points:
         if p["sweep"] == "timing":
             m = re.search(r"_J_(\d+)", p["name"])
             for pl, episodes in p["planners"].items():
-                timing[(p["data_dir"], pl, int(m.group(1)) if m else None)] = nan_stat(np.median, np.concatenate(
-                    [e["plan_times"] for e in episodes.values()]))
+                t = np.concatenate([e["plan_times"] for e in episodes.values()])
+                if np.any(~np.isnan(t)):
+                    timing[(p["data_dir"], pl, int(m.group(1)) if m else None)] = t[~np.isnan(t)]
+    for data_dir in sorted({k[0] for k in timing}):
+        # A sampler's time is nearly constant while SCP+MPPI's varies with its iterations: the matched budget is the
+        # smallest whose mean is at least SCP+MPPI's (at least as much compute per episode)
+        lines += ["", f"=== Plan time per step (s), idle timing runs ({data_dir}) ===",
+                  f"{'planner':11s} {'sequences':>9s} {'steps':>6s} {'median':>7s} {'mean':>7s} {'p90':>7s} "
+                  f"{'p99':>7s}"]
+        keys = sorted((k for k in timing if k[0] == data_dir), key=lambda k: (
+            PLANNER_ORDER.index(k[1]) if k[1] in PLANNER_ORDER else len(PLANNER_ORDER), k[2] or 0))
+        for _, pl, J in keys:
+            t = timing[(data_dir, pl, J)]
+            lines.append(f"{pl:11s} {'-' if J is None else J:>9} {len(t):6d} {np.median(t):7.3f} {t.mean():7.3f} "
+                         f"{np.percentile(t, 90):7.3f} {np.percentile(t, 99):7.3f}")
+        ref = timing.get((data_dir, MAIN, None))
+        for s in ("MPPI", "CEM"):
+            budgets = sorted(J for d, pl, J in timing if d == data_dir and pl == s and J is not None)
+            matched = [J for J in budgets if ref is not None and timing[(data_dir, s, J)].mean() >= ref.mean()]
+            if ref is not None and matched:
+                t = timing[(data_dir, s, matched[0])]
+                lines.append(f"  {s}: matched budget {matched[0]} (mean {t.mean():.3f} s, at least {MAIN}'s "
+                             f"{ref.mean():.3f} s); {MAIN} planned for longer than that on "
+                             f"{np.mean(ref > t.mean()):.1%} of steps")
+            elif ref is not None and budgets:
+                lines.append(f"  {s}: no budget reaches {MAIN}'s mean ({ref.mean():.3f} s)")
 
     # E1-type points: every sweep but E2 and the timing runs (E1's margin_eps, the horizon tests, any later sweep),
     # grouped by world model and sweep
@@ -567,22 +593,22 @@ def main():
         model = e2_pts[0]["model"]
         lines += ["", f"=== {model} ({data_dir}): E2 at eps {e2_pts[0]['eps']:g} ===",
                   f"{'planner':11s} {'sequences':>9s} {'n':>3s} {'rate [95% CI]':>18s} {'return':>7s} "
-                  f"{'plan time logged / idle':>24s}"]
+                  f"{'mean plan time logged / idle':>29s}"]
         for p in e2_pts:
             for pl in ordered(p["planners"]):
                 r = summary[(data_dir, p["tag"], pl)]
                 idle = timing.get((data_dir, pl, int(p["value"])))
                 lines.append(f"{pl:11s} {int(p['value']):9d} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
-                             f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_med']:10.3f}s / "
-                             f"{'-' if idle is None else f'{idle:.3f}s'}")
+                             f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_mean']:15.3f}s / "
+                             f"{'-' if idle is None else f'{idle.mean():.3f}s'}")
         if e1_pt is not None:
             for pl in ("SCP+MPPI", "SCP"):
                 if pl in e1_pt["planners"]:
                     r = summary[(data_dir, e1_pt["tag"], pl)]
                     idle = timing.get((data_dir, pl, None))
                     lines.append(f"{pl:11s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
-                                 f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_med']:10.3f}s / "
-                                 f"{'-' if idle is None else f'{idle:.3f}s'}")
+                                 f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_mean']:15.3f}s / "
+                                 f"{'-' if idle is None else f'{idle.mean():.3f}s'}")
         plot_e2(out / f"e2_eps{e2_pts[0]['eps']:g}_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
 
     # Lipschitz bound: the horizon-10 models of each task, by bound, on E1
