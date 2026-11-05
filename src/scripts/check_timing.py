@@ -27,6 +27,9 @@ SEEDS = [0, 1, 2]
 STEPS = 200
 BUDGETS = [64, 256, 512, 2048, 8192, 32768, 131072] # E2's
 SAMPLERS = ("mppi", "cem")
+# The agent builds a new controller at every reset, so JAX recompiles the sampler on each episode's first two steps
+# (about 10x a normal step): JIT compilation, not planning, so left out of every statistic
+COMPILE_STEPS = 2
 ARGS = sys.argv[1:]
 ONLY = [int(a[1:]) for a in ARGS if re.fullmatch(r"J\d+", a)]
 EPS = [float(a) for a in ARGS if re.fullmatch(r"-?\d*\.?\d+", a)]
@@ -55,7 +58,7 @@ def summarise():
     for d in sorted(base.iterdir()) if base.exists() else []:
         files = sorted(d.glob("*_seed_*.npz")) if d.is_dir() else []
         if files:
-            times[d.name] = np.concatenate([np.load(f)["plan_times"] for f in files])
+            times[d.name] = np.concatenate([np.load(f)["plan_times"][COMPILE_STEPS:] for f in files])
     eps_of = lambda name: float(name.rsplit("_eps", 1)[1]) if "_eps" in name else 0.2
     refs = {eps_of(n): t for n, t in times.items() if re.fullmatch(r"scp_mppi(_eps-?[\d.]+)?", n)}
     ref_eps = max(refs, key=lambda e: refs[e].mean()) if refs else None

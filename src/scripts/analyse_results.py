@@ -26,6 +26,9 @@ COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "C
 BOUND_COLOURS = {1.2: "tab:red", 1.5: "tab:blue", np.inf: "tab:gray"}
 TAU, FEAS_TOL = 0.0, 1e-3 # a plan meets the barrier in the model when its worst step's risk is at most TAU + FEAS_TOL
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
+# The agent builds a new controller at every reset, so JAX recompiles on each episode's first two steps (about 10x a
+# normal step): JIT compilation, not planning, so left out of every plan-time statistic
+COMPILE_STEPS = 2
 POOL_MIN_EPS = 0.1 # pooled tests use every margin_eps from this up (the points with a buffer)
 N_BOOT = 10_000
 RNG = np.random.default_rng(0)
@@ -108,7 +111,7 @@ def episode_summary(path):
     T = len(rewards)
     ep = {"steps": T, "violated": bool(violations[-1]), "return": float(rewards.sum()),
           "goals": int(np.sum(rewards > GOAL_THRESHOLD)),
-          "plan_times": d["plan_times"] if "plan_times" in d.files else np.full(T, np.nan)}
+          "plan_times": d["plan_times"][COMPILE_STEPS:] if "plan_times" in d.files else np.full(T, np.nan)}
     if "info_pred_risk" in d.files: # per step: does the executed plan meet the barrier in the model?
         ep["latent_safe"] = d["info_pred_risk"].reshape(T, -1).max(axis=1) <= TAU + FEAS_TOL
     for k in ("stop_reason", "start"):
