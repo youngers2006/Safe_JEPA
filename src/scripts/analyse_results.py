@@ -21,8 +21,9 @@ ARGS.add_argument("--out", type=Path, default=None, help="output folder (default
 ARGS.add_argument("--prefix", default="M2_", help="only world model folders starting with this ('' for all)")
 
 MAIN = "SCP+MPPI" # the planner compared against every other one
-PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "CEM"]
-COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "CEM": "tab:green"}
+PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "MPPI+CBF", "CEM", "CEM+CBF"]
+COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "MPPI+CBF": "tab:brown",
+           "CEM": "tab:green", "CEM+CBF": "tab:olive"}
 BOUND_COLOURS = {1.2: "tab:red", 1.5: "tab:blue", np.inf: "tab:gray"}
 TAU, FEAS_TOL = 0.0, 1e-3 # a plan meets the barrier in the model when its worst step's risk is at most TAU + FEAS_TOL
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
@@ -120,6 +121,9 @@ def episode_summary(path):
     for k in ("certified", "iterations"):
         if f"info_{k}" in d.files:
             ep[k] = d[f"info_{k}"].astype(float)
+    if "info_filter_active" in d.files: # the one-step safety filter: did it change the action, and did that work?
+        ep["filter_active"] = d["info_filter_active"].astype(bool)
+        ep["filter_met"] = d["info_filter_q_after"] <= TAU + FEAS_TOL
     return ep
 
 def tag_parts(tag):
@@ -223,6 +227,10 @@ def planner_row(episodes, horizon):
             row["iterations"] = np.concatenate([e["iterations"] for e in eps]).mean()
     if all("start" in e for e in eps):
         row["sampled_start"] = np.mean(np.concatenate([e["start"] for e in eps]) == "sampled")
+    if all("filter_active" in e for e in eps):
+        active = np.concatenate([e["filter_active"] for e in eps])
+        met = np.concatenate([e["filter_met"] for e in eps])
+        row.update({"filter_active": active.mean(), "filter_met": met[active].mean() if active.any() else np.nan})
     return row
 
 def compare(a, b):
@@ -586,9 +594,13 @@ def main():
         for pl in ordered({pl for p in pts for pl in p["planners"]}):
             rows = [summary[(data_dir, p["tag"], pl)] for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS]
             vals = {k: nan_stat(np.mean, [r.get(k, np.nan) for r in rows])
-                    for k in ("viol_soon_after_safe", "viol_soon_after_unsafe", "violations_warned")}
+                    for k in ("viol_soon_after_safe", "viol_soon_after_unsafe", "violations_warned", "filter_active",
+                              "filter_met")}
             lines.append(f"    {pl:11s} {vals['viol_soon_after_safe']:.4f} / {vals['viol_soon_after_unsafe']:.4f}, "
-                         f"warned {vals['violations_warned']:.2f}")
+                         f"warned {vals['violations_warned']:.2f}"
+                         + (f"; safety filter changed the action on {vals['filter_active']:.1%} of steps and met the "
+                            f"barrier after {vals['filter_met']:.0%} of those"
+                            if not np.isnan(vals["filter_active"]) else ""))
         title, stem = f"{model}: {sweep}", f"{sweep}_{data_dir}"
         plot_e1(out / f"{stem}.png", title, pts, summary)
         plot_survival(out / f"survival_{stem}.png", title, pts, tests)

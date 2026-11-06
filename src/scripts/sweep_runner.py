@@ -65,12 +65,13 @@ def make_agent(cfg, obs_dim):
     return agent
 
 def planner_name(cfg):
-    # SCP started from a sampler's plan is saved apart from pure SCP, e.g. as "SCP+CEM"
-    seed = cfg.get("seed_sampler")
-    if not seed:
-        return cfg["controller"]
-    with open(ROOT / seed) as f:
-        return f"{cfg['controller']}+{yaml.safe_load(f)['controller']}"
+    # SCP started from a sampler's plan is saved apart from pure SCP, e.g. as "SCP+CEM"; a planner with the one-step
+    # safety filter gets "+CBF", e.g. "MPPI+CBF"
+    name, seed = cfg["controller"], cfg.get("seed_sampler")
+    if seed:
+        with open(ROOT / seed) as f:
+            name += "+" + yaml.safe_load(f)["controller"]
+    return name + ("+CBF" if cfg.get("safety_filter") else "")
 
 def warmup(agent, env, seed):
     """One discarded act() so JIT compilation stays out of the timed loop.

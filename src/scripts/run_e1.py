@@ -13,16 +13,20 @@ COMMON = "configs/Planner/common.yaml"
 PLANNERS = {"SCP+MPPI": ("configs/Planner/scp.yaml", {"seed_sampler": "configs/Planner/mppi.yaml"}),
             "MPPI": ("configs/Planner/mppi.yaml", {}),
             "CEM": ("configs/Planner/cem.yaml", {}),
+            "MPPI+CBF": ("configs/Planner/mppi.yaml", {"safety_filter": True}), # one-step barrier filter
+            "CEM+CBF": ("configs/Planner/cem.yaml", {"safety_filter": True}),
             "SCP": ("configs/Planner/scp.yaml", {})} # pure SCP, the ablation
 # Command line: the world model (a config name in configs/wmTraining), margin_eps values, planner names and a seed
 # range, so runs can be split across processes, e.g. python run_e1.py pg2_c_1_2_model 0.2 SCP 0:30. Without a model,
 # pg1_c_1_5_model; without values, every margin_eps (the distance kept from every hazard's edge); without names, all
 # but pure SCP; without a range, seeds 0 to 19. The model's name gives its task, and its training windows its planning
-# horizon (train_horizon - 1). MPPI@<J> or CEM@<J> runs that sampler with J sequences per iteration (top_k J/8, as in
-# E2), saved under that name beside the default-budget runs, e.g. python run_e1.py 0.5 MPPI@32768 0:30
+# horizon (train_horizon - 1). MPPI@<J>, CEM@<J>, MPPI+CBF@<J> or CEM+CBF@<J> runs that sampler with J sequences per
+# iteration (top_k J/8, as in E2), saved under that name beside the default-budget runs, e.g. python run_e1.py 0.5
+# MPPI+CBF@65536 0:30
 ARGS = sys.argv[1:]
-BUDGETED = {a: (PLANNERS[m.group(1)][0], {"num_seqs": int(m.group(2)), "top_k": max(2, round(int(m.group(2)) / 8))})
-            for a in ARGS if (m := re.fullmatch(r"(MPPI|CEM)@(\d+)", a))}
+BUDGETED = {a: (PLANNERS[m.group(1)][0], {**PLANNERS[m.group(1)][1], "num_seqs": int(m.group(2)),
+                                          "top_k": max(2, round(int(m.group(2)) / 8))})
+            for a in ARGS if (m := re.fullmatch(r"((?:MPPI|CEM)(?:\+CBF)?)@(\d+)", a))}
 MODEL = next((a for a in ARGS if (ROOT / f"configs/wmTraining/{a}.yaml").exists()), "pg1_c_1_5_model")
 WM_CFG = f"configs/wmTraining/{MODEL}.yaml"
 ENV = {"pg1": "SafetyPointGoal1-v0", "pg2": "SafetyPointGoal2-v0"}[MODEL[:3]]

@@ -10,6 +10,7 @@ from ..world_model.world_model import WorldModel
 from ..nn.mlp import MarginBarrier
 from ..SCP_control.SCPController import SCPController
 from ..Sampling_control.SamplingController import SamplingController
+from .safety_filter import safety_filter
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -85,5 +86,11 @@ class SafeJEPAAgent:
             u, self.q_prev, info = self.controller.step(
                 z_c, self.wm_networks, sub, q_prev=self.q_prev
             )
+
+        # Optional one-step safety filter: the smallest change to the executed action that meets the barrier at the
+        # next step (the MPPI+CBF baseline); the plan and the planner's warm start are left as they were
+        if self.cfg.get("safety_filter"):
+            u, filter_info = safety_filter(self.wm_networks[3], z_c, u, *self.cfg["action_bounds"])
+            info = {**info, **filter_info}
         self.last_info = {k: np.asarray(v) for k, v in info.items()}
         return np.asarray(u)
