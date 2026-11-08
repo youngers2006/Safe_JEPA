@@ -21,7 +21,8 @@ PREFIX = "M2_" # only world model folders starting with this ("" for all)
 # pair with its seeds, named with their budget from their config: a sampler's sequences ("MPPI@65536"), SCP's iteration
 # cap ("SCP+MPPI@100it"). Each rule maps such a folder (its path below the world model's folder) to that point's
 BUDGET_DIRS = {r"e1/eps_t_matched_(.+)": r"e1/eps_\1", # time-matched samplers beside E1's margin_eps sweep
-               r"e4_extended_budget/(.+)": r"e4/\1"} # larger budgets beside the horizon tests
+               r"e4_extended_budget[^/]*/(.+)": r"e4/\1"} # larger budgets beside the horizon tests, e.g.
+                                                          # e4_extended_budget_130k/H_30 beside e4_extended_budget/H_30
 
 MAIN = "SCP+MPPI" # the planner compared against every other one
 PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "MPPI+CBF", "CEM", "CEM+CBF"]
