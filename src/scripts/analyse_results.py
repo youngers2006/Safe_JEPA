@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "src/save_data/experiments" # the merged experiments folder
 OUT = RESULTS / "analysis_results"
 PREFIX = "M2_" # only world model folders starting with this ("" for all)
+# Time-matched sampler runs in their own folder beside E1's (e1/eps_t_matched_0.2/MPPI_seed_0.npz) join E1's eps_0.2
+# point as "MPPI@<num_seqs>", num_seqs from their config, so they pair with its seeds
+MATCHED_DIR = r"eps_t_matched_(-?[\d.]+)"
 
 MAIN = "SCP+MPPI" # the planner compared against every other one
 PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "MPPI+CBF", "CEM", "CEM+CBF"]
@@ -147,39 +150,50 @@ def model_info(data_dir, cfg):
     return {"task": task, "bound": bound, "horizon": horizon,
             "model": f"PG{task} c{'inf' if np.isinf(bound) else f'{bound:g}'} H{horizon}"}
 
-def check_point(point_dir, planners, configs, warnings):
+def check_point(point_dir, sources, configs, warnings):
     # Overlapping seed ranges for a planner (e.g. a test run's CSV beside the final one) and settings that differ
-    # between the planners of one point
-    for planner in planners:
+    # between the planners of one point. sources: each planner's folder and the name its files were saved under
+    for folder, name in sources.values():
         ranges = []
-        for f in point_dir.glob(f"{glob.escape(planner)}_seeds_*.csv"):
-            m = re.fullmatch(rf"{re.escape(planner)}_seeds_(\d+)-(\d+)\.csv", f.name)
+        for f in folder.glob(f"{glob.escape(name)}_seeds_*.csv"):
+            m = re.fullmatch(rf"{re.escape(name)}_seeds_(\d+)-(\d+)\.csv", f.name)
             if m:
                 ranges.append((int(m.group(1)), int(m.group(2))))
         ranges.sort()
         if any(b0 <= a1 for (a0, a1), (b0, b1) in zip(ranges, ranges[1:])):
-            warnings.append(f"{point_dir}: {planner} has overlapping seed ranges {ranges}; check which run wrote the "
+            warnings.append(f"{folder}: {name} has overlapping seed ranges {ranges}; check which run wrote the "
                             f"seed files")
     for key in ("rho_u", "barrier_alpha", "horizon", "data_dir", "margin_eps"):
         values = {p: str(c.get(key)) for p, c in configs.items() if c}
         if len(set(values.values())) > 1:
             warnings.append(f"{point_dir}: {key} differs between planners: {values}")
 
+def point_name(folder, saved, rel):
+    # The point (tag) and planner name a seed file counts under: its own folder and saved name, except a time-matched
+    # run's (MATCHED_DIR), which joins E1's point at its eps under its name and budget
+    m = re.fullmatch(MATCHED_DIR, rel[-1])
+    if m is None:
+        return "/".join(rel[1:]), saved
+    cfg = folder / f"{saved}_config.yaml"
+    J = yaml.safe_load(open(cfg)).get("num_seqs") if cfg.exists() else None
+    return "/".join(rel[1:-1] + (f"eps_{m.group(1)}",)), f"{saved}@{J or 'matched'}"
+
 def load_results(results, prefix):
-    raw = {}
+    raw, sources = {}, {}
     for f in sorted(results.rglob("*_seed_*.npz")):
         m = re.fullmatch(r"(.+)_seed_(\d+)\.npz", f.name)
         rel = f.parent.relative_to(results).parts
         if m is None or len(rel) < 2 or not rel[0].startswith(prefix):
             continue
-        raw.setdefault((rel[0], "/".join(rel[1:])), {}).setdefault(m.group(1), {})[int(m.group(2))] = \
-            episode_summary(f)
+        tag, planner = point_name(f.parent, m.group(1), rel)
+        sources.setdefault((rel[0], tag), {})[planner] = (f.parent, m.group(1))
+        raw.setdefault((rel[0], tag), {}).setdefault(planner, {})[int(m.group(2))] = episode_summary(f)
     points, warnings = [], []
     for (data_dir, tag), planners in sorted(raw.items()):
-        point_dir = results / data_dir / tag
-        configs = {p: (yaml.safe_load(open(point_dir / f"{p}_config.yaml"))
-                       if (point_dir / f"{p}_config.yaml").exists() else {}) for p in planners}
-        check_point(point_dir, planners, configs, warnings)
+        point_dir, src = results / data_dir / tag, sources[(data_dir, tag)]
+        configs = {p: (yaml.safe_load(open(folder / f"{name}_config.yaml"))
+                       if (folder / f"{name}_config.yaml").exists() else {}) for p, (folder, name) in src.items()}
+        check_point(point_dir, src, configs, warnings)
         cfg = next((c for c in configs.values() if c), {})
         sweep, name, value = tag_parts(tag)
         eps = cfg.get("margin_eps", value if name == "eps" else np.nan)
