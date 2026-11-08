@@ -7,9 +7,8 @@ subproblem of every step, how often each slack is in use and the largest multipl
 Choose w_dyn above the dynamics multipliers and w_safe above the safety ones. A step whose safety slack is in use at
 every w_safe has no feasible plan within SCP's reach at that threshold.
 
-usage: python src/scripts/measure_multipliers.py configs/wmTraining/pg1_c_1_5_model.yaml --tau 0.02 --w_dyn 1 --w_safe 1 10 100
+Set the settings below, then: python src/scripts/measure_multipliers.py
 """
-import argparse
 import itertools
 
 import jax
@@ -18,6 +17,15 @@ import numpy as np
 from sweep_runner import build_cfg, make_agent, sgym
 
 SLACK_TOL = 1e-7
+WM_CFG = "configs/wmTraining/pg1_c_1_5_model.yaml"
+COMMON = "configs/Planner/common.yaml"
+SCP_CFG = "configs/Planner/scp.yaml"
+ENV = "SafetyPointGoal1-v0"
+TAU = 0.02
+W_DYN = [1.0]
+W_SAFE = [1.0, 10.0, 100.0]
+STEPS = 200
+SEED = 0
 
 def last_solve_recorder(solver, log):
     # Wrap solve_problem so the slack and multipliers of the latest successful subproblem are kept in log
@@ -60,28 +68,16 @@ def run_episode(cfg, env, seed, steps):
     return np.array(rows, dtype=float)
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("wm_cfg")
-    parser.add_argument("--common_cfg", default="configs/Planner/common.yaml")
-    parser.add_argument("--scp_cfg", default="configs/Planner/scp.yaml")
-    parser.add_argument("--env", default="SafetyPointGoal1-v0")
-    parser.add_argument("--tau", type=float, default=0.02)
-    parser.add_argument("--w_dyn", type=float, nargs="+", default=[1.0])
-    parser.add_argument("--w_safe", type=float, nargs="+", default=[1.0, 10.0, 100.0])
-    parser.add_argument("--steps", type=int, default=200)
-    parser.add_argument("--seed", type=int, default=0)
-    args = parser.parse_args()
-
-    env = sgym.make(args.env)
-    for w_dyn, w_safe in itertools.product(args.w_dyn, args.w_safe):
-        cfg = build_cfg(args.wm_cfg, args.common_cfg, args.scp_cfg, env.observation_space.shape[0],
-                        {"safety_threshold": args.tau, "w_dyn": w_dyn, "w_safe": w_safe})
-        rows = run_episode(cfg, env, args.seed, args.steps)
+    env = sgym.make(ENV)
+    for w_dyn, w_safe in itertools.product(W_DYN, W_SAFE):
+        cfg = build_cfg(WM_CFG, COMMON, SCP_CFG, env.observation_space.shape[0],
+                        {"safety_threshold": TAU, "w_dyn": w_dyn, "w_safe": w_safe})
+        rows = run_episode(cfg, env, SEED, STEPS)
         slack_dyn, slack_safe, mult_dyn, mult_safe, max_risk, feasible = rows.T
         free_dyn, free_safe = slack_dyn <= SLACK_TOL, slack_safe <= SLACK_TOL
         # NaN marks a multiplier the solver could not resolve accurately
         largest = lambda m, free: f"{np.nanmax(m[free]):.3g}" if np.any(free & ~np.isnan(m)) else "-"
-        print(f"w_dyn {w_dyn:g}, w_safe {w_safe:g}, tau {args.tau:g}: {len(rows)} steps | dynamics slack in use on {np.mean(~free_dyn):.2f} of steps, "
+        print(f"w_dyn {w_dyn:g}, w_safe {w_safe:g}, tau {TAU:g}: {len(rows)} steps | dynamics slack in use on {np.mean(~free_dyn):.2f} of steps, "
               f"largest dynamics multiplier without it {largest(mult_dyn, free_dyn)} | safety slack in use on "
               f"{np.mean(~free_safe):.2f} of steps, largest safety multiplier without it {largest(mult_safe, free_safe)} | "
               f"planned max risk median {np.median(max_risk):.3f}, feasible plans {np.mean(feasible):.2f}", flush=True)

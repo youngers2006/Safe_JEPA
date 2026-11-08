@@ -1,4 +1,3 @@
-import argparse
 import csv
 import glob
 import re
@@ -13,12 +12,11 @@ from scipy import stats
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Reads every saved episode under the experiments folder (no world model or GPU needed) and writes summary tables,
-# paired tests and figures, e.g. python analyse_results.py --results path/to/experiments --prefix M2_
-ARGS = argparse.ArgumentParser()
-ARGS.add_argument("--results", type=Path, default=ROOT / "src/save_data/experiments", help="experiments folder")
-ARGS.add_argument("--out", type=Path, default=None, help="output folder (default <results>/analysis_results)")
-ARGS.add_argument("--prefix", default="M2_", help="only world model folders starting with this ('' for all)")
+# Reads every saved episode under RESULTS (no world model or GPU needed) and writes summary tables, paired tests and
+# figures to OUT: python analyse_results.py
+RESULTS = ROOT / "src/save_data/experiments" # the merged experiments folder
+OUT = RESULTS / "analysis_results"
+PREFIX = "M2_" # only world model folders starting with this ("" for all)
 
 MAIN = "SCP+MPPI" # the planner compared against every other one
 PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "MPPI+CBF", "CEM", "CEM+CBF"]
@@ -506,11 +504,9 @@ def write_csv(path, rows):
         w.writerows([{k: v for k, v in r.items() if not k.startswith("_")} for r in rows])
 
 def main():
-    args = ARGS.parse_args()
-    results, out = args.results, args.out or args.results / "analysis_results"
-    out.mkdir(parents=True, exist_ok=True)
-    points, warnings = load_results(results, args.prefix)
-    lines = [f"Results in {results} (world model folders starting '{args.prefix}'): {len(points)} sweep points"]
+    OUT.mkdir(parents=True, exist_ok=True)
+    points, warnings = load_results(RESULTS, PREFIX)
+    lines = [f"Results in {RESULTS} (world model folders starting '{PREFIX}'): {len(points)} sweep points"]
     if not points:
         print(lines[0])
         return
@@ -646,10 +642,10 @@ def main():
                             f"barrier after {vals['filter_met']:.0%} of those"
                             if not np.isnan(vals["filter_active"]) else ""))
         title, stem = f"{model}: {sweep}", f"{sweep}_{data_dir}"
-        plot_e1(out / f"{stem}.png", title, pts, summary)
-        plot_survival(out / f"survival_{stem}.png", title, pts, tests)
+        plot_e1(OUT / f"{stem}.png", title, pts, summary)
+        plot_survival(OUT / f"survival_{stem}.png", title, pts, tests)
         if any(pl in p["planners"] for p in pts for pl in ("SCP+MPPI", "SCP")):
-            plot_certificates(out / f"certificates_{stem}.png", title, pts, summary)
+            plot_certificates(OUT / f"certificates_{stem}.png", title, pts, summary)
 
     # Headline: each world model (task and bound, horizon 10, E1), each planner pooled over margin_eps >= POOL_MIN_EPS,
     # with SCP+MPPI's pooled paired tests against it, Holm-adjusted over the world models for each comparison
@@ -720,8 +716,8 @@ def main():
                                f"({qd['only_main']}:{qd['only_other']}), "
                                f"McNemar p {fmt_p(qd['p_mcnemar'])}, CMH p {fmt_p(qd['p_cmh'])}, return difference "
                                f"{np.mean(diffs):+.2f} [{lo:+.2f}, {hi:+.2f}]")
-        plot_grid(out / "e1_grid_violations.png", main_models, "rate", "violation rate (95% Wilson interval)", summary)
-        plot_grid(out / "e1_grid_return.png", main_models, "return", "episode return (95% bootstrap interval)",
+        plot_grid(OUT / "e1_grid_violations.png", main_models, "rate", "violation rate (95% Wilson interval)", summary)
+        plot_grid(OUT / "e1_grid_return.png", main_models, "return", "episode return (95% bootstrap interval)",
                   summary)
     lines[1:1] = top
 
@@ -750,13 +746,13 @@ def main():
                     lines.append(f"{pl:11s} {'(E1)':>9s} {r['n']:3d} {r['rate']:5.2f} [{r['rate_lo']:.2f}, "
                                  f"{r['rate_hi']:.2f}] {r['return']:7.2f} {r['plan_time_mean']:15.3f}s / "
                                  f"{'-' if idle is None else f'{idle.mean():.3f}s'}")
-        plot_e2(out / f"e2_eps{e2_pts[0]['eps']:g}_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
+        plot_e2(OUT / f"e2_eps{e2_pts[0]['eps']:g}_{data_dir}.png", model, e2_pts, e1_pt, summary, timing)
 
     # Lipschitz bound: the horizon-10 models of each task, by bound, on E1
     for task in sorted({k[0] for k in e1}):
         by_bound = {k[1]: v for k, v in e1.items() if k[0] == task and k[2] == 10 and k[4] == "e1"}
         if len(by_bound) > 1:
-            plot_lipschitz(out / f"lipschitz_pg{task}.png", task, by_bound, summary)
+            plot_lipschitz(OUT / f"lipschitz_pg{task}.png", task, by_bound, summary)
     # Planning horizon: the bound-1.5 models of each task, at every margin_eps run at two or more horizons (E1's points
     # and the horizon tests')
     for task in sorted({k[0] for k in e1}):
@@ -767,21 +763,21 @@ def main():
                     by_eps.setdefault(round(p["eps"], 6), []).append(p)
         by_eps = {e: v for e, v in by_eps.items() if len({p["horizon"] for p in v}) > 1}
         if by_eps:
-            plot_horizon(out / f"horizon_pg{task}.png", task, by_eps, summary)
+            plot_horizon(OUT / f"horizon_pg{task}.png", task, by_eps, summary)
 
     if warnings:
         lines += ["", "Warnings:"] + [f"  {w}" for w in warnings]
-    write_csv(out / "summary.csv", summary_rows)
-    write_csv(out / "tests.csv", test_rows)
-    write_csv(out / "pooled_tests.csv", pooled_rows)
-    write_csv(out / "episodes.csv", episode_rows)
-    write_csv(out / "headline.csv", headline_rows)
-    write_csv(out / "lipschitz_tests.csv", lip_rows)
-    write_csv(out / "lipschitz_pooled.csv", lip_pooled)
+    write_csv(OUT / "summary.csv", summary_rows)
+    write_csv(OUT / "tests.csv", test_rows)
+    write_csv(OUT / "pooled_tests.csv", pooled_rows)
+    write_csv(OUT / "episodes.csv", episode_rows)
+    write_csv(OUT / "headline.csv", headline_rows)
+    write_csv(OUT / "lipschitz_tests.csv", lip_rows)
+    write_csv(OUT / "lipschitz_pooled.csv", lip_pooled)
     report = "\n".join(lines)
-    (out / "report.txt").write_text(report + "\n")
+    (OUT / "report.txt").write_text(report + "\n")
     print(report)
-    print(f"\nWritten to {out}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
+    print(f"\nWritten to {OUT}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
           f"lipschitz_tests.csv, lipschitz_pooled.csv, episodes.csv and the figures")
 
 if __name__ == "__main__":
