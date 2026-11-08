@@ -20,7 +20,8 @@ from sweep_runner import run_point
 # python check_timing.py 0.0 0.1 0.3 0.5; J<sequences> times only those sampler budgets, e.g. python check_timing.py
 # J35456; summary only rewrites the CSV from the timing runs already done. Without them: SCP at eps 0.2 and every
 # budget
-WM_CFG = "configs/wmTraining/pg1_c_1_5_model.yaml"
+WM_CFG = "configs/wmTraining/pg1_c_1_5_model.yaml" # the h20 / h30 model for the horizon tests
+HORIZON = 10 # planning horizon: 20 or 30 with those models
 COMMON = "configs/Planner/common.yaml"
 ENV = "SafetyPointGoal1-v0"
 SEEDS = [0, 1, 2]
@@ -109,5 +110,5 @@ if __name__ == "__main__":
     if "summary" not in ARGS:
         for planner, overrides, name, eps in PLANNERS:
             run_point(SEEDS, WM_CFG, COMMON, planner, ENV,
-                      {"margin_eps": eps, "sim_max_steps": STEPS, **overrides}, f"timing/{name}")
+                      {"margin_eps": eps, "sim_max_steps": STEPS, "horizon": HORIZON, **overrides}, f"timing/{name}")
     summarise()

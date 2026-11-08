@@ -30,6 +30,7 @@ COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "M
            "CEM": "tab:green", "CEM+CBF": "tab:olive"}
 BOUND_COLOURS = {1.2: "tab:red", 1.5: "tab:blue", np.inf: "tab:gray"}
 TAU, FEAS_TOL = 0.0, 1e-3 # a plan meets the barrier in the model when its worst step's risk is at most TAU + FEAS_TOL
+ACTIVE_TOL = 0.01 # a plan that meets the barrier has it active when its worst step's risk is within this of TAU
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
 # The agent builds a new controller at every reset, so JAX recompiles on each episode's first two steps (about 10x a
 # normal step): JIT compilation, not planning, so left out of every plan-time statistic
@@ -117,8 +118,9 @@ def episode_summary(path):
     ep = {"steps": T, "violated": bool(violations[-1]), "return": float(rewards.sum()),
           "goals": int(np.sum(rewards > GOAL_THRESHOLD)),
           "plan_times": d["plan_times"][COMPILE_STEPS:] if "plan_times" in d.files else np.full(T, np.nan)}
-    if "info_pred_risk" in d.files: # per step: does the executed plan meet the barrier in the model?
-        ep["latent_safe"] = d["info_pred_risk"].reshape(T, -1).max(axis=1) <= TAU + FEAS_TOL
+    if "info_pred_risk" in d.files: # per step: the executed plan's worst step risk, and does it meet the barrier?
+        ep["max_risk"] = d["info_pred_risk"].reshape(T, -1).max(axis=1)
+        ep["latent_safe"] = ep["max_risk"] <= TAU + FEAS_TOL
     for k in ("stop_reason", "start"):
         if f"info_{k}" in d.files:
             ep[k] = d[f"info_{k}"].astype(str)
@@ -233,6 +235,8 @@ def planner_row(episodes, horizon):
                     "viol_soon_after_safe": soon[safe].mean() if safe.any() else np.nan,
                     "viol_soon_after_unsafe": soon[~safe].mean() if (~safe).any() else np.nan,
                     "violations_warned": np.mean(warned) if warned else np.nan})
+        ct = crash_types(eps, horizon)
+        row.update({k: ct[k] for k in ("crashes_unwarned", "barrier_active", "barrier_slack_med")})
     # SCP's certificates: converged with the plan feasible (KKT point), converged with slack in use (no safe plan
     # nearby, to first order), or stopped at the iteration cap (no certificate)
     if all("stop_reason" in e for e in eps):
@@ -251,6 +255,40 @@ def planner_row(episodes, horizon):
         met = np.concatenate([e["filter_met"] for e in eps])
         row.update({"filter_active": active.mean(), "filter_met": met[active].mean() if active.any() else np.nan})
     return row
+
+def episode_crash(e, horizon):
+    # One episode: did it crash with no warning (every executed plan in its last horizon met the barrier in the model,
+    # so the model was wrong), and on what share of the steps whose plan met the barrier was it active
+    if "max_risk" not in e:
+        return np.nan, np.nan
+    slack = TAU - e["max_risk"][e["latent_safe"]]
+    return (bool(e["violated"]) and bool(e["latent_safe"][-horizon:].all()),
+            float(np.mean(slack <= ACTIVE_TOL)) if len(slack) else np.nan)
+
+def crash_types(eps, horizon):
+    # Pooled over episodes: crashes the model warned of (an executed plan in the last horizon failed the barrier) and
+    # ones it did not, and how close the plans that met the barrier sat to it: slack is TAU minus the worst step risk,
+    # and the barrier is active where the slack is at most ACTIVE_TOL
+    eps = [e for e in eps if "max_risk" in e]
+    if not eps:
+        return {}
+    slack = np.concatenate([TAU - e["max_risk"][e["latent_safe"]] for e in eps])
+    crashes, unwarned = sum(bool(e["violated"]) for e in eps), sum(episode_crash(e, horizon)[0] for e in eps)
+    return {"episodes": len(eps), "crashes_warned": crashes - unwarned, "crashes_unwarned": unwarned,
+            "barrier_active": float(np.mean(slack <= ACTIVE_TOL)) if len(slack) else np.nan,
+            "barrier_slack_med": float(np.median(slack)) if len(slack) else np.nan}
+
+def seed_boot(seeds, x, rng):
+    # 95% interval for the mean of x over pairs, resampling whole seeds: seed k is the same layout in every model and
+    # margin_eps, so its pairs are not independent
+    seeds, x = np.asarray(seeds), np.asarray(x, float)
+    keep = ~np.isnan(x)
+    keys, inv = np.unique(seeds[keep], return_inverse=True)
+    if len(keys) < 2:
+        return np.nan, np.nan
+    sums, counts = np.bincount(inv, weights=x[keep]), np.bincount(inv)
+    pick = rng.integers(len(keys), size=(N_BOOT, len(keys)))
+    return tuple(np.percentile(sums[pick].sum(axis=1) / counts[pick].sum(axis=1), [2.5, 97.5]))
 
 def pooled_planner(pts, pl):
     # One planner's episodes pooled over the points with margin_eps >= POOL_MIN_EPS
@@ -544,7 +582,9 @@ def main():
                 episode_rows.append({"model": p["model"], "data_dir": p["data_dir"], "tag": p["tag"], "eps": p["eps"],
                                      "planner": pl, "seed": s, "steps": e["steps"], "violated": e["violated"],
                                      "return": e["return"], "goals": e["goals"],
-                                     "plan_time_med": nan_stat(np.median, e["plan_times"])})
+                                     "plan_time_med": nan_stat(np.median, e["plan_times"]),
+                                     **dict(zip(("crash_unwarned", "barrier_active"),
+                                                episode_crash(e, p["horizon"])))})
         if MAIN in p["planners"]:
             for pl in p["planners"]:
                 if pl != MAIN:
@@ -651,14 +691,19 @@ def main():
                              f"{fmt_p(q['p_logrank'])}")
         lines.append(f"  latent safety, pooled over eps >= {POOL_MIN_EPS}: share of steps followed by a violation "
                      f"within one horizon, after a plan that met the barrier in the model / one that did not; share of "
-                     f"violations preceded by such a warning")
+                     f"violations preceded by such a warning; crashes with no warning (the model was wrong); share of "
+                     f"the plans meeting the barrier that had it active (slack <= {ACTIVE_TOL:g}), and their median slack")
         for pl in ordered({pl for p in pts for pl in p["planners"]}):
             rows = [summary[(data_dir, p["tag"], pl)] for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS]
             vals = {k: nan_stat(np.mean, [r.get(k, np.nan) for r in rows])
                     for k in ("viol_soon_after_safe", "viol_soon_after_unsafe", "violations_warned", "filter_active",
                               "filter_met")}
+            ct = crash_types([e for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS
+                              for e in p["planners"][pl].values()], pts[0]["horizon"])
             lines.append(f"    {pl:11s} {vals['viol_soon_after_safe']:.4f} / {vals['viol_soon_after_unsafe']:.4f}, "
                          f"warned {vals['violations_warned']:.2f}"
+                         + (f"; unwarned crashes {ct['crashes_unwarned']} in {ct['episodes']} episodes; barrier active "
+                            f"on {ct['barrier_active']:.1%} (median slack {ct['barrier_slack_med']:.3f})" if ct else "")
                          + (f"; safety filter changed the action on {vals['filter_active']:.1%} of steps and met the "
                             f"barrier after {vals['filter_met']:.0%} of those"
                             if not np.isnan(vals["filter_active"]) else ""))
@@ -676,7 +721,7 @@ def main():
     for pl in {r["other"] for r in pooled_rows}:
         keys = [(d, pl) for d, _ in main_models.values() if (d, pl) in pooled_by]
         holm_by.update(zip(keys, holm([pooled_by[k]["p_mcnemar"] for k in keys])))
-    top, headline_rows, lip_rows, lip_pooled = [], [], [], []
+    top, headline_rows, lip_rows, lip_pooled, all_rows = [], [], [], [], []
     bound_str = lambda b: "inf" if np.isinf(b) else f"{b:g}"
     if main_models:
         top += ["", f"=== Headline: each planner pooled over eps >= {POOL_MIN_EPS}; {MAIN} against it on paired seeds: "
@@ -698,6 +743,66 @@ def main():
                                       **({"p_mcnemar_vs_main": q["p_mcnemar"],
                                           "p_mcnemar_vs_main_holm": holm_by[(data_dir, pl)],
                                           "p_cmh_vs_main": q["p_cmh"]} if q else {})})
+
+        # All world models: MAIN against each planner on the same model, margin_eps (>= POOL_MIN_EPS) and seed, pooled
+        # over the horizon-10 models, with intervals that resample whole seeds. The crash types and barrier slack test
+        # whether the stronger optimisers add crashes the model did not predict by planning closer to the barrier
+        rng = np.random.default_rng(1) # its own stream, so every other interval stays as it was
+        pairs = {}
+        for data_dir, pts in main_models.values():
+            for p in pts:
+                if p["eps"] < POOL_MIN_EPS or MAIN not in p["planners"]:
+                    continue
+                a = p["planners"][MAIN]
+                for pl, b in p["planners"].items():
+                    for s in (sorted(set(a) & set(b)) if pl != MAIN else []):
+                        (ua, xa), (ub, xb) = (episode_crash(x[s], p["horizon"]) for x in (a, b))
+                        pairs.setdefault(pl, []).append((s, float(a[s]["violated"]) - float(b[s]["violated"]),
+                                                         a[s]["return"] - b[s]["return"], float(ua) - float(ub),
+                                                         xa - xb))
+        if pairs:
+            top += ["", f"=== All {len(main_models)} horizon-10 world models, eps >= {POOL_MIN_EPS}: {MAIN} against each "
+                        f"planner on the same model, eps and seed (95% intervals resample seeds) ===",
+                    f"  {'vs':13s} {'pairs':>5s}  only {MAIN}:only other violated, violation difference (points), "
+                    f"McNemar p, return difference"]
+            for pl in ordered(pairs):
+                s, dv, dr, du, dx = (np.array(c, float) for c in zip(*pairs[pl]))
+                b, c = int(np.sum(dv > 0)), int(np.sum(dv < 0))
+                (vlo, vhi), (rlo, rhi) = seed_boot(s, dv, rng), seed_boot(s, dr, rng)
+                ub, uc = int(np.sum(du > 0)), int(np.sum(du < 0))
+                (xlo, xhi), keep = seed_boot(s, dx, rng), ~np.isnan(dx)
+                all_rows.append({"other": pl, "pairs": len(s), "only_main": b, "only_other": c,
+                                 "viol_diff": dv.mean(), "viol_diff_lo": vlo, "viol_diff_hi": vhi,
+                                 "p_mcnemar": binom_two_sided(min(b, c), b + c), "return_diff": dr.mean(),
+                                 "return_diff_lo": rlo, "return_diff_hi": rhi, "unwarned_only_main": ub,
+                                 "unwarned_only_other": uc, "p_mcnemar_unwarned": binom_two_sided(min(ub, uc), ub + uc),
+                                 "active_diff": dx[keep].mean() if keep.any() else np.nan, "active_diff_lo": xlo,
+                                 "active_diff_hi": xhi})
+                r = all_rows[-1]
+                top.append(f"  {pl:13s} {len(s):5d}  {b:4d}:{c:<4d} {100 * r['viol_diff']:+6.1f} [{100 * vlo:+.1f}, "
+                           f"{100 * vhi:+.1f}], p {fmt_p(r['p_mcnemar'])}, {r['return_diff']:+.2f} [{rlo:+.2f}, "
+                           f"{rhi:+.2f}]")
+            top += [f"  crash types and barrier slack, each planner over the same models and eps: crashes per 100 "
+                    f"episodes the model warned of / did not; share of the plans meeting the barrier that had it active "
+                    f"(slack <= {ACTIVE_TOL:g}) and their median slack;",
+                    f"  {MAIN} against it on paired episodes: unwarned crashes (only {MAIN}:only other, McNemar p) and "
+                    f"the difference in the active share (points)"]
+            cts = {pl: crash_types([e for _, pts in main_models.values() for p in pts if p["eps"] >= POOL_MIN_EPS
+                                    for e in p["planners"].get(pl, {}).values()], 10) # main_models are horizon 10
+                   for pl in set(pairs) | {MAIN}}
+            for r in all_rows:
+                r.update({**{f"main_{k}": v for k, v in cts[MAIN].items()},
+                          **{f"other_{k}": v for k, v in cts[r["other"]].items()}})
+            for pl in ordered(cts):
+                ct, r = cts[pl], next((r for r in all_rows if r["other"] == pl), None)
+                if not ct:
+                    continue
+                top.append(f"  {pl:13s} {ct['episodes']:5d} episodes: {100 * ct['crashes_warned'] / ct['episodes']:5.1f} / "
+                           f"{100 * ct['crashes_unwarned'] / ct['episodes']:4.1f}, active {ct['barrier_active']:6.1%}, "
+                           f"median slack {ct['barrier_slack_med']:.3f}"
+                           + (f"; vs {MAIN}: unwarned {r['unwarned_only_main']}:{r['unwarned_only_other']}, p "
+                              f"{fmt_p(r['p_mcnemar_unwarned'])}, active {100 * r['active_diff']:+.1f} "
+                              f"[{100 * r['active_diff_lo']:+.1f}, {100 * r['active_diff_hi']:+.1f}]" if r else ""))
 
         # Lipschitz bound: each planner on the bound-1.5 model against the same planner on each other bound, on paired
         # seeds (seed k is the same layout for every model), per margin_eps and pooled over margin_eps >= POOL_MIN_EPS
@@ -795,11 +900,12 @@ def main():
     write_csv(OUT / "headline.csv", headline_rows)
     write_csv(OUT / "lipschitz_tests.csv", lip_rows)
     write_csv(OUT / "lipschitz_pooled.csv", lip_pooled)
+    write_csv(OUT / "all_models.csv", all_rows)
     report = "\n".join(lines)
     (OUT / "report.txt").write_text(report + "\n")
     print(report)
     print(f"\nWritten to {OUT}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
-          f"lipschitz_tests.csv, lipschitz_pooled.csv, episodes.csv and the figures")
+          f"lipschitz_tests.csv, lipschitz_pooled.csv, all_models.csv, episodes.csv and the figures")
 
 if __name__ == "__main__":
     main()
