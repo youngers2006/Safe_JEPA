@@ -233,6 +233,17 @@ def planner_row(episodes, horizon):
         row.update({"filter_active": active.mean(), "filter_met": met[active].mean() if active.any() else np.nan})
     return row
 
+def pooled_planner(pts, pl):
+    # One planner's episodes pooled over the points with margin_eps >= POOL_MIN_EPS
+    eps = [e for p in pts if pl in p["planners"] and p["eps"] >= POOL_MIN_EPS for e in p["planners"][pl].values()]
+    if not eps:
+        return None
+    n, k = len(eps), sum(e["violated"] for e in eps)
+    ret, goals = np.array([e["return"] for e in eps]), np.array([e["goals"] for e in eps])
+    (lo, hi), (rlo, rhi) = wilson(k, n), boot_ci(ret)
+    return {"episodes": n, "violations": k, "rate": k / n, "rate_lo": lo, "rate_hi": hi, "return": ret.mean(),
+            "return_lo": rlo, "return_hi": rhi, "goals": goals.mean()}
+
 def compare(a, b):
     # MAIN (a) against another planner (b) on the seeds both ran: paired violations (McNemar exact), unpaired counts
     # (Fisher exact), time to violation (log-rank) and paired return difference (bootstrap interval, Wilcoxon)
@@ -301,6 +312,39 @@ def plot_e1(path, title, pts, summary):
         ax.set_xlabel(name if ax is not axes[3] else f"violation rate (labels: {name})")
         ax.legend(fontsize=8)
     fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+def plot_grid(path, models, key, ylabel, summary):
+    # One panel per task (rows) and Lipschitz bound (columns), every planner against margin_eps
+    tasks, bounds = sorted({t for t, _ in models}), sorted({b for _, b in models})
+    fig, axes = plt.subplots(len(tasks), len(bounds), figsize=(5 * len(bounds), 4 * len(tasks)), squeeze=False,
+                             sharey=True)
+    for i, task in enumerate(tasks):
+        for j, bound in enumerate(bounds):
+            ax = axes[i][j]
+            if (task, bound) not in models:
+                ax.axis("off")
+                continue
+            data_dir, pts = models[(task, bound)]
+            planners = ordered({pl for p in pts for pl in p["planners"]})
+            width = 0.01 * (max(p["eps"] for p in pts) - min(p["eps"] for p in pts) or 1)
+            for k, pl in enumerate(planners):
+                sel = [p for p in pts if pl in p["planners"]]
+                errorbar(ax, [p["eps"] for p in sel], [summary[(data_dir, p["tag"], pl)] for p in sel], key, pl,
+                         (k - (len(planners) - 1) / 2) * width)
+            ax.set_title(f"PointGoal{task}, bound {'inf' if np.isinf(bound) else f'{bound:g}'}", fontsize=10)
+            ax.set_xlabel("margin_eps")
+            if j == 0:
+                ax.set_ylabel(ylabel)
+    # One legend for every panel's planners, as some appear only in some panels (e.g. a time-matched sampler)
+    labels = {}
+    for ax in axes.flat:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            labels.setdefault(l, h)
+    order = ordered(labels)
+    axes[0][0].legend([labels[l] for l in order], order, fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -607,6 +651,80 @@ def main():
         if any(pl in p["planners"] for p in pts for pl in ("SCP+MPPI", "SCP")):
             plot_certificates(out / f"certificates_{stem}.png", title, pts, summary)
 
+    # Headline: each world model (task and bound, horizon 10, E1), each planner pooled over margin_eps >= POOL_MIN_EPS,
+    # with SCP+MPPI's pooled paired tests against it, Holm-adjusted over the world models for each comparison
+    main_models = {(t, b): (d, pts) for (t, b, h, d, sw), pts in sorted(e1.items()) if sw == "e1" and h == 10}
+    pooled_by = {(r["data_dir"], r["other"]): r for r in pooled_rows if r["sweep"] == "e1"}
+    holm_by = {}
+    for pl in {r["other"] for r in pooled_rows}:
+        keys = [(d, pl) for d, _ in main_models.values() if (d, pl) in pooled_by]
+        holm_by.update(zip(keys, holm([pooled_by[k]["p_mcnemar"] for k in keys])))
+    top, headline_rows, lip_rows, lip_pooled = [], [], [], []
+    bound_str = lambda b: "inf" if np.isinf(b) else f"{b:g}"
+    if main_models:
+        top += ["", f"=== Headline: each planner pooled over eps >= {POOL_MIN_EPS}; {MAIN} against it on paired seeds: "
+                    f"pooled McNemar p (Holm over the {len(main_models)} world models) and CMH p ===",
+                f"{'task':4s} {'bound':>5s} {'planner':15s} {'episodes':>8s} {'violations':>10s} "
+                f"{'rate [95% CI]':>18s} {'return [95% CI]':>22s} {'goals':>6s}  vs {MAIN}"]
+        for (task, bound), (data_dir, pts) in sorted(main_models.items()):
+            for pl in ordered({pl for p in pts for pl in p["planners"]}):
+                r = pooled_planner(pts, pl)
+                if r is None:
+                    continue
+                q = pooled_by.get((data_dir, pl))
+                top.append(f"PG{task:<2d} {bound_str(bound):>5s} {pl:15s} {r['episodes']:8d} {r['violations']:10d} "
+                           f"{r['rate']:5.2f} [{r['rate_lo']:.2f}, {r['rate_hi']:.2f}] {r['return']:7.2f} "
+                           f"[{r['return_lo']:6.2f}, {r['return_hi']:6.2f}] {r['goals']:6.2f}  "
+                           + (f"McNemar p {fmt_p(q['p_mcnemar'])} (Holm {fmt_p(holm_by[(data_dir, pl)])}), CMH p "
+                              f"{fmt_p(q['p_cmh'])}" if q else ""))
+                headline_rows.append({"task": task, "bound": bound, "data_dir": data_dir, "planner": pl, **r,
+                                      **({"p_mcnemar_vs_main": q["p_mcnemar"],
+                                          "p_mcnemar_vs_main_holm": holm_by[(data_dir, pl)],
+                                          "p_cmh_vs_main": q["p_cmh"]} if q else {})})
+
+        # Lipschitz bound: each planner on the bound-1.5 model against the same planner on each other bound, on paired
+        # seeds (seed k is the same layout for every model), per margin_eps and pooled over margin_eps >= POOL_MIN_EPS
+        for task in sorted({t for t, _ in main_models}):
+            others = sorted(b for t, b in main_models if t == task and not np.isclose(b, 1.5))
+            if (task, 1.5) not in main_models or not others:
+                continue
+            top += ["", f"=== Lipschitz bound, PointGoal{task}: each planner with bound 1.5 against bound "
+                        + ", ".join(map(bound_str, others)) + f", paired seeds, pooled over eps >= {POOL_MIN_EPS} "
+                        f"(only-1.5:only-other = episodes where just one of the two violated) ==="]
+            ref_pts = main_models[(task, 1.5)][1]
+            for pl in ordered({pl for p in ref_pts for pl in p["planners"]}):
+                for b in others:
+                    other_by_eps = {round(p["eps"], 6): p for p in main_models[(task, b)][1]}
+                    rows, diffs = [], []
+                    for p in ref_pts:
+                        q = other_by_eps.get(round(p["eps"], 6))
+                        if q is None or pl not in p["planners"] or pl not in q["planners"]:
+                            continue
+                        t = compare(p["planners"][pl], q["planners"][pl])
+                        if t is None:
+                            continue
+                        lip_rows.append({"task": task, "planner": pl, "eps": p["eps"], "ref_bound": 1.5,
+                                         "other_bound": b, **{k.replace("main", "ref"): v for k, v in t.items()}})
+                        if p["eps"] >= POOL_MIN_EPS:
+                            rows.append(t)
+                            a, c = p["planners"][pl], q["planners"][pl]
+                            diffs += [a[s]["return"] - c[s]["return"] for s in sorted(set(a) & set(c))]
+                    if not rows:
+                        continue
+                    qd, (lo, hi) = pooled(rows), boot_ci(diffs)
+                    lip_pooled.append({"task": task, "planner": pl, "ref_bound": 1.5, "other_bound": b,
+                                       **{k.replace("main", "ref"): v for k, v in qd.items()},
+                                       "return_diff": np.mean(diffs), "return_diff_lo": lo, "return_diff_hi": hi})
+                    top.append(f"  {pl:15s} 1.5 vs {bound_str(b):>3s}: violations {qd['viol_main']}/"
+                               f"{qd['n_paired']} vs {qd['viol_other']}/{qd['n_paired']} "
+                               f"({qd['only_main']}:{qd['only_other']}), "
+                               f"McNemar p {fmt_p(qd['p_mcnemar'])}, CMH p {fmt_p(qd['p_cmh'])}, return difference "
+                               f"{np.mean(diffs):+.2f} [{lo:+.2f}, {hi:+.2f}]")
+        plot_grid(out / "e1_grid_violations.png", main_models, "rate", "violation rate (95% Wilson interval)", summary)
+        plot_grid(out / "e1_grid_return.png", main_models, "return", "episode return (95% bootstrap interval)",
+                  summary)
+    lines[1:1] = top
+
     # E2: samplers over their budgets at each margin_eps run, with the same model's E1 point at that margin_eps
     for data_dir, sweep in sorted({(p["data_dir"], p["sweep"]) for p in points if is_e2(p)}):
         e2_pts = sorted((p for p in points if p["sweep"] == sweep and p["data_dir"] == data_dir),
@@ -657,10 +775,14 @@ def main():
     write_csv(out / "tests.csv", test_rows)
     write_csv(out / "pooled_tests.csv", pooled_rows)
     write_csv(out / "episodes.csv", episode_rows)
+    write_csv(out / "headline.csv", headline_rows)
+    write_csv(out / "lipschitz_tests.csv", lip_rows)
+    write_csv(out / "lipschitz_pooled.csv", lip_pooled)
     report = "\n".join(lines)
     (out / "report.txt").write_text(report + "\n")
     print(report)
-    print(f"\nWritten to {out}: report.txt, summary.csv, tests.csv, pooled_tests.csv, episodes.csv and the figures")
+    print(f"\nWritten to {out}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
+          f"lipschitz_tests.csv, lipschitz_pooled.csv, episodes.csv and the figures")
 
 if __name__ == "__main__":
     main()
