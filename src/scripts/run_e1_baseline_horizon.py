@@ -16,9 +16,9 @@ PLANNERS = {"MPPI": ("configs/Planner/mppi.yaml", {}),
             "CEM": ("configs/Planner/cem.yaml", {}),
             "SCP": ("configs/Planner/scp.yaml", {})}
 ENV = "SafetyPointGoal1-v0"
-SEEDS = list(range(10))
+SEEDS = list(range(20))
 MARGIN_EPS = 0.2
-HORIZONS = [int(a) for a in sys.argv[1:]] or list(WM_CFGS)
+HORIZONS = [20, 30]
 
 def main():
     for H in tqdm(HORIZONS, leave=True):

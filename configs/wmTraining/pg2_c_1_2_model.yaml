@@ -6,7 +6,7 @@ obs_type: "state"
 val_frac: 0.1 # split by TRAJECTORY, not transition
 
 epochs: 250
-num_batches: 1500 # ~= n_transitions / batch_size
+num_batches: 1800 # ~= n_transitions / batch_size
 batch_size: 256
 lr: 3.0e-4
 train_horizon: 11 # consecutive transitions per training window (1 = one-step training, as before)
