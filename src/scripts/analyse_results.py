@@ -17,14 +17,16 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "src/save_data/experiments" # the merged experiments folder
 OUT = RESULTS / "analysis_results"
 PREFIX = "M2_" # only world model folders starting with this ("" for all)
-# Time-matched sampler runs in their own folder beside E1's (e1/eps_t_matched_0.2/MPPI_seed_0.npz) join E1's eps_0.2
-# point as "MPPI@<num_seqs>", num_seqs from their config, so they pair with its seeds
-MATCHED_DIR = r"eps_t_matched_(-?[\d.]+)"
+# Runs at another budget, saved in their own folder under the plain planner names, join the point they extend so they
+# pair with its seeds, named with their budget from their config: a sampler's sequences ("MPPI@65536"), SCP's iteration
+# cap ("SCP+MPPI@100it"). Each rule maps such a folder (its path below the world model's folder) to that point's
+BUDGET_DIRS = {r"e1/eps_t_matched_(.+)": r"e1/eps_\1", # time-matched samplers beside E1's margin_eps sweep
+               r"e4_extended_budget/(.+)": r"e4/\1"} # larger budgets beside the horizon tests
 
 MAIN = "SCP+MPPI" # the planner compared against every other one
-PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "MPPI+CBF", "CEM", "CEM+CBF"]
-COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "MPPI+CBF": "tab:brown",
-           "CEM": "tab:green", "CEM+CBF": "tab:olive"}
+PLANNER_ORDER = ["SCP+MPPI", "SCP", "MPPI", "CEM"]
+COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange",
+           "CEM": "tab:green"}
 BOUND_COLOURS = {1.2: "tab:red", 1.5: "tab:blue", np.inf: "tab:gray"}
 TAU, FEAS_TOL = 0.0, 1e-3 # a plan meets the barrier in the model when its worst step's risk is at most TAU + FEAS_TOL
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
@@ -169,14 +171,18 @@ def check_point(point_dir, sources, configs, warnings):
             warnings.append(f"{point_dir}: {key} differs between planners: {values}")
 
 def point_name(folder, saved, rel):
-    # The point (tag) and planner name a seed file counts under: its own folder and saved name, except a time-matched
-    # run's (MATCHED_DIR), which joins E1's point at its eps under its name and budget
-    m = re.fullmatch(MATCHED_DIR, rel[-1])
-    if m is None:
-        return "/".join(rel[1:]), saved
-    cfg = folder / f"{saved}_config.yaml"
-    J = yaml.safe_load(open(cfg)).get("num_seqs") if cfg.exists() else None
-    return "/".join(rel[1:-1] + (f"eps_{m.group(1)}",)), f"{saved}@{J or 'matched'}"
+    # The point (tag) and planner name a seed file counts under: its own folder and saved name, except in a
+    # BUDGET_DIRS folder, which joins the point it extends under its name and budget
+    tag = "/".join(rel[1:])
+    for pattern, point in BUDGET_DIRS.items():
+        m = re.fullmatch(pattern, tag)
+        if m:
+            cfg_file = folder / f"{saved}_config.yaml"
+            cfg = yaml.safe_load(open(cfg_file)) if cfg_file.exists() else {}
+            budget = cfg.get("num_seqs") if cfg.get("controller") in ("MPPI", "CEM") else \
+                (f"{cfg['scp_iters']}it" if "scp_iters" in cfg else None)
+            return m.expand(point), f"{saved}@{budget or 'budget'}"
+    return tag, saved
 
 def load_results(results, prefix):
     raw, sources = {}, {}
@@ -289,7 +295,7 @@ def pooled(rows):
 def ordered(planners):
     # PLANNER_ORDER first, each sampler followed by its other budgets (e.g. MPPI, then MPPI@32768), then the rest
     base = lambda p: p.split("@")[0]
-    budget = lambda p: int(p.split("@")[1]) if "@" in p and p.split("@")[1].isdigit() else 0
+    budget = lambda p: int(re.match(r"\d*", p.split("@")[1]).group() or 0) if "@" in p else 0 # "100it" -> 100
     rank = lambda p: PLANNER_ORDER.index(base(p)) if base(p) in PLANNER_ORDER else len(PLANNER_ORDER)
     return sorted(planners, key=lambda p: (rank(p), base(p), budget(p)))
 
