@@ -10,7 +10,10 @@ __pycache__/
 .ipynb_checkpoints/
 
 # experiment outputs
-save_data/
+src/save_data/*
+!src/save_data/experiments/
+src/save_data/experiments/*
+!src/save_data/experiments/analysis_results/
 runs/
 checkpoints/
 *.pt
