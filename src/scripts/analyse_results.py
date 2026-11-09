@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
+from scipy.signal import lfilter
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,7 +36,8 @@ ACTIVE_TOL = 0.01 # a plan that meets the barrier has it active when its worst s
 # converged step whose rollout meets the barrier to it (the logged "certified" checks the rollout with no tolerance)
 SCP_FEAS_TOL = 1e-4
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
-GOAL_REWARD = 1.0 # the goal bonus; the reward heads learn the reward without it (dense_reward in the wmTraining configs)
+DISCOUNT = 0.99 # the world models' discount (wmTraining configs), in the plans' predicted returns
+OPTIMISM_TAIL = 0.05 # model optimism uses the steps whose unseen return after the episode's end weighs at most this
 # The agent builds a new controller at every reset, so JAX recompiles on each episode's first two steps (about 10x a
 # normal step): JIT compilation, not planning, so left out of every plan-time statistic
 COMPILE_STEPS = 2
@@ -122,12 +124,13 @@ def episode_summary(path):
     ep = {"steps": T, "violated": bool(violations[-1]), "return": float(rewards.sum()),
           "goals": int(np.sum(rewards > GOAL_THRESHOLD)),
           "plan_times": d["plan_times"][COMPILE_STEPS:] if "plan_times" in d.files else np.full(T, np.nan)}
-    if "info_pred_rewards" in d.files: # model optimism: the dense reward the plan predicted over its horizon, minus
-        # the dense reward received over the next horizon (only where the episode lasted that long)
-        pred = d["info_pred_rewards"].reshape(T, -1)
-        H = pred.shape[1]
-        dense = np.concatenate([[0.0], np.cumsum(rewards - GOAL_REWARD * (rewards > GOAL_THRESHOLD))])
-        gap = pred[:T - H + 1].sum(axis=1) - (dense[H:] - dense[:T - H + 1]) if T >= H else np.array([])
+    if "info_pred_return" in d.files: # model optimism: the executed plan's predicted return (its discounted predicted
+        # rewards plus the value at its end, which carries the goal bonus) minus the discounted return received from
+        # that step, goal bonuses included. Episodes end at a violation or the step limit while the value assumes they
+        # go on, so only steps at least K before the end count, where the unseen remainder weighs at most OPTIMISM_TAIL
+        received = lfilter([1.0], [1.0, -DISCOUNT], rewards[::-1])[::-1] # sum over k of DISCOUNT^k r[t + k]
+        K = int(np.ceil(np.log(OPTIMISM_TAIL) / np.log(DISCOUNT)))
+        gap = d["info_pred_return"].reshape(T)[:T - K + 1] - received[:T - K + 1] if T >= K else np.array([])
         ep["optimism"] = float(gap.mean()) if len(gap) else np.nan
     if "info_pred_risk" in d.files: # per step: the executed plan's worst step risk, and does it meet the barrier?
         ep["max_risk"] = d["info_pred_risk"].reshape(T, -1).max(axis=1)

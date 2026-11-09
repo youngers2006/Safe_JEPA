@@ -295,9 +295,10 @@ def fig_latent_safety(rows):
     save(fig, "main_text", "fig_latent_safety")
 
 def fig_model_optimism(rows, episodes):
-    # Model optimism, the dense reward a plan predicted over its horizon minus what the next horizon earned, for each
-    # planner and budget: at horizon 10 over every world model (margin_eps >= POOL_MIN_EPS), at the longer horizons
-    # on the horizon tests' models; mean over episodes with a 95% bootstrap interval
+    # Model optimism, each executed plan's predicted return (discounted predicted rewards plus the value at its end,
+    # which carries the goal bonus) minus the discounted return received from that step, for each planner and budget:
+    # at horizon 10 over every world model (margin_eps >= POOL_MIN_EPS), at the longer horizons on the horizon tests'
+    # models; mean over episodes with a 95% bootstrap interval
     if "optimism" not in episodes[0]:
         return skip("fig_model_optimism", "episodes.csv has no optimism; re-run analyse_results.py")
     rng = np.random.default_rng(0)
@@ -326,7 +327,7 @@ def fig_model_optimism(rows, episodes):
                                           f"{pl.partition('@')[0]}\n{budget_label(pl)}" for pl in shown], fontsize=7)
         ax.set_xlim(-0.6, len(shown) - 0.4)
         ax.set_title(title)
-    axes[0][0].set_ylabel("predicted minus received\ndense reward over the plan")
+    axes[0][0].set_ylabel("predicted minus received\ndiscounted return")
     fig.tight_layout()
     save(fig, "ablation", "fig_model_optimism")
 
