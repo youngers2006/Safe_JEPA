@@ -35,6 +35,7 @@ ACTIVE_TOL = 0.01 # a plan that meets the barrier has it active when its worst s
 # converged step whose rollout meets the barrier to it (the logged "certified" checks the rollout with no tolerance)
 SCP_FEAS_TOL = 1e-4
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
+GOAL_REWARD = 1.0 # the goal bonus; the reward heads learn the reward without it (dense_reward in the wmTraining configs)
 # The agent builds a new controller at every reset, so JAX recompiles on each episode's first two steps (about 10x a
 # normal step): JIT compilation, not planning, so left out of every plan-time statistic
 COMPILE_STEPS = 2
@@ -121,6 +122,13 @@ def episode_summary(path):
     ep = {"steps": T, "violated": bool(violations[-1]), "return": float(rewards.sum()),
           "goals": int(np.sum(rewards > GOAL_THRESHOLD)),
           "plan_times": d["plan_times"][COMPILE_STEPS:] if "plan_times" in d.files else np.full(T, np.nan)}
+    if "info_pred_rewards" in d.files: # model optimism: the dense reward the plan predicted over its horizon, minus
+        # the dense reward received over the next horizon (only where the episode lasted that long)
+        pred = d["info_pred_rewards"].reshape(T, -1)
+        H = pred.shape[1]
+        dense = np.concatenate([[0.0], np.cumsum(rewards - GOAL_REWARD * (rewards > GOAL_THRESHOLD))])
+        gap = pred[:T - H + 1].sum(axis=1) - (dense[H:] - dense[:T - H + 1]) if T >= H else np.array([])
+        ep["optimism"] = float(gap.mean()) if len(gap) else np.nan
     if "info_pred_risk" in d.files: # per step: the executed plan's worst step risk, and does it meet the barrier?
         ep["max_risk"] = d["info_pred_risk"].reshape(T, -1).max(axis=1)
         ep["latent_safe"] = ep["max_risk"] <= TAU + FEAS_TOL
@@ -239,7 +247,9 @@ def planner_row(episodes, horizon):
         row.update({"latent_safe": safe.mean(),
                     "viol_soon_after_safe": soon[safe].mean() if safe.any() else np.nan,
                     "viol_soon_after_unsafe": soon[~safe].mean() if (~safe).any() else np.nan,
-                    "violations_warned": np.mean(warned) if warned else np.nan})
+                    "violations_warned": np.mean(warned) if warned else np.nan,
+                    "steps_safe": int(safe.sum()), "steps_safe_viol_soon": int(soon[safe].sum()),
+                    "steps_unsafe": int((~safe).sum()), "steps_unsafe_viol_soon": int(soon[~safe].sum())})
         ct = crash_types(eps, horizon)
         row.update({k: ct[k] for k in ("crashes_unwarned", "barrier_active", "barrier_slack_med")})
     # SCP's certificates: converged with the plan feasible (KKT point), converged with slack in use (no safe plan
@@ -257,6 +267,8 @@ def planner_row(episodes, horizon):
             row["iterations"] = np.concatenate([e["iterations"] for e in eps]).mean()
     if all("start" in e for e in eps):
         row["sampled_start"] = np.mean(np.concatenate([e["start"] for e in eps]) == "sampled")
+    if any("optimism" in e for e in eps):
+        row["optimism"] = nan_stat(np.mean, [e.get("optimism", np.nan) for e in eps])
     if all("filter_active" in e for e in eps):
         active = np.concatenate([e["filter_active"] for e in eps])
         met = np.concatenate([e["filter_met"] for e in eps])
@@ -591,7 +603,8 @@ def main():
                                      "return": e["return"], "goals": e["goals"],
                                      "plan_time_med": nan_stat(np.median, e["plan_times"]),
                                      **dict(zip(("crash_unwarned", "barrier_active"),
-                                                episode_crash(e, p["horizon"])))})
+                                                episode_crash(e, p["horizon"]))),
+                                     "optimism": e.get("optimism", np.nan)})
         if MAIN in p["planners"]:
             for pl in p["planners"]:
                 if pl != MAIN:
