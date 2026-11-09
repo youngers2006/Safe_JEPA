@@ -31,6 +31,9 @@ COLOURS = {"SCP+MPPI": "tab:purple", "SCP": "tab:blue", "MPPI": "tab:orange", "M
 BOUND_COLOURS = {1.2: "tab:red", 1.5: "tab:blue", np.inf: "tab:gray"}
 TAU, FEAS_TOL = 0.0, 1e-3 # a plan meets the barrier in the model when its worst step's risk is at most TAU + FEAS_TOL
 ACTIVE_TOL = 0.01 # a plan that meets the barrier has it active when its worst step's risk is within this of TAU
+# SCP's feas_tol (scp.yaml): SCP counts as converged when the barrier is met to this, so certified_tol certifies a
+# converged step whose rollout meets the barrier to it (the logged "certified" checks the rollout with no tolerance)
+SCP_FEAS_TOL = 1e-4
 GOAL_THRESHOLD = 0.5 # a step whose reward exceeds this reached the goal
 # The agent builds a new controller at every reset, so JAX recompiles on each episode's first two steps (about 10x a
 # normal step): JIT compilation, not planning, so left out of every plan-time statistic
@@ -127,6 +130,8 @@ def episode_summary(path):
     for k in ("certified", "iterations"):
         if f"info_{k}" in d.files:
             ep[k] = d[f"info_{k}"].astype(float)
+    if "stop_reason" in ep and "max_risk" in ep:
+        ep["certified_tol"] = ((ep["stop_reason"] == "converged") & (ep["max_risk"] <= TAU + SCP_FEAS_TOL)).astype(float)
     if "info_filter_active" in d.files: # the one-step safety filter: did it change the action, and did that work?
         ep["filter_active"] = d["info_filter_active"].astype(bool)
         ep["filter_met"] = d["info_filter_q_after"] <= TAU + FEAS_TOL
@@ -246,6 +251,8 @@ def planner_row(episodes, horizon):
                     "max_iters": np.mean(stops == "max_iters")})
         if all("certified" in e for e in eps):
             row["certified"] = np.concatenate([e["certified"] for e in eps]).mean()
+        if all("certified_tol" in e for e in eps):
+            row["certified_tol"] = np.concatenate([e["certified_tol"] for e in eps]).mean()
         if all("iterations" in e for e in eps):
             row["iterations"] = np.concatenate([e["iterations"] for e in eps]).mean()
     if all("start" in e for e in eps):
