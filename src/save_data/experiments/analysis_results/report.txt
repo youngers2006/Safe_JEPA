@@ -39,6 +39,22 @@ PG2    inf MPPI@65536           120         22  0.18 [0.12, 0.26]    0.52 [  0.3
 PG2    inf CEM                  120         25  0.21 [0.15, 0.29]    0.49 [  0.27,   0.74]   0.08  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 PG2    inf CEM@65536            120         26  0.22 [0.15, 0.30]    0.56 [  0.36,   0.77]   0.11  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 
+=== All 6 horizon-10 world models, eps >= 0.1: SCP+MPPI against each planner on the same model, eps and seed (95% intervals resample seeds) ===
+  vs            pairs  only SCP+MPPI:only other violated, violation difference (points), McNemar p, return difference
+  SCP             880    64:326   -29.8 [-34.0, -25.8], p 2.2e-43, +0.01 [-0.12, +0.14]
+  MPPI            880   103:86     +1.9 [-0.7, +4.7], p 0.244, +0.21 [+0.12, +0.30]
+  MPPI@65536      720    66:67     -0.1 [-2.8, +2.5], p 1.000, +0.06 [-0.09, +0.21]
+  CEM             880   100:77     +2.6 [+0.0, +5.2], p 0.098, +0.18 [+0.08, +0.29]
+  CEM@65536       720    65:60     +0.7 [-2.1, +3.3], p 0.721, +0.09 [-0.05, +0.22]
+  crash types and barrier slack, each planner over the same models and eps: crashes per 100 episodes the model warned of / did not; share of the plans meeting the barrier that had it active (slack <= 0.01) and their median slack;
+  SCP+MPPI against it on paired episodes: unwarned crashes (only SCP+MPPI:only other, McNemar p) and the difference in the active share (points)
+  SCP+MPPI        880 episodes:  23.9 /  1.6, active  86.1%, median slack -0.000
+  SCP             920 episodes:  54.6 /  0.9, active  75.2%, median slack 0.000; vs SCP+MPPI: unwarned 13:7, p 0.263, active +9.4 [+7.0, +11.7]
+  MPPI            920 episodes:  22.2 /  0.8, active  85.4%, median slack 0.000; vs SCP+MPPI: unwarned 13:6, p 0.167, active +0.1 [-1.2, +1.5]
+  MPPI@65536      720 episodes:  24.4 /  1.0, active  87.4%, median slack 0.000; vs SCP+MPPI: unwarned 12:7, p 0.359, active +1.0 [-0.2, +2.4]
+  CEM             920 episodes:  21.7 /  0.7, active  85.3%, median slack 0.001; vs SCP+MPPI: unwarned 14:6, p 0.115, active +0.3 [-1.2, +1.7]
+  CEM@65536       720 episodes:  22.8 /  1.8, active  86.9%, median slack 0.000; vs SCP+MPPI: unwarned 7:8, p 1.000, active +1.4 [+0.0, +2.9]
+
 === Lipschitz bound, PointGoal1: each planner with bound 1.5 against bound 1.2, inf, paired seeds, pooled over eps >= 0.1 (only-1.5:only-other = episodes where just one of the two violated) ===
   SCP+MPPI        1.5 vs 1.2: violations 28/160 vs 44/160 (20:36), McNemar p 0.044, CMH p 0.046, return difference -0.26 [-0.61, +0.09]
   SCP+MPPI        1.5 vs inf: violations 24/120 vs 34/120 (19:29), McNemar p 0.193, CMH p 0.176, return difference +0.22 [-0.18, +0.62]
@@ -256,13 +272,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 9/30 vs 10/30 (3:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.825, return difference +0.21 [-0.25, +0.71] (Wilcoxon p 0.309)
   vs CEM@65536 eps  0.5: violations 10/30 vs 8/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.586, return difference +0.20 [-0.18, +0.61] (Wilcoxon p 0.529)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 35/120 vs 35/120 (12:12), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.980
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0006 / 0.0634, warned 0.85
-    SCP         0.0008 / 0.1509, warned 0.99
-    MPPI        0.0006 / 0.1238, warned 0.93
-    MPPI@65536  0.0006 / 0.0527, warned 0.90
-    CEM         0.0003 / 0.1053, warned 0.94
-    CEM@65536   0.0008 / 0.0629, warned 0.85
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0006 / 0.0634, warned 0.85; unwarned crashes 6 in 160 episodes; barrier active on 81.0% (median slack 0.000)
+    SCP         0.0008 / 0.1509, warned 0.99; unwarned crashes 1 in 160 episodes; barrier active on 60.7% (median slack 0.005)
+    MPPI        0.0006 / 0.1238, warned 0.93; unwarned crashes 3 in 160 episodes; barrier active on 79.8% (median slack 0.000)
+    MPPI@65536  0.0006 / 0.0527, warned 0.90; unwarned crashes 3 in 120 episodes; barrier active on 81.6% (median slack -0.000)
+    CEM         0.0003 / 0.1053, warned 0.94; unwarned crashes 2 in 160 episodes; barrier active on 82.6% (median slack 0.001)
+    CEM@65536   0.0008 / 0.0629, warned 0.85; unwarned crashes 5 in 120 episodes; barrier active on 79.5% (median slack -0.000)
 
 === PG1 c1.5 H10 (M2_pointgoal1_c_1_5_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -327,13 +343,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 7/30 vs 7/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.973, return difference +0.45 [-0.08, +1.07] (Wilcoxon p 0.626)
   vs CEM@65536 eps  0.5: violations 2/30 vs 4/30 (1:3), McNemar p 0.625 (Holm 1.000), log-rank p 0.378, return difference +0.18 [-0.12, +0.50] (Wilcoxon p 0.349)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 24/120 vs 31/120 (6:13), McNemar p 0.167, CMH p 0.352 (odds ratio 0.71), stratified log-rank p 0.306
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0003 / 0.0771, warned 0.94
-    SCP         0.0012 / 0.1350, warned 0.98
-    MPPI        0.0002 / 0.0693, warned 0.95
-    MPPI@65536  0.0003 / 0.0535, warned 1.00
-    CEM         0.0001 / 0.0580, warned 1.00
-    CEM@65536   0.0004 / 0.0767, warned 0.97
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0003 / 0.0771, warned 0.94; unwarned crashes 2 in 160 episodes; barrier active on 73.9% (median slack 0.002)
+    SCP         0.0012 / 0.1350, warned 0.98; unwarned crashes 2 in 160 episodes; barrier active on 65.6% (median slack 0.003)
+    MPPI        0.0002 / 0.0693, warned 0.95; unwarned crashes 2 in 160 episodes; barrier active on 73.8% (median slack 0.001)
+    MPPI@65536  0.0003 / 0.0535, warned 1.00; unwarned crashes 0 in 120 episodes; barrier active on 75.2% (median slack 0.000)
+    CEM         0.0001 / 0.0580, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 72.4% (median slack 0.001)
+    CEM@65536   0.0004 / 0.0767, warned 0.97; unwarned crashes 1 in 120 episodes; barrier active on 75.7% (median slack 0.001)
 
 === PG1 c1.5 H20 (M2_pointgoal1_c_1_5_seed_0_h20), e4 ===
     H planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -348,11 +364,11 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs MPPI  pooled over eps >= 0.1 (1 points): violations 2/30 vs 2/30 (0:0), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 1.000
   vs CEM   H   20: violations 2/30 vs 3/30 (0:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.644, return difference -0.24 [-1.05, +0.57] (Wilcoxon p 0.685)
   vs CEM   pooled over eps >= 0.1 (1 points): violations 2/30 vs 3/30 (0:1), McNemar p 1.000, CMH p 1.000 (odds ratio 0.64), stratified log-rank p 0.644
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0000 / 0.0948, warned 1.00
-    SCP         0.0003 / 0.1434, warned 1.00
-    MPPI        0.0000 / 0.0717, warned 1.00
-    CEM         0.0000 / 0.0990, warned 1.00
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0000 / 0.0948, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 67.7% (median slack 0.000)
+    SCP         0.0003 / 0.1434, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 60.3% (median slack 0.005)
+    MPPI        0.0000 / 0.0717, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 76.5% (median slack 0.001)
+    CEM         0.0000 / 0.0990, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 73.1% (median slack 0.001)
 
 === PG1 c1.5 H30 (M2_pointgoal1_c_1_5_seed_0_h30), e4 ===
     H planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -373,13 +389,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM   pooled over eps >= 0.1 (1 points): violations 1/30 vs 0/30 (1:0), McNemar p 1.000, CMH p 1.000 (odds ratio inf), stratified log-rank p 0.317
   vs CEM@32768 H   30: violations 1/30 vs 1/30 (0:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.990, return difference +0.11 [-0.91, +1.14] (Wilcoxon p 0.715)
   vs CEM@32768 pooled over eps >= 0.1 (1 points): violations 1/30 vs 1/30 (0:0), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.990
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0005 / 0.0299, warned 1.00
-    SCP         0.0029 / 0.0630, warned 0.86
-    MPPI        0.0000 / 0.0000, warned nan
-    MPPI@32768  0.0003 / 0.0794, warned 1.00
-    CEM         0.0000 / 0.0000, warned nan
-    CEM@32768   0.0004 / 0.0614, warned 1.00
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0005 / 0.0299, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 77.8% (median slack 0.000)
+    SCP         0.0029 / 0.0630, warned 0.86; unwarned crashes 1 in 30 episodes; barrier active on 74.2% (median slack 0.000)
+    MPPI        0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 74.1% (median slack 0.003)
+    MPPI@32768  0.0003 / 0.0794, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 76.6% (median slack 0.002)
+    CEM         0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 74.5% (median slack 0.003)
+    CEM@32768   0.0004 / 0.0614, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 73.9% (median slack 0.001)
 
 === PG1 cinf H10 (M2_pointgoal1_c_inf_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -444,13 +460,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 12/30 vs 7/30 (6:1), McNemar p 0.125 (Holm 0.625), log-rank p 0.180, return difference -0.12 [-0.45, +0.21] (Wilcoxon p 0.339)
   vs CEM@65536 eps  0.5: violations 11/30 vs 9/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.597, return difference +0.13 [-0.17, +0.50] (Wilcoxon p 0.598)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 34/120 vs 30/120 (13:9), McNemar p 0.523, CMH p 0.661 (odds ratio 1.19), stratified log-rank p 0.547
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0003 / 0.0932, warned 0.90
-    SCP         0.0013 / 0.0803, warned 0.98
-    MPPI        0.0002 / 0.1297, warned 1.00
-    MPPI@65536  0.0003 / 0.0731, warned 1.00
-    CEM         0.0001 / 0.0771, warned 1.00
-    CEM@65536   0.0003 / 0.1174, warned 0.93
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0003 / 0.0932, warned 0.90; unwarned crashes 2 in 120 episodes; barrier active on 80.9% (median slack 0.000)
+    SCP         0.0013 / 0.0803, warned 0.98; unwarned crashes 2 in 160 episodes; barrier active on 57.6% (median slack 0.005)
+    MPPI        0.0002 / 0.1297, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 77.7% (median slack 0.001)
+    MPPI@65536  0.0003 / 0.0731, warned 1.00; unwarned crashes 0 in 120 episodes; barrier active on 81.3% (median slack 0.000)
+    CEM         0.0001 / 0.0771, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 78.0% (median slack 0.001)
+    CEM@65536   0.0003 / 0.1174, warned 0.93; unwarned crashes 2 in 120 episodes; barrier active on 78.7% (median slack 0.000)
 
 === PG2 c1.2 H10 (M2_pointgoal2_c_1_2_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -515,13 +531,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 8/30 vs 5/30 (4:1), McNemar p 0.375 (Holm 1.000), log-rank p 0.407, return difference -0.20 [-0.85, +0.19] (Wilcoxon p 0.968)
   vs CEM@65536 eps  0.5: violations 10/30 vs 8/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.559, return difference +0.12 [-0.06, +0.31] (Wilcoxon p 0.124)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 36/120 vs 27/120 (15:6), McNemar p 0.078, CMH p 0.241 (odds ratio 1.49), stratified log-rank p 0.202
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0007 / 0.0588, warned 0.95
-    SCP         0.0002 / 0.0903, warned 1.00
-    MPPI        0.0002 / 0.0567, warned 1.00
-    MPPI@65536  0.0005 / 0.0418, warned 0.96
-    CEM         0.0002 / 0.0558, warned 0.97
-    CEM@65536   0.0007 / 0.0266, warned 0.97
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0007 / 0.0588, warned 0.95; unwarned crashes 3 in 160 episodes; barrier active on 96.7% (median slack -0.000)
+    SCP         0.0002 / 0.0903, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 95.5% (median slack -0.000)
+    MPPI        0.0002 / 0.0567, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 97.7% (median slack 0.000)
+    MPPI@65536  0.0005 / 0.0418, warned 0.96; unwarned crashes 1 in 120 episodes; barrier active on 96.9% (median slack 0.000)
+    CEM         0.0002 / 0.0558, warned 0.97; unwarned crashes 1 in 160 episodes; barrier active on 97.3% (median slack 0.000)
+    CEM@65536   0.0007 / 0.0266, warned 0.97; unwarned crashes 1 in 120 episodes; barrier active on 97.1% (median slack 0.000)
 
 === PG2 c1.5 H10 (M2_pointgoal2_c_1_5_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -586,13 +602,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 6/30 vs 5/30 (5:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.783, return difference +0.13 [-0.08, +0.38] (Wilcoxon p 0.309)
   vs CEM@65536 eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.832, return difference -0.04 [-0.25, +0.16] (Wilcoxon p 0.761)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 27/120 vs 28/120 (9:10), McNemar p 1.000, CMH p 1.000 (odds ratio 0.95), stratified log-rank p 0.875
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0001 / 0.0705, warned 1.00
-    SCP         0.0019 / 0.0885, warned 0.97
-    MPPI        0.0004 / 0.0368, warned 0.92
-    MPPI@65536  0.0002 / 0.0935, warned 0.95
-    CEM         0.0004 / 0.0582, warned 0.94
-    CEM@65536   0.0004 / 0.0845, warned 0.89
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0001 / 0.0705, warned 1.00; unwarned crashes 0 in 160 episodes; barrier active on 93.4% (median slack -0.000)
+    SCP         0.0019 / 0.0885, warned 0.97; unwarned crashes 3 in 160 episodes; barrier active on 84.3% (median slack -0.000)
+    MPPI        0.0004 / 0.0368, warned 0.92; unwarned crashes 2 in 160 episodes; barrier active on 92.9% (median slack 0.000)
+    MPPI@65536  0.0002 / 0.0935, warned 0.95; unwarned crashes 1 in 120 episodes; barrier active on 95.8% (median slack 0.000)
+    CEM         0.0004 / 0.0582, warned 0.94; unwarned crashes 2 in 160 episodes; barrier active on 92.4% (median slack 0.000)
+    CEM@65536   0.0004 / 0.0845, warned 0.89; unwarned crashes 3 in 120 episodes; barrier active on 96.2% (median slack 0.000)
 
 === PG2 cinf H10 (M2_pointgoal2_c_inf_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
@@ -657,13 +673,13 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   vs CEM@65536 eps  0.3: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.721, return difference +0.07 [-0.10, +0.21] (Wilcoxon p 0.685)
   vs CEM@65536 eps  0.5: violations 7/30 vs 9/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.663, return difference -0.08 [-0.43, +0.27] (Wilcoxon p 0.393)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 26/120 vs 26/120 (10:10), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.929
-  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning
-    SCP+MPPI    0.0002 / 0.0241, warned 0.96
-    SCP         0.0003 / 0.0634, warned 1.00
-    MPPI        0.0002 / 0.0337, warned 1.00
-    MPPI@65536  0.0004 / 0.0123, warned 0.90
-    CEM         0.0002 / 0.0269, warned 0.96
-    CEM@65536   0.0004 / 0.0202, warned 0.96
+  latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
+    SCP+MPPI    0.0002 / 0.0241, warned 0.96; unwarned crashes 1 in 120 episodes; barrier active on 94.2% (median slack -0.000)
+    SCP         0.0003 / 0.0634, warned 1.00; unwarned crashes 0 in 120 episodes; barrier active on 91.7% (median slack -0.000)
+    MPPI        0.0002 / 0.0337, warned 1.00; unwarned crashes 0 in 120 episodes; barrier active on 94.9% (median slack 0.000)
+    MPPI@65536  0.0004 / 0.0123, warned 0.90; unwarned crashes 2 in 120 episodes; barrier active on 94.4% (median slack 0.000)
+    CEM         0.0002 / 0.0269, warned 0.96; unwarned crashes 1 in 120 episodes; barrier active on 94.0% (median slack 0.000)
+    CEM@65536   0.0004 / 0.0202, warned 0.96; unwarned crashes 1 in 120 episodes; barrier active on 94.8% (median slack 0.000)
 
 Warnings:
   /home/samuel/Github/Safe_JEPA/src/save_data/experiments/M2_pointgoal1_c_inf_seed_0/e1/eps_0.0: SCP+MPPI has overlapping seed ranges [(0, 29), (20, 29)]; check which run wrote the seed files
