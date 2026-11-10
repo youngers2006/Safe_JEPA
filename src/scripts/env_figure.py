@@ -1,4 +1,5 @@
 import os
+from importlib import import_module
 from pathlib import Path
 
 MUJOCO_GL = "egl" # offscreen rendering backend: "egl" on a machine with a GPU, "osmesa" without one
@@ -27,7 +28,7 @@ plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix", "
 
 def top_down(level):
     # The layout Safety-Gymnasium builds for SEED, seen through its far fixed camera moved straight above the arena's
-    # centre and pointed down (x right, y up), drawn with MuJoCo's own renderer
+    # centre and pointed down (x right, y up), drawn with MuJoCo's low-level renderer (in every MuJoCo version)
     env = safety_gymnasium.make(f"SafetyPointGoal{level}-v0")
     env.reset(seed=SEED)
     model, data = env.unwrapped.task.model, env.unwrapped.task.data
@@ -37,18 +38,28 @@ def top_down(level):
     model.cam_quat[cam] = [1.0, 0.0, 0.0, 0.0]
     model.vis.global_.offwidth = model.vis.global_.offheight = PIXELS # the offscreen buffer must fit the image
     mujoco.mj_forward(model, data) # camera poses are recomputed only here
+
+    camera = mujoco.MjvCamera()
+    camera.type, camera.fixedcamid = mujoco.mjtCamera.mjCAMERA_FIXED.value, cam
     option = mujoco.MjvOption()
     option.geomgroup[:] = 1 # hazards, vases and the goal are geom groups 3 and up, which MuJoCo hides by default
-    renderer = mujoco.Renderer(model, PIXELS, PIXELS)
-    renderer.update_scene(data, camera=cam, scene_option=option)
-    image = renderer.render()
-    # Free the GL context now: left until exit, it is freed after EGL has shut down, which raises
-    if hasattr(renderer, "close"):
-        renderer.close()
-    else:
-        renderer._gl_context.free() # MuJoCo before 3.0 has no close()
+    scene = mujoco.MjvScene(model, maxgeom=10000)
+    mujoco.mjv_updateScene(model, data, option, mujoco.MjvPerturb(), camera, mujoco.mjtCatBit.mjCAT_ALL.value, scene)
+
+    gl = import_module(f"mujoco.{os.environ['MUJOCO_GL']}").GLContext(PIXELS, PIXELS)
+    gl.make_current()
+    context = mujoco.MjrContext(model, mujoco.mjtFontScale.mjFONTSCALE_150.value)
+    mujoco.mjr_setBuffer(mujoco.mjtFramebuffer.mjFB_OFFSCREEN.value, context)
+    viewport = mujoco.MjrRect(0, 0, PIXELS, PIXELS)
+    mujoco.mjr_render(viewport, scene, context)
+    image = np.empty((PIXELS, PIXELS, 3), dtype=np.uint8)
+    mujoco.mjr_readPixels(image, None, viewport, context)
+    # Free MuJoCo's GL resources, then the GL context, now: left until exit, they are freed after EGL has shut down,
+    # which raises
+    del context
+    gl.free()
     env.close()
-    return image
+    return np.flipud(image) # OpenGL reads rows bottom up
 
 def main():
     fig, axes = plt.subplots(1, 2, figsize=(WIDTH, WIDTH / 2))
