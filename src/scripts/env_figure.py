@@ -26,20 +26,27 @@ plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix", "
                      "pdf.fonttype": 42, "ps.fonttype": 42, "savefig.bbox": "tight", "savefig.pad_inches": 0.02})
 
 def top_down(level):
-    # Safety-Gymnasium's far fixed camera, moved straight above the arena's centre and pointed down (x right, y up)
-    env = safety_gymnasium.make(f"SafetyPointGoal{level}-v0", render_mode="rgb_array", camera_name="fixedfar",
-                                width=PIXELS, height=PIXELS)
+    # The layout Safety-Gymnasium builds for SEED, seen through its far fixed camera moved straight above the arena's
+    # centre and pointed down (x right, y up), drawn with MuJoCo's own renderer
+    env = safety_gymnasium.make(f"SafetyPointGoal{level}-v0")
     env.reset(seed=SEED)
-    task = env.unwrapped.task
-    task.render_conf.lidar_markers = False # the robot's lidar readout would ring it with markers
-    cam = mujoco.mj_name2id(task.model, mujoco.mjtObj.mjOBJ_CAMERA, "fixedfar")
-    task.model.cam_mode[cam] = 0
-    task.model.cam_pos[cam] = [0.0, 0.0, CAMERA_HEIGHT[level]]
-    task.model.cam_quat[cam] = [1.0, 0.0, 0.0, 0.0]
-    mujoco.mj_forward(task.model, task.data) # camera poses are recomputed only here
-    image = env.render()
-    for viewer in task._viewers.values():
-        viewer.free() # Safety-Gymnasium's close() leaves its renderer to be freed at exit, after EGL has shut down
+    model, data = env.unwrapped.task.model, env.unwrapped.task.data
+    cam = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "fixedfar")
+    model.cam_mode[cam] = 0
+    model.cam_pos[cam] = [0.0, 0.0, CAMERA_HEIGHT[level]]
+    model.cam_quat[cam] = [1.0, 0.0, 0.0, 0.0]
+    model.vis.global_.offwidth = model.vis.global_.offheight = PIXELS # the offscreen buffer must fit the image
+    mujoco.mj_forward(model, data) # camera poses are recomputed only here
+    option = mujoco.MjvOption()
+    option.geomgroup[:] = 1 # hazards, vases and the goal are geom groups 3 and up, which MuJoCo hides by default
+    renderer = mujoco.Renderer(model, PIXELS, PIXELS)
+    renderer.update_scene(data, camera=cam, scene_option=option)
+    image = renderer.render()
+    # Free the GL context now: left until exit, it is freed after EGL has shut down, which raises
+    if hasattr(renderer, "close"):
+        renderer.close()
+    else:
+        renderer._gl_context.free() # MuJoCo before 3.0 has no close()
     env.close()
     return image
 
