@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # Saved as PDF (for the paper) and PNG (to preview) in OUT, one folder per place in the paper
 ANALYSIS = ROOT / "src/save_data/experiments/analysis_results"
 OUT = ROOT / "paper_graphs"
+# The seeds are capped in analyse_results.py, which reads the episodes; this must match its SEED_CAP so the figures say
+# which seeds they show. The analysis outputs record their cap, and the figures stop if the two differ
+SEED_CAP = 30
 TEXT_WIDTH = 6.0 # inches, the paper's text width: every figure spans it
 MAIN_BOUND = 1.5 # the main world models' Lipschitz bound
 SURVIVAL_TASK = 1 # the main model whose survival curves go in the appendix
@@ -529,7 +532,12 @@ def table_per_model(headline):
 
 def main():
     rows, episodes = load("summary.csv"), load("episodes.csv")
-    print(f"Paper figures from {ANALYSIS}, written to {OUT}:")
+    caps = {r.get("seed_cap") for r in rows}
+    if caps != {str(SEED_CAP)}:
+        made = "before SEED_CAP existed" if None in caps else f"with SEED_CAP {', '.join(sorted(caps))}"
+        raise SystemExit(f"{ANALYSIS} was made {made}, not {SEED_CAP}: set SEED_CAP in analyse_results.py and here to "
+                         f"the same value and re-run analyse_results.py")
+    print(f"Paper figures from {ANALYSIS} (seeds 0-{SEED_CAP - 1}), written to {OUT}:")
     fig_sweep(rows, MAIN_TEXT, "main_text", "fig_eps_sweep_c1_5")
     fig_stop_reasons(rows)
     fig_horizon(rows, HORIZON_MAIN, "main_text", "fig_horizon")

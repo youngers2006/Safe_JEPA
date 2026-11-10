@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "src/save_data/experiments" # the merged experiments folder
 OUT = RESULTS / "analysis_results"
 PREFIX = "M2_" # only world model folders starting with this ("" for all)
+SEED_CAP = 30 # only seeds 0 to SEED_CAP - 1 are read, so every point uses the same seeds; one with fewer keeps its own
 # Runs at another budget, saved in their own folder under the plain planner names, join the point they extend so they
 # pair with its seeds, named with their budget from their config: a sampler's sequences ("MPPI@65536"), SCP's iteration
 # cap ("SCP+MPPI@100it"). Each rule maps such a folder (its path below the world model's folder) to that point's
@@ -208,7 +209,7 @@ def load_results(results, prefix):
     for f in sorted(results.rglob("*_seed_*.npz")):
         m = re.fullmatch(r"(.+)_seed_(\d+)\.npz", f.name)
         rel = f.parent.relative_to(results).parts
-        if m is None or len(rel) < 2 or not rel[0].startswith(prefix):
+        if m is None or len(rel) < 2 or not rel[0].startswith(prefix) or int(m.group(2)) >= SEED_CAP:
             continue
         tag, planner = point_name(f.parent, m.group(1), rel)
         sources.setdefault((rel[0], tag), {})[planner] = (f.parent, m.group(1))
@@ -587,7 +588,8 @@ def write_csv(path, rows):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     points, warnings = load_results(RESULTS, PREFIX)
-    lines = [f"Results in {RESULTS} (world model folders starting '{PREFIX}'): {len(points)} sweep points"]
+    lines = [f"Results in {RESULTS} (world model folders starting '{PREFIX}'): {len(points)} sweep points, "
+             f"seeds 0-{SEED_CAP - 1} only (SEED_CAP)"]
     if not points:
         print(lines[0])
         return
@@ -599,7 +601,7 @@ def main():
             summary[(p["data_dir"], p["tag"], pl)] = row
             summary_rows.append({"model": p["model"], "data_dir": p["data_dir"], "tag": p["tag"], "eps": p["eps"],
                                  "horizon": p["horizon"], "bound": p["bound"], "task": p["task"], "planner": pl,
-                                 "seeds": f"{min(episodes)}-{max(episodes)}", **row})
+                                 "seeds": f"{min(episodes)}-{max(episodes)}", "seed_cap": SEED_CAP, **row})
             for s, e in sorted(episodes.items()):
                 episode_rows.append({"model": p["model"], "data_dir": p["data_dir"], "tag": p["tag"], "eps": p["eps"],
                                      "planner": pl, "seed": s, "steps": e["steps"], "violated": e["violated"],
