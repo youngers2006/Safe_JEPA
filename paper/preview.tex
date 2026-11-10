@@ -1,0 +1,35 @@
+% Stand-alone preview of the experiments and results (not the paper): pdflatex preview, bibtex preview, pdflatex x2.
+% Text width is 6 in, the width the figures are drawn at. The "Method" section is a stub that only holds the labels the
+% results refer to; in the paper those labels belong to your method section.
+\documentclass[10pt]{article}
+\usepackage[letterpaper,textwidth=6in,textheight=9in]{geometry}
+\usepackage{mathptmx}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\newcommand{\figdir}{../paper_graphs}
+
+\title{Experiments and Results (preview)}
+\date{}
+\begin{document}
+\maketitle
+
+\section{Method (stub for cross-references)}
+\subsection{Regularity constraints}\label{sec:regularity}
+\subsection{Control barrier function}\label{sec:cbf}
+\subsection{Successive convexification}\label{sec:scp}
+\subsection{Initial guess}\label{sec:init}
+\begin{equation}\label{eq:ocp}
+  \text{(the planning problem)}
+\end{equation}
+
+\input{experiments_results}
+
+\appendix
+\input{appendix_results}
+
+\bibliographystyle{plainnat}
+\bibliography{experiments_refs}
+\end{document}

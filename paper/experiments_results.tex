@@ -1,0 +1,278 @@
+% =====================================================================================================================
+% Experimental setup and results for "Successive Convexification In Learned World Models For Safe Offline Planning".
+% Main text: \input{experiments_results}. Appendix: \input{appendix_results}. Citations: experiments_refs.bib.
+%
+% Every figure and table is written by the repository's scripts, run from the repository root:
+%   python src/scripts/analyse_results.py  -> src/save_data/experiments/analysis_results/*.csv
+%   python src/scripts/paper_figures.py    -> paper_graphs/{main_text,ablation,appendix}/ (figures and both tables)
+%   python src/scripts/env_figure.py       -> paper_graphs/main_text/fig_environments.pdf
+% \figdir is the paper_graphs folder; define it before \input if the paper lives elsewhere (e.g. on Overleaf).
+%
+% Notation follows the method: N horizon, \epsilon barrier margin, \alpha DCBF rate, c Lipschitz bound, \tau risk
+% threshold, g_\Phi margin head. Labels of the method's parts used here (rename to match yours): sec:regularity,
+% sec:cbf, sec:scp, sec:init, eq:ocp.
+% Every number is from the analysis of the runs on main (2d4240b). "% TODO" marks a fact to confirm before submission.
+% =====================================================================================================================
+\providecommand{\figdir}{../paper_graphs}
+
+\section{Experimental Setup}\label{sec:setup}
+
+Our experiments answer four questions.
+\textbf{(Q1)}~Does SCP, started from a sampled plan, plan better than sampling-based MPC given the same wall-clock time?
+\textbf{(Q2)}~How does the comparison change as the horizon, and with it the number of decision variables, grows?
+\textbf{(Q3)}~What does SCP's convergence tell us online?
+\textbf{(Q4)}~Does meeting the barrier in the learned model keep the robot safe in the environment, and what do the
+regularity constraints cost?
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Environments}\label{sec:envs}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.62\linewidth]{\figdir/main_text/fig_environments.pdf}
+  \caption{The two tasks from above, one layout each (layouts are drawn from the episode's seed). The point robot
+  (red) must reach the goal (green) without entering a hazard (blue); in PointGoal2, touching a vase (cyan) is also a
+  violation.}
+  \label{fig:envs}
+\end{figure}
+
+We use \texttt{SafetyPointGoal1} and \texttt{SafetyPointGoal2} from Safety-Gymnasium~\citep{ji2023safety}
+(Fig.~\ref{fig:envs}). A point robot with two actuators (forward force and turning, $u\in[-1,1]^2$) must reach a goal
+of radius $0.3$\,m, which moves to a new position each time it is reached, within $T=1000$ steps. The reward is the
+per-step reduction in distance to the goal plus a bonus of 1 for reaching it. The robot observes 60 quantities: 12
+proprioceptive signals (accelerometer, velocimeter, gyroscope and magnetometer) and three 16-ray pseudo-lidars measuring
+the proximity of the goal, the hazards and the vases. Level~1 places 8 hazards of radius $0.2$\,m and one cost-free
+vase in a $3\times3$\,m region; level~2 places 10 hazards and 10 vases in a $4\times4$\,m region and also charges for
+touching or moving a vase. A step is a \emph{violation} if it incurs any cost. We treat violations as absorbing
+failures: an episode ends at its first violation, so the \emph{violation rate} is the share of episodes that fail and
+the \emph{return} is the reward collected before failure or the time limit.
+
+These tasks suit our question for four reasons.
+(i)~DSRL~\citep{liu2023datasets} provides offline datasets for both, so the world model is learned without any
+interaction, which is the setting of this paper.
+(ii)~The constraint is geometric (stay out of regions of the plane) and observed through the lidar, so the barrier's
+margin is a distance in metres, the margin $\epsilon$ has a physical meaning, and safety in the model can be checked
+against safety in the environment (Sec.~\ref{sec:latent_safety}).
+(iii)~Level~2 is more cluttered (20 obstacles in 16\,m$^2$ against 8 in 9\,m$^2$) and adds a second, movable kind of
+obstacle, so the two levels, together with $\epsilon$, vary how restrictive the safe set is.
+(iv)~The action is two-dimensional, which favours sampling: at $N=10$ a plan has only 20 decision variables, so the
+comparison is a demanding one for SCP. The horizon study (Sec.~\ref{sec:horizon}) raises this to 40 and 60.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Offline data and world models}\label{sec:wm_setup}
+
+For each task we train on the corresponding DSRL dataset (2,022 trajectories for PointGoal1 and 3,442 for PointGoal2,
+of up to 1000 steps each), truncating every trajectory at its first violation to match the absorbing failure above.
+This leaves about 0.87\,M transitions for PointGoal1 and 1.15\,M for PointGoal2; only 329 of PointGoal2's trajectories
+run their full length without a violation.
+% TODO: PG1's exact transition count (FilterDataset.ipynb prints it for PG2 only: 1,145,452); one sentence on how DSRL
+% collected the data (behaviour policies, cost budgets).
+The encoder drops seven proprioceptive channels (the accelerometer and the out-of-plane components of velocity,
+angular rate and magnetic field) and maps the remaining 53 to a latent state of $d_z=32$ dimensions. The four networks
+the planner differentiates through (dynamics, reward, value and margin) are MLPs with two hidden layers of 256 units,
+each with Lipschitz constant at most $c$ (Sec.~\ref{sec:regularity}). We train one model per task and bound,
+$c\in\{1.2,1.5,\infty\}$ ($c=\infty$: unbounded), for $N=10$, and two more PointGoal1 models with $c=1.5$ for $N=20$
+and $30$. Each is trained for 250 epochs of 1000 (PointGoal1) or 1500 (PointGoal2) minibatches of 256 windows of $N+1$
+consecutive transitions, with learning rate $3\times10^{-4}$, the loss at rollout step $t$ weighted by $\rho^t$
+($\rho=0.9$, $0.95$, $0.99$ for $N=10$, $20$, $30$), discount $\gamma=0.99$ and value expectile $0.7$. The margin head
+$g_\Phi$ regresses the distance from the robot to the nearest hazard edge (in PointGoal2, hazard or vase edge),
+computed from the lidar, clipped at 1\,m, with samples near an edge up-weighted.
+% TODO: optimiser (Adam?); state that each model is a single training seed (limitations).
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Planners}\label{sec:planners}
+
+All planners solve the same receding-horizon problem~\eqref{eq:ocp} in the same model: maximise
+$\sum_{k=0}^{N-1}\gamma^k r(z_k,u_k)+\gamma^N V(z_N)-\rho_u\|u\|^2$ ($\rho_u=10^{-4}$) subject to
+$(1-\alpha)h(z_k)-h(z_{k+1})\le\tau=0$ at every step, with $h(z)=g_\Phi(z)-\epsilon$ and $\alpha=0.05$. Each executes
+the first action of its plan and replans at every step.
+
+\textbf{SCP} is the method of Sec.~\ref{sec:scp} started from its previous plan shifted by one step (zeros at the first
+step): at most 40 prox-linear iterations, each a convex QP solved by Clarabel~\citep{goulart2024clarabel}, with exact
+$\ell_1$ penalties $w_{\mathrm{dyn}}=10^3$ and $w_{\mathrm{safe}}=10^2$, a trust-region weight that starts at 1, is
+floored at $10^{-2}$ and is carried between steps, acceptance thresholds $(0.25,0.75)$, and a stop when the
+prox-gradient norm falls below $10^{-2}$.
+\textbf{SCP+MPPI}, our method, first runs MPPI with 512 sequences (below) and starts SCP from whichever of MPPI's plan
+and its own shifted plan has the lower penalty merit (Sec.~\ref{sec:init}). SCP accepts only steps that lower the
+merit, so the plan SCP+MPPI executes is never worse under the merit than MPPI's, whether or not SCP converges.
+\textbf{MPPI}~\citep{williams2017information} and \textbf{CEM}~\citep{rubinstein1999cross} run 6 iterations of $J$
+action sequences drawn from a Gaussian that is refitted to the best $J/8$ (weighted by $\exp(\text{score}/0.5)$ in MPPI,
+uniformly in CEM) and warm-started from the previous mean shifted by one step. A sequence whose rollout breaks the
+barrier at any step ranks below every sequence that meets it; if none meets it, sequences are ranked by their total
+barrier excess, the quantity SCP's $\ell_1$ penalty charges. The executed plan is the refitted mean if its rollout
+meets the barrier, and otherwise the best sequence sampled.
+
+We run the samplers with $J=512$, the proposal SCP+MPPI uses, and \emph{time-matched}, with $J$ chosen so that a step
+takes about as long as SCP+MPPI's: $J=65{,}536$ at $N=10$ (about 0.70\,s against 0.40--0.71\,s for SCP+MPPI, timed on
+the same idle GPU), and $95{,}040$ and $120{,}000$ at $N=20$ and $30$ (mean logged plan times 2.04\,s and 3.81\,s,
+against 2.16\,s and 3.61\,s for SCP+MPPI). Each run used one 1g.10gb slice of an NVIDIA A100, with the QP solved on the
+CPU.
+% TODO: the 65,536 time is interpolated between 32,768 (0.33 s) and 131,072 (1.43 s) sequences; time it directly or
+% say so. Confirm the hardware sentence.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Protocol and statistics}\label{sec:protocol}
+
+We sweep the margin $\epsilon\in\{0,0.1,0.2,0.3,0.5\}$\,m on every $N=10$ model and fix $\epsilon=0.2$\,m for the
+horizon study. Each configuration runs on seeds $0$--$39$, or $0$--$29$ for the time-matched samplers, the horizon
+study, PointGoal2's $c=\infty$ model and SCP+MPPI on PointGoal1's $c=\infty$ model. The seed fixes the layout, the
+initial state and the planner's random numbers, so every comparison between planners or models is paired by seed. We
+report violation rates with Wilson 95\% intervals and mean returns with bootstrap 95\% intervals ($10^4$ resamples).
+Paired comparisons use McNemar's exact test on violations, and the Wilcoxon signed-rank test and a paired bootstrap
+interval on return differences. When pooling over models and margins we use $\epsilon\ge0.1$, since at $\epsilon=0$
+every planner fails often (Sec.~\ref{sec:q1}), and resample whole seeds; per-model tests are Holm-corrected over the
+six models.
+
+% =====================================================================================================================
+\section{Results}\label{sec:results}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{SCP needs a sampled start, and then matches time-matched sampling at \texorpdfstring{$N=10$}{N=10}}\label{sec:q1}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/main_text/fig_eps_sweep_c1_5.pdf}
+  \caption{Violation rate (top) and return (bottom) against the margin $\epsilon$ on each task's $c=1.5$ model at
+  $N=10$, with 95\% intervals; 40 episodes per point (30 for the time-matched samplers).}
+  \label{fig:eps_sweep}
+\end{figure}
+
+\begin{table}[t]
+  \centering
+  \caption{SCP+MPPI minus each baseline over all six $N=10$ world models and $\epsilon\ge0.1$, paired by model, margin
+  and seed. A negative $\Delta$ violation rate or a positive $\Delta$ return favours SCP+MPPI. Brackets: 95\%
+  intervals resampling whole seeds.}
+  \label{tab:pooled}
+  \small
+  \input{\figdir/main_text/table_pooled_comparison}
+\end{table}
+
+\textbf{SCP needs a sampled start.} Started from its own shifted plan, SCP fails in 55\% of episodes over all $N=10$
+models and $\epsilon\ge0.1$, against 25\% for SCP+MPPI on the same layouts (Table~\ref{tab:pooled}: $-29.8$ points,
+$p=2\times10^{-43}$), at the same return. Pure SCP does not fail for want of convergence: on PointGoal1's $c=1.5$ model
+it certifies nearly as many steps as SCP+MPPI (62--95\% against 63--97\% across $\epsilon$; Sec.~\ref{sec:certificates}). It fails
+as a local method does, converging to the local solution nearest a poor start: it converges with barrier slack in use,
+meaning no safe plan nearby, on more steps (2--19\% against 0--11\% on PointGoal1) and finds a plan that meets the
+barrier in the model less often (88\% of steps against 92\%). On the $c=1.5$ models, SCP+MPPI starts from MPPI's plan on
+33--43\% of steps on PointGoal1 and 38--55\% on PointGoal2 ($\epsilon\ge0.1$).
+
+\textbf{With a sampled start, SCP+MPPI is as safe as sampling and earns more than its proposal.} Against MPPI and CEM
+with the 512 sequences that seed it, SCP+MPPI's violation rate differs by $+1.9$ and $+2.6$ points ($p=0.24$ and
+$0.098$), while its return is higher by 0.21 and 0.18 with intervals that exclude zero. Against samplers given the same
+time, with 128 times as many sequences, the differences in violations ($-0.1$ and $+0.7$ points) and return ($+0.06$
+and $+0.09$) are small and not significant. At $N=10$, then, SCP's refinement adds about as much return as 128 times
+more samples, and neither makes the planner safer: with a two-dimensional action, sampling finds plans that meet the
+barrier about as often as optimisation does (Sec.~\ref{sec:latent_safety}). The per-model results agree
+(Table~\ref{tab:per_model}): no time-matched sampler differs significantly from SCP+MPPI in violations on any model,
+and the one significant difference against the 512-sequence samplers favours MPPI on PointGoal2 with $c=1.2$ (23\%
+against 34\%, Holm-corrected $p=0.031$).
+
+\textbf{The margin is the main safety lever.} Without a margin ($\epsilon=0$) every planner fails in 30--63\% of
+episodes, and pure SCP in 72--85\% (Fig.~\ref{fig:eps_sweep}): the barrier holds only in the model, so a margin must
+absorb the model's error. A margin of 0.1--0.3\,m cuts SCP+MPPI's violation rate from 40--50\% to 15--23\% at a moderate
+cost in return. At $\epsilon=0.5$\,m the planners turn conservative and return collapses (SCP+MPPI on PointGoal1: 0.38
+against 1.75 at $\epsilon=0.1$), and on the more cluttered PointGoal2 violations rise again for every planner
+(40--45\%; pure SCP 70\%) as the barrier becomes infeasible in many states, which SCP reports (Sec.~\ref{sec:certificates}).
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{At longer horizons SCP+MPPI earns more than time-matched sampling}\label{sec:horizon}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/main_text/fig_horizon.pdf}
+  \caption{Violation rate and return against the horizon $N$ on PointGoal1 ($c=1.5$, $\epsilon=0.2$), each sampler at
+  its horizon's time-matched budget, with 95\% intervals. Each $N$ uses a world model trained on windows of $N+1$
+  steps; 30 episodes per point (40 for SCP+MPPI and SCP at $N=10$).}
+  \label{fig:horizon}
+\end{figure}
+
+% CUT 1 if over the page limit: move this figure to the appendix and keep the paragraph's numbers.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/main_text/fig_return_vs_compute.pdf}
+  \caption{Return against mean plan time per step at $N=20$ and $30$, with 95\% intervals. Each sampler is shown at
+  every budget we ran (sequences per iteration along the bottom); SCP+MPPI and SCP are single points.}
+  \label{fig:compute}
+\end{figure}
+
+We repeat the comparison on PointGoal1 ($c=1.5$, $\epsilon=0.2$) at $N=20$ and $30$, re-matching the samplers' budgets
+in time at each horizon (Fig.~\ref{fig:horizon}). At both horizons SCP+MPPI earns more than the time-matched samplers,
+at the same safety (2 and 1 violations in 30 episodes, against 3 and 0). Its return is higher by 0.65 [0.03, 1.30]
+(MPPI, $p=0.021$) and 0.93 [0.15, 1.69] (CEM, $p=0.009$) at $N=20$, and by 1.13 [0.41, 1.93] ($p<0.001$) and 0.98
+[0.08, 1.93] ($p=0.005$) at $N=30$.
+
+The samplers do not turn extra time into return (Fig.~\ref{fig:compute}). Their largest budgets earn less than smaller
+ones at both horizons, and their best budget changes with the sampler and the horizon (512 sequences for CEM at
+$N=20$, 32,768 at $N=30$). At its best budget each sampler ties with SCP+MPPI (CEM: $-0.24$ at $N=20$, $+0.11$ at
+$N=30$; neither significant), but that budget is not known in advance. SCP+MPPI used the same settings at every
+horizon, and its refinement adds 0.27 (not significant) and 0.67 ($p=0.043$) to the return of the 512-sequence MPPI
+plan it starts from.
+% Possible reason for the samplers' trend, not tested: the elite set grows with J (top-k = J/8), so a larger budget
+% refits to the same top eighth of the samples instead of concentrating on the best of them.
+
+Two caveats apply. The horizon study uses one world model per horizon, one margin and 30 seeds, and the model changes
+with $N$, so returns compare within a horizon but not across horizons. And within its 40-iteration cap SCP+MPPI
+converged on 53\% of steps at $N=20$ and 32\% at $N=30$, executing its last accepted iterate on the rest: the
+comparison is at matched time, not at convergence.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{SCP's convergence certifies the plan and detects infeasibility}\label{sec:certificates}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/main_text/fig_scp_stop_reasons.pdf}
+  \caption{How SCP+MPPI's steps ended on each task's $c=1.5$ model at $N=10$: converged with the plan's rollout meeting
+  the barrier (certified), converged with barrier slack in use, or at the 40-iteration cap.}
+  \label{fig:stops}
+\end{figure}
+
+Each SCP step ends in one of three ways (Fig.~\ref{fig:stops}). Because SCP's reference trajectory is always the model
+rollout of its plan, a step that stops as converged, with prox-gradient norm below $10^{-2}$ and barrier excess below
+$10^{-4}$, executes an approximately stationary plan that meets the barrier at every step in the model: convergence
+itself certifies the plan, at no extra cost. This is the most common outcome. On the $c=1.5$ models SCP+MPPI certifies
+97\% of steps at $\epsilon=0$, falling to 63\% at $\epsilon=0.5$, on PointGoal1, and 83\% falling to 60\% on
+PointGoal2, using 9--22 iterations on average.
+
+A step that converges with barrier slack in use signals something different: a stationary point at which the barrier
+cannot be met, that is, no safe plan near the current one. Its share grows with the margin, from 0 to 11\% of steps on
+PointGoal1 and from 1\% to 22\% on PointGoal2, where at $\epsilon=0.5$ it coincides with the rise in violations
+(Sec.~\ref{sec:q1}). Sampling planners give no such signal: when no sampled sequence meets the barrier they cannot tell
+an empty safe set from too few samples. The remaining steps reach the iteration cap, a share that grows with $\epsilon$
+(3\% to 27\% on PointGoal1) and with the horizon (46\% at $N=20$ and 68\% at $N=30$ on the same task and model bound).
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Safety in the model predicts safety in the environment}\label{sec:latent_safety}
+
+% CUT 2 if over the page limit: move this figure to the appendix; the paragraph stands on its numbers.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/main_text/fig_latent_safety.pdf}
+  \caption{Share of steps followed by a violation within $N$ steps, after a plan whose model rollout met the barrier
+  and after one whose rollout did not, over the six $N=10$ models and $\epsilon\ge0.1$, with 95\% Wilson intervals
+  (log scale).}
+  \label{fig:latent_safety}
+\end{figure}
+
+The barrier is enforced only in the learned model; Fig.~\ref{fig:latent_safety} tests whether that is enough. After a
+plan that meets the barrier in the model, a violation follows within $N$ steps on $2$--$10\times10^{-4}$ of steps,
+whichever planner made the plan (including the 512-sequence samplers); after a plan that does not, on
+$3$--$7\times10^{-2}$, 56 to 131 times as often. Conversely, 93--98\% of violations were preceded within $N$ steps by a
+plan that broke the barrier in the model: the model nearly always warns before a violation. Violations therefore arise
+mainly in states where the planner finds no plan that is safe in the model, not from plans that are safe in the model
+but not in the environment. All planners find such a plan on a similar share of steps (90--92\%; pure SCP 88\%), which
+is why optimising harder does not make the planner safer at $N=10$ (Sec.~\ref{sec:q1}).
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Regularity constraints}\label{sec:regularity_results}
+
+Bounding the networks' Lipschitz constants at $c=1.5$ costs no measurable safety or return: against the unbounded
+models, no planner's violation rate or return differs significantly on either task (McNemar $p\ge0.18$; return
+intervals include zero;
+Figs.~\ref{fig:grid_violations} and~\ref{fig:grid_return} in the appendix). It does make SCP converge more reliably
+(Fig.~\ref{fig:lipschitz_convergence}). At $\epsilon$ from 0.1 to 0.3, SCP+MPPI reaches the iteration cap on 6--16\% of
+steps on PointGoal1 and 16--21\% on PointGoal2 with $c=1.5$, against 33--44\% and 31--35\% unbounded, needs fewer
+iterations (12--16 against 24--28 on PointGoal1), and so certifies more of its plans (78--92\% against 55--65\% on
+PointGoal1; 74--83\% against 53--62\% on PointGoal2). The tighter bound $c=1.2$ makes the model less conservative:
+returns are higher, but so are violations, significantly on PointGoal1 for SCP+MPPI (44 against 28 of 160 episodes,
+$p=0.044$), MPPI ($p=0.009$) and CEM ($p=0.005$), and on PointGoal2 for SCP+MPPI (54 against 38, $p=0.036$). We
+therefore use $c=1.5$ for the main results.

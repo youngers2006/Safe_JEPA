@@ -1,0 +1,150 @@
+% =====================================================================================================================
+% Appendix results: \input{appendix_results} in the appendix. Files and numbers as in experiments_results.tex.
+% Order is by importance; drop subsections from the end if the appendix must be short.
+% =====================================================================================================================
+\providecommand{\figdir}{../paper_graphs}
+
+\section{Additional Results}\label{app:results}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Per-model results}\label{app:per_model}
+
+Table~\ref{tab:per_model} gives each planner's violation rate and return on every $N=10$ world model, pooled over
+$\epsilon\ge0.1$, and Figs.~\ref{fig:grid_violations} and~\ref{fig:grid_return} show the full sweeps. Pure SCP is
+significantly less safe than SCP+MPPI on every model. Against the samplers, the only significant difference is MPPI
+with 512 sequences on PointGoal2 with $c=1.2$, which violates less.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Each planner on each $N=10$ world model, pooled over $\epsilon\ge0.1$: violation rate (Wilson) and return
+  (bootstrap) with 95\% intervals, and McNemar's $p$ for SCP+MPPI against it on paired seeds, Holm-corrected over the
+  six models.}
+  \label{tab:per_model}
+  \small
+  \input{\figdir/appendix/table_per_model}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/appendix/fig_eps_sweep_all_bounds_violations.pdf}
+  \caption{Violation rate against $\epsilon$ for every planner on every $N=10$ world model (rows: tasks; columns:
+  Lipschitz bound $c$), with 95\% Wilson intervals.}
+  \label{fig:grid_violations}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/appendix/fig_eps_sweep_all_bounds_return.pdf}
+  \caption{Return against $\epsilon$ for every planner on every $N=10$ world model, with 95\% bootstrap intervals.}
+  \label{fig:grid_return}
+\end{figure}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Lipschitz bound and SCP's convergence}\label{app:lipschitz}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/appendix/fig_lipschitz_convergence.pdf}
+  \caption{Share of SCP+MPPI's steps that reached the 40-iteration cap against $\epsilon$, for each Lipschitz bound,
+  at $N=10$.}
+  \label{fig:lipschitz_convergence}
+\end{figure}
+
+Without a Lipschitz bound, SCP+MPPI reaches the iteration cap on more steps than with either bound at every margin,
+except at $\epsilon=0.5$ on PointGoal2, where $c=1.5$ and $c=\infty$ are within 0.02 (Fig.~\ref{fig:lipschitz_convergence}).
+Which bound converges best differs by task: $c=1.5$ on PointGoal1, $c=1.2$ on PointGoal2.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{What more samples buy at \texorpdfstring{$N=10$}{N=10}}\label{app:samples}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/ablation/fig_sample_vs_time_matched.pdf}
+  \caption{Fig.~\ref{fig:eps_sweep} with the samplers at both budgets: 512 sequences (open markers, dashed) and
+  time-matched (filled, solid).}
+  \label{fig:sample_vs_time_matched}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/ablation/fig_return_vs_violations.pdf}
+  \caption{Return against violation rate on each task's $c=1.5$ model at $N=10$, pooled over $\epsilon\ge0.1$, with
+  95\% intervals. Arrows lead from each sampler with 512 sequences to the same sampler time-matched.}
+  \label{fig:trade_off}
+\end{figure}
+
+Figs.~\ref{fig:sample_vs_time_matched} and~\ref{fig:trade_off} show what 128 times as many sequences buy the samplers.
+On PointGoal1's $c=1.5$ model, the time-matched samplers earn more than with 512 sequences but violate more often
+(MPPI: return 0.78 to 1.15, violation rate 0.19 to 0.24; CEM: 0.84 to 0.94 and 0.14 to 0.26), while SCP+MPPI reaches
+the higher return at the lower violation rate (1.15 and 0.17). On PointGoal2 the extra sequences raise return (0.35 to
+0.51 and 0.49) without changing the violation rate. These shifts lie within the intervals; the paired tests of
+Sec.~\ref{sec:q1} find no significant difference in safety between SCP+MPPI and either budget.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{All budgets at every horizon}\label{app:horizon_budgets}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/ablation/fig_horizon_all_budgets.pdf}
+  \caption{Fig.~\ref{fig:horizon} with the samplers at both 512 sequences (open markers, dashed) and their
+  time-matched budget (filled, solid).}
+  \label{fig:horizon_all}
+\end{figure}
+
+With 512 sequences the samplers' return at $N=20$ is close to SCP+MPPI's (MPPI 2.07, CEM 2.58, against 2.34; neither
+difference significant), and at $N=30$ below it (1.59 and 1.22 against 2.26; $p=0.043$ and $0.013$)
+(Fig.~\ref{fig:horizon_all}). Together with Fig.~\ref{fig:compute}, this shows that the samplers' best budget depends on
+the sampler and the horizon.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Does optimisation exploit the model?}\label{app:optimism}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/ablation/fig_model_optimism.pdf}
+  \caption{Model optimism: each executed plan's predicted return (discounted predicted rewards plus terminal value)
+  minus the discounted return received from that step on, averaged over each episode, with 95\% bootstrap intervals.
+  $N=10$ pools every world model ($\epsilon\ge0.1$); $N=20$ and $30$ are the horizon study's models.}
+  \label{fig:optimism}
+\end{figure}
+
+A gradient-based optimiser might exploit model error, finding plans whose predicted return the environment does not
+deliver. We measure each executed plan's optimism: its predicted return, whose terminal value carries the goal bonus,
+minus the discounted return actually received from that step on, using steps at least 299 steps before the episode
+ends so that the part of the future the episode did not reach weighs under 5\%. Every planner is optimistic by about
+2, as expected of a value fitted to the 0.7 expectile, but by nearly the same amount (Fig.~\ref{fig:optimism}): 2.06
+(pure SCP) to 2.19 at $N=10$, 2.20 to 2.44 at $N=20$ and 2.41 to 2.56 at $N=30$, with SCP+MPPI inside the samplers'
+range at every horizon and no trend with the sampling budget. We find no evidence that SCP, or a larger sampling
+budget, exploits the model more than sampling with 512 sequences does.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Warned and unwarned violations}\label{app:crashes}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/ablation/fig_crash_types.pdf}
+  \caption{Violations per 100 episodes over the six $N=10$ models and $\epsilon\ge0.1$, split into those preceded
+  within $N$ steps by a plan that broke the barrier in the model (warned, light) and those that were not (unwarned,
+  dark, counts above the bars).}
+  \label{fig:crash_types}
+\end{figure}
+
+Few violations come without warning (Fig.~\ref{fig:crash_types}). SCP+MPPI has 14 unwarned violations in 880
+episodes, against 6 and 7 for the 512-sequence samplers and 7 and 13 for the time-matched ones. That stronger
+optimisation, by SCP or by more samples, leads to more violations the model did not foresee would be consistent with
+it planning closer to where the model is wrong, but paired by seed none of these differences is significant
+($p\ge0.12$).
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{When violations happen}\label{app:survival}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\figdir/appendix/fig_survival_pg1_c1_5.pdf}
+  \caption{Share of episodes without a violation by each step, at each margin, on PointGoal1's $c=1.5$ model at
+  $N=10$. Episodes end early only at a violation, so these are Kaplan--Meier curves without censoring.}
+  \label{fig:survival}
+\end{figure}
+
+Most violations happen within the first 300 or so steps, after which the curves flatten (Fig.~\ref{fig:survival});
+pure SCP's keeps falling for longer.

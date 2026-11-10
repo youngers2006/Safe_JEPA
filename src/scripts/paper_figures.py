@@ -216,7 +216,7 @@ def fig_horizon(rows, series, folder, name):
                         mfc=colour if filled else "white", label=label)
     for ax, ylabel in zip(axes, ("violation rate", "episode return")):
         ax.set_xticks(Hs)
-        ax.set_xlabel("planning horizon $H$")
+        ax.set_xlabel("planning horizon $N$")
         ax.set_ylabel(ylabel)
     fig.tight_layout()
     top_legend(fig, axes, ncol=min(len(series), 4))
@@ -256,7 +256,7 @@ def fig_compute(rows):
                             ms=6, ls="none", label=label)
         ax.set_xscale("log")
         ax.set_xlabel("plan time per step (s)")
-        ax.set_title(f"$H={H}$")
+        ax.set_title(f"$N={H}$")
         lo_y, hi_y = ax.get_ylim()
         ax.set_ylim(lo_y - 0.12 * (hi_y - lo_y), hi_y) # room for the budget labels
     axes[0][0].set_ylabel("episode return")
@@ -303,10 +303,10 @@ def fig_model_optimism(rows, episodes):
         return skip("fig_model_optimism", "episodes.csv has no optimism; re-run analyse_results.py")
     rng = np.random.default_rng(0)
     pts = horizon_points(rows)
-    panels = [("$H=10$, every world model", pooled_episodes(episodes))]
+    panels = [("$N=10$, every world model", pooled_episodes(episodes))]
     for H in sorted(h for h in pts if h != 10):
         dirs = {r["data_dir"] for r in pts[H].values()}
-        panels.append((f"$H={H}$", [r for r in episodes if r["data_dir"] in dirs and r["tag"] == f"e4/H_{H}"]))
+        panels.append((f"$N={H}$", [r for r in episodes if r["data_dir"] in dirs and r["tag"] == f"e4/H_{H}"]))
     order = lambda pl: (["SCP+MPPI", "SCP", "MPPI", "CEM"].index(pl.partition("@")[0]), budget_of(pl))
     planners = [sorted({r["planner"] for r in eps if r["planner"].partition("@")[0] in
                         ("SCP+MPPI", "SCP", "MPPI", "CEM")}, key=order) for _, eps in panels]
@@ -458,6 +458,75 @@ def fig_trade_off(rows, episodes):
     top_legend(fig, axes, ncol=3)
     save(fig, "ablation", "fig_return_vs_violations")
 
+# Tables (LaTeX, booktabs), written beside the figures so the paper's numbers come from the same outputs
+
+def latex_p(p):
+    if not np.isfinite(p):
+        return "--"
+    if p >= 0.1:
+        return f"{p:.2f}"
+    if p >= 1e-3:
+        return f"{p:.2g}"
+    e = int(np.floor(np.log10(p)))
+    m = round(p / 10 ** e)
+    m, e = (1, e + 1) if m == 10 else (m, e)
+    return f"${m}\\times 10^{{{e}}}$"
+
+def latex_ci(x, lo, hi, scale=1.0, digits=2, sign=False):
+    f = (lambda v: f"${v * scale:+.{digits}f}$") if sign else (lambda v: f"${v * scale:.{digits}f}$")
+    return f"{f(x)} [{f(lo)}, {f(hi)}]"
+
+def write_table(folder, name, lines):
+    (OUT / folder).mkdir(parents=True, exist_ok=True)
+    (OUT / folder / f"{name}.tex").write_text("\n".join(lines) + "\n")
+    print(f"  {folder}/{name}.tex")
+
+def table_pooled(all_rows):
+    # SCP+MPPI minus each planner over every horizon-10 world model (margin_eps >= POOL_MIN_EPS), paired on model,
+    # margin_eps and seed, with intervals that resample whole seeds (all_models.csv)
+    order = [("SCP", "SCP", "--"), ("MPPI", "MPPI", "512"), ("CEM", "CEM", "512"),
+             ("MPPI@65536", "MPPI", "time-matched"), ("CEM@65536", "CEM", "time-matched")]
+    by = {r["other"]: r for r in all_rows}
+    lines = [r"\begin{tabular}{llrccc}", r"\toprule",
+             r"Baseline & Budget & Pairs & $\Delta$ violation rate (pp) & McNemar $p$ & $\Delta$ return \\",
+             r"\midrule"]
+    for key, name, budget in order:
+        if key not in by:
+            continue
+        r = {k: float(by[key][k]) for k in ("pairs", "viol_diff", "viol_diff_lo", "viol_diff_hi", "p_mcnemar",
+                                            "return_diff", "return_diff_lo", "return_diff_hi")}
+        lines.append(f"{name} & {budget} & {int(r['pairs'])} & "
+                     f"{latex_ci(r['viol_diff'], r['viol_diff_lo'], r['viol_diff_hi'], 100, 1, True)} & "
+                     f"{latex_p(r['p_mcnemar'])} & "
+                     f"{latex_ci(r['return_diff'], r['return_diff_lo'], r['return_diff_hi'], 1, 2, True)} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("main_text", "table_pooled_comparison", lines)
+
+def table_per_model(headline):
+    # Every horizon-10 world model, each planner pooled over margin_eps >= POOL_MIN_EPS (headline.csv): violation rate
+    # (Wilson) and return (bootstrap) with 95% intervals, and SCP+MPPI's paired McNemar p against it (Holm over models)
+    lines = [r"\begin{tabular}{llrccc}", r"\toprule",
+             r"Task, $c$ & Planner & Episodes & Violation rate & Return & $p$ vs SCP+MPPI \\", r"\midrule"]
+    groups = {}
+    for r in headline:
+        groups.setdefault((int(r["task"]), float(r["bound"])), []).append(r)
+    for i, ((task, b), rs) in enumerate(sorted(groups.items())):
+        if i:
+            lines.append(r"\midrule")
+        rs = sorted(rs, key=lambda r: EVERY.index(r["planner"]) if r["planner"] in EVERY else len(EVERY))
+        for j, r in enumerate(rs):
+            f = {k: float(r[k]) if r.get(k, "") not in ("", "nan") else np.nan for k in
+                 ("episodes", "rate", "rate_lo", "rate_hi", "return", "return_lo", "return_hi",
+                  "p_mcnemar_vs_main_holm")}
+            label = STYLE[r["planner"]][0] if r["planner"] in STYLE else r["planner"]
+            head = f"PG{task}, {bound_label(b)}" if j == 0 else ""
+            lines.append(f"{head} & {label} & {int(f['episodes'])} & "
+                         f"{latex_ci(f['rate'], f['rate_lo'], f['rate_hi'])} & "
+                         f"{latex_ci(f['return'], f['return_lo'], f['return_hi'])} & "
+                         f"{latex_p(f['p_mcnemar_vs_main_holm']) if r['planner'] != 'SCP+MPPI' else ''} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("appendix", "table_per_model", lines)
+
 def main():
     rows, episodes = load("summary.csv"), load("episodes.csv")
     print(f"Paper figures from {ANALYSIS}, written to {OUT}:")
@@ -475,6 +544,11 @@ def main():
     fig_grid(rows, "rate", "violation rate", "fig_eps_sweep_all_bounds_violations")
     fig_grid(rows, "return", "episode return", "fig_eps_sweep_all_bounds_return")
     fig_survival(rows, episodes)
+    for name, table in (("all_models.csv", table_pooled), ("headline.csv", table_per_model)):
+        if (ANALYSIS / name).exists():
+            table(load(name))
+        else:
+            skip(name.replace(".csv", " table"), f"no {name}; re-run analyse_results.py")
 
 if __name__ == "__main__":
     main()
