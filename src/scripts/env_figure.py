@@ -38,6 +38,8 @@ def top_down(level):
     task.model.cam_quat[cam] = [1.0, 0.0, 0.0, 0.0]
     mujoco.mj_forward(task.model, task.data) # camera poses are recomputed only here
     image = env.render()
+    for viewer in task._viewers.values():
+        viewer.free() # Safety-Gymnasium's close() leaves its renderer to be freed at exit, after EGL has shut down
     env.close()
     return image
 
