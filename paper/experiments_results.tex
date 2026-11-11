@@ -118,10 +118,12 @@ horizon study. Each configuration runs on seeds $0$--$39$, or $0$--$29$ for the 
 study, PointGoal2's $c=\infty$ model and SCP+MPPI on PointGoal1's $c=\infty$ model. The seed fixes the layout, the
 initial state and the planner's random numbers, so every comparison between planners or models is paired by seed. We
 report violation rates with Wilson 95\% intervals and mean returns with bootstrap 95\% intervals ($10^4$ resamples).
-Paired comparisons use McNemar's exact test on violations, and the Wilcoxon signed-rank test and a paired bootstrap
-interval on return differences. When pooling over models and margins we use $\epsilon\ge0.1$, since at $\epsilon=0$
-every planner fails often (Sec.~\ref{sec:q1}), and resample whole seeds; per-model tests are Holm-corrected over the
-six models.
+Paired comparisons report the difference in violation rate and in return with a 95\% bootstrap interval, and the
+probability, given the data, that SCP+MPPI's violation rate is lower or its return higher than the baseline's, from a
+Bayesian bootstrap~\citep{rubin1981bayesian}. When pooling over margins and tasks we use $\epsilon\ge0.1$, since at
+$\epsilon=0$ every planner fails often (Sec.~\ref{sec:q1}), and resample whole seeds, since a seed's episodes share a
+layout. The per-model results in the appendix use McNemar's exact test on violations, Holm-corrected over the six models,
+and the Wilcoxon signed-rank test on returns.
 
 % =====================================================================================================================
 \section{Results}\label{sec:results}

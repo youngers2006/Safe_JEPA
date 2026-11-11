@@ -501,10 +501,9 @@ def table_pooled(bound_rows, bound):
     names = {"SCP": "SCP", "MPPI": "MPPI (512)", "CEM": "CEM (512)", "MPPI@65536": "MPPI (time-matched)",
              "CEM@65536": "CEM (time-matched)"}
     by = {r["other"]: r for r in bound_rows if np.isclose(float(r["bound"]), bound)}
-    lines = [r"\setlength{\tabcolsep}{3.5pt} % local to the table float: seven columns in the text width",
-             r"\begin{tabular}{@{}lrccccc@{}}", r"\toprule",
-             r"Baseline & Pairs & $\Delta$ violations (pp) & McNemar $p$ & $P$(safer) & $\Delta$ return & "
-             r"$P$(higher return) \\", r"\midrule"]
+    lines = [r"\begin{tabular}{lrcccc}", r"\toprule",
+             r"Baseline & Pairs & $\Delta$ violations (pp) & $P$(safer) & $\Delta$ return & $P$(higher return) \\",
+             r"\midrule"]
     for key in POOLED_ROWS:
         if key not in by:
             continue
@@ -512,7 +511,7 @@ def table_pooled(bound_rows, bound):
         num = lambda k: float(by[key][k]) if by[key].get(k, "") not in ("", "nan") else np.nan
         lines.append(f"{name} & {int(num('pairs'))} & "
                      f"{latex_ci(num('viol_diff'), num('viol_diff_lo'), num('viol_diff_hi'), 100, 1, True)} & "
-                     f"{latex_p(num('p_mcnemar'))} & {latex_prob(num('p_safer'))} & "
+                     f"{latex_prob(num('p_safer'))} & "
                      f"{latex_ci(num('return_diff'), num('return_diff_lo'), num('return_diff_hi'), 1, 2, True)} & "
                      f"{latex_prob(num('p_higher_return'))} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
