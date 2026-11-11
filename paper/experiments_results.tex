@@ -196,7 +196,10 @@ against 1.75 at $\epsilon=0.1$), and on the more cluttered PointGoal2 violations
   \centering
   \caption{SCP+MPPI minus SCP and the time-matched samplers at each horizon on PointGoal1 ($c=1.5$, $\epsilon=0.2$),
   paired by seed, with the columns of Table~\ref{tab:pooled}. The time-matched budgets are 65,536, 95,040 and 120,000
-  sequences per round at $N=10$, 20 and 30; Table~\ref{tab:horizon_all} in the appendix adds every other budget.}
+  sequences per round at $N=10$, 20 and 30; Table~\ref{tab:horizon_all} in the appendix adds every other budget. At
+  $N=20$ and 30, SCP+MPPI and the time-matched samplers each violated in at most 3 of 30 episodes and differed on a
+  single layout. These are too few violations to compare their safety, so there the violation columns resolve only the
+  difference from SCP.}
   \label{tab:horizon}
   \small
   \input{\figdir/main_text/table_horizon}
