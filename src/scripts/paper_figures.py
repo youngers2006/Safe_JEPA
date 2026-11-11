@@ -28,6 +28,9 @@ TIME_MATCHED = {10: 65536, 20: 95040, 30: 120000} # each horizon's time-matched 
 SAMPLE_BUDGET = 512 # the samplers' budget in the runs named plain MPPI and CEM
 # The baselines in the per-bound comparison tables, in order; add "MPPI" and "CEM" for the 512-sequence samplers
 POOLED_ROWS = ["SCP", "MPPI@65536", "CEM@65536"]
+# The baselines in the main-text horizon table ("@tm": each horizon's TIME_MATCHED budget); the appendix version lists
+# every planner run at each horizon
+HORIZON_TABLE_ROWS = ["SCP", "MPPI@tm", "CEM@tm"]
 # Return against compute uses the plan times logged during the runs, comparable within these horizons' runs (H10's
 # time-matched runs shared GPUs differently; its compute matching is the idle timing in the report)
 COMPUTE_HORIZONS = (20, 30)
@@ -507,16 +510,55 @@ def table_pooled(bound_rows, bound):
     for key in POOLED_ROWS:
         if key not in by:
             continue
-        name = names.get(key, key)
-        num = lambda k: float(by[key][k]) if by[key].get(k, "") not in ("", "nan") else np.nan
-        lines.append(f"{name} & {int(num('pairs'))} & "
-                     f"{latex_ci(num('viol_diff'), num('viol_diff_lo'), num('viol_diff_hi'), 100, 1, True)} & "
-                     f"{latex_prob(num('p_safer'))} & "
-                     f"{latex_ci(num('return_diff'), num('return_diff_lo'), num('return_diff_hi'), 1, 2, True)} & "
-                     f"{latex_prob(num('p_higher_return'))} \\\\")
+        lines.append(f"{names.get(key, key)} & {comparison_cells(by[key])} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("main_text" if np.isclose(bound, MAIN_BOUND) else "appendix",
                 f"table_pooled_c{bound:g}".replace(".", "_"), lines)
+
+def comparison_cells(row):
+    # One comparison's cells, shared by the per-bound and horizon tables: pairs, the violation difference (points) and
+    # the return difference with their 95% intervals, and the probabilities that SCP+MPPI is safer and earns more
+    num = lambda k: float(row[k]) if row.get(k, "") not in ("", "nan") else np.nan
+    return (f"{int(num('pairs'))} & "
+            f"{latex_ci(num('viol_diff'), num('viol_diff_lo'), num('viol_diff_hi'), 100, 1, True)} & "
+            f"{latex_prob(num('p_safer'))} & "
+            f"{latex_ci(num('return_diff'), num('return_diff_lo'), num('return_diff_hi'), 1, 2, True)} & "
+            f"{latex_prob(num('p_higher_return'))}")
+
+def baseline_label(pl, H):
+    # A baseline's name in the horizon tables: each sampler with its budget, "time-matched" at its horizon's
+    base, _, budget = pl.partition("@")
+    if base not in ("MPPI", "CEM"):
+        return pl
+    J = int(budget) if budget.isdigit() else SAMPLE_BUDGET
+    return f"{base} (time-matched)" if J == TIME_MATCHED.get(H) else f"{base} ({J:,})"
+
+def table_horizon(horizon_rows, series, folder, name):
+    # SCP+MPPI minus each baseline at each planning horizon, on the horizon tests' model and margin (horizon.csv), the
+    # same columns as the per-bound tables. series: the baselines to list (None: every planner run at that horizon)
+    rows = [r for r in horizon_rows if int(r["task"]) == HORIZON_TASK and np.isclose(float(r["bound"]), MAIN_BOUND)
+            and np.isclose(float(r["eps"]), HORIZON_EPS)]
+    def order(pl):
+        base, _, budget = pl.partition("@")
+        return (["SCP", "MPPI", "CEM"].index(base) if base in ("SCP", "MPPI", "CEM") else 3,
+                int(budget) if budget.isdigit() else SAMPLE_BUDGET)
+    lines = [r"\begin{tabular}{@{}rlrcccc@{}}", r"\toprule",
+             r"$N$ & Baseline & Pairs & $\Delta$ violations (pp) & $P$(safer) & $\Delta$ return & $P$(higher return) \\",
+             r"\midrule"]
+    first = True
+    for H in sorted({int(r["horizon"]) for r in rows}):
+        by = {r["other"]: r for r in rows if int(r["horizon"]) == H}
+        keys = [run_name(sr, H) for sr in series] if series else sorted(by, key=order)
+        keys = [k for k in keys if k in by]
+        if not keys:
+            continue
+        if not first:
+            lines.append(r"\midrule")
+        first = False
+        for j, key in enumerate(keys):
+            lines.append(f"{H if j == 0 else ''} & {baseline_label(key, H)} & {comparison_cells(by[key])} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table(folder, name, lines)
 
 def table_per_model(headline):
     # Every horizon-10 world model, each planner pooled over margin_eps >= POOL_MIN_EPS (headline.csv): violation rate
@@ -571,6 +613,12 @@ def main():
             table_pooled(bound_rows, bound)
     else:
         skip("pooled tables", "no by_bound.csv; re-run analyse_results.py")
+    if (ANALYSIS / "horizon.csv").exists():
+        horizon_rows = load("horizon.csv")
+        table_horizon(horizon_rows, HORIZON_TABLE_ROWS, "main_text", "table_horizon")
+        table_horizon(horizon_rows, None, "appendix", "table_horizon_all_budgets")
+    else:
+        skip("horizon tables", "no horizon.csv; re-run analyse_results.py")
     if (ANALYSIS / "headline.csv").exists():
         table_per_model(load("headline.csv"))
     else:
