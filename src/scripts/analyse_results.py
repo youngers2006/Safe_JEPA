@@ -301,6 +301,24 @@ def crash_types(eps, horizon):
             "barrier_active": float(np.mean(slack <= ACTIVE_TOL)) if len(slack) else np.nan,
             "barrier_slack_med": float(np.median(slack)) if len(slack) else np.nan}
 
+def paired_rate_diff(a, b, c, d):
+    # 95% interval for p1 - p2 on paired yes/no outcomes, p1 = (a + b) / n, p2 = (a + c) / n (a: both, b: only the
+    # first, c: only the second, d: neither): Newcombe's score interval (1998, method 10), sound with few events
+    n = a + b + c + d
+    p1, p2 = (a + b) / n, (a + c) / n
+    (l1, u1), (l2, u2) = wilson(a + b, n), wilson(a + c, n)
+    denom = (a + b) * (c + d) * (a + c) * (b + d)
+    phi = (a * d - b * c) / np.sqrt(denom) if denom > 0 else 0.0
+    lo = np.sqrt(max(0.0, (p1 - l1) ** 2 - 2 * phi * (p1 - l1) * (u2 - p2) + (u2 - p2) ** 2))
+    hi = np.sqrt(max(0.0, (u1 - p1) ** 2 - 2 * phi * (u1 - p1) * (p2 - l2) + (p2 - l2) ** 2))
+    return p1 - p2 - lo, p1 - p2 + hi
+
+def prob_fewer(only_first, only_second):
+    # Probability the first's violation rate is below the second's, given the paired episodes: the share of
+    # discordant pairs that favour the first has a Beta posterior (uniform prior), and the first is safer when that share
+    # is above 1/2. The Bayesian counterpart of McNemar's test; unlike a bootstrap it stays sound with few events
+    return float(stats.beta.sf(0.5, only_second + 1, only_first + 1))
+
 def prob_positive(seeds, x, rng):
     # Probability that the mean of x over pairs is above 0, given the data: the Bayesian bootstrap (Rubin, 1981) over
     # whole seeds, i.e. the share of draws of flat Dirichlet weights on the seeds whose weighted mean is positive
@@ -312,6 +330,28 @@ def prob_positive(seeds, x, rng):
     sums, counts = np.bincount(inv, x[keep]), np.bincount(inv)
     w = rng.dirichlet(np.ones(len(keys)), size=N_BOOT)
     return float(np.mean(w @ sums / (w @ counts) > 0))
+
+def paired_difference(a, b, rng_ci, rng_prob):
+    # MAIN (a) minus another planner (b) on the seeds both ran: the violation difference with Newcombe's interval and
+    # the return difference with one resampling seeds, McNemar's p, and the probabilities that MAIN is safer (Beta
+    # posterior on the discordant pairs) and earns more (Bayesian bootstrap)
+    seeds = sorted(set(a) & set(b))
+    if not seeds:
+        return None
+    s = np.array(seeds, float)
+    va = np.array([float(a[k]["violated"]) for k in seeds])
+    dv = np.array([float(a[k]["violated"]) - float(b[k]["violated"]) for k in seeds])
+    dr = np.array([a[k]["return"] - b[k]["return"] for k in seeds])
+    only_main, only_other = int(np.sum(dv > 0)), int(np.sum(dv < 0))
+    both = int(np.sum((va == 1) & (dv == 0)))
+    vlo, vhi = paired_rate_diff(both, only_main, only_other, len(seeds) - both - only_main - only_other)
+    rlo, rhi = seed_boot(s, dr, rng_ci)
+    return {"pairs": len(seeds), "viol_main": int(sum(a[k]["violated"] for k in seeds)),
+            "viol_other": int(sum(b[k]["violated"] for k in seeds)), "only_main": only_main, "only_other": only_other,
+            "viol_diff": dv.mean(), "viol_diff_lo": vlo, "viol_diff_hi": vhi,
+            "p_mcnemar": binom_two_sided(min(only_main, only_other), only_main + only_other),
+            "return_diff": dr.mean(), "return_diff_lo": rlo, "return_diff_hi": rhi,
+            "p_safer": prob_fewer(only_main, only_other), "p_higher_return": prob_positive(s, dr, rng_prob)}
 
 def seed_boot(seeds, x, rng):
     # 95% interval for the mean of x over pairs, resampling whole seeds: seed k is the same layout in every model and
@@ -796,7 +836,7 @@ def main():
                         (ua, xa), (ub, xb) = (episode_crash(x[s], p["horizon"]) for x in (a, b))
                         dv, dr = float(a[s]["violated"]) - float(b[s]["violated"]), a[s]["return"] - b[s]["return"]
                         pairs.setdefault(pl, []).append((s, dv, dr, float(ua) - float(ub), xa - xb))
-                        by_bound.setdefault((bnd, pl), []).append((s, dv, dr))
+                        by_bound.setdefault((bnd, pl), []).append((s, dv, dr, float(a[s]["violated"])))
         if pairs:
             top += ["", f"=== All {len(main_models)} horizon-10 world models, eps >= {POOL_MIN_EPS}: {MAIN} against each "
                         f"planner on the same model, eps and seed (95% intervals resample seeds) ===",
@@ -848,14 +888,16 @@ def main():
             top += [f"  per Lipschitz bound, both tasks: {MAIN} against each planner as above"]
             for bnd in sorted({bnd for bnd, _ in by_bound}):
                 for pl in ordered({pl for b_, pl in by_bound if b_ == bnd}):
-                    s, dv, dr = (np.array(c, float) for c in zip(*by_bound[(bnd, pl)]))
+                    s, dv, dr, va = (np.array(c, float) for c in zip(*by_bound[(bnd, pl)]))
                     b, c = int(np.sum(dv > 0)), int(np.sum(dv < 0))
-                    (vlo, vhi), (rlo, rhi) = seed_boot(s, dv, rng_bound), seed_boot(s, dr, rng_bound)
+                    both = int(np.sum((va == 1) & (dv == 0)))
+                    (vlo, vhi) = paired_rate_diff(both, b, c, len(s) - both - b - c)
+                    rlo, rhi = seed_boot(s, dr, rng_bound)
                     bound_rows.append({"bound": bnd, "other": pl, "pairs": len(s), "only_main": b, "only_other": c,
                                        "viol_diff": dv.mean(), "viol_diff_lo": vlo, "viol_diff_hi": vhi,
                                        "p_mcnemar": binom_two_sided(min(b, c), b + c), "return_diff": dr.mean(),
                                        "return_diff_lo": rlo, "return_diff_hi": rhi,
-                                       "p_safer": prob_positive(s, -dv, rng_prob),
+                                       "p_safer": prob_fewer(b, c),
                                        "p_higher_return": prob_positive(s, dr, rng_prob)})
                     top.append(f"  c {bound_str(bnd):3s} {pl:13s} {len(s):5d}  {b:4d}:{c:<4d} {100 * dv.mean():+6.1f} "
                                f"[{100 * vlo:+.1f}, {100 * vhi:+.1f}], p {fmt_p(bound_rows[-1]['p_mcnemar'])}, "
@@ -937,6 +979,7 @@ def main():
         by_bound = {k[1]: v for k, v in e1.items() if k[0] == task and k[2] == 10 and k[4] == "e1"}
         if len(by_bound) > 1:
             plot_lipschitz(OUT / f"lipschitz_pg{task}.png", task, by_bound, summary)
+    horizon_rows = []
     # Planning horizon: the bound-1.5 models of each task, at every margin_eps run at two or more horizons (E1's points
     # and the horizon tests')
     for task in sorted({k[0] for k in e1}):
@@ -948,6 +991,27 @@ def main():
         by_eps = {e: v for e, v in by_eps.items() if len({p["horizon"] for p in v}) > 1}
         if by_eps:
             plot_horizon(OUT / f"horizon_pg{task}.png", task, by_eps, summary)
+        # and MAIN against each planner at each of those horizons, on paired seeds
+        rng_ci, rng_prob = np.random.default_rng(4), np.random.default_rng(5) # their own streams, as above
+        for e, pts in sorted(by_eps.items()):
+            lines += ["", f"=== Planning horizon, PG{task} bound 1.5, eps {e:g}: {MAIN} against each planner on paired "
+                          f"seeds: violations {MAIN}/other, violation difference (points) and return difference with 95% "
+                          f"intervals, probability {MAIN} is safer / earns more ==="]
+            for p in sorted(pts, key=lambda p: p["horizon"]):
+                if MAIN not in p["planners"]:
+                    continue
+                for pl in ordered(p["planners"]):
+                    d = None if pl == MAIN else paired_difference(p["planners"][MAIN], p["planners"][pl], rng_ci,
+                                                                    rng_prob)
+                    if d is None:
+                        continue
+                    horizon_rows.append({"task": task, "bound": 1.5, "eps": e, "horizon": p["horizon"],
+                                         "data_dir": p["data_dir"], "tag": p["tag"], "other": pl, **d})
+                    lines.append(f"  N {p['horizon']:2d} vs {pl:13s} {d['pairs']:3d} pairs, {d['viol_main']}/"
+                                 f"{d['viol_other']}, {100 * d['viol_diff']:+6.1f} [{100 * d['viol_diff_lo']:+.1f}, "
+                                 f"{100 * d['viol_diff_hi']:+.1f}], {d['return_diff']:+.2f} [{d['return_diff_lo']:+.2f}, "
+                                 f"{d['return_diff_hi']:+.2f}]; P(safer) {d['p_safer']:.3f}, P(higher return) "
+                                 f"{d['p_higher_return']:.3f}")
 
     if warnings:
         lines += ["", "Warnings:"] + [f"  {w}" for w in warnings]
@@ -960,11 +1024,12 @@ def main():
     write_csv(OUT / "lipschitz_pooled.csv", lip_pooled)
     write_csv(OUT / "all_models.csv", all_rows)
     write_csv(OUT / "by_bound.csv", bound_rows)
+    write_csv(OUT / "horizon.csv", horizon_rows)
     report = "\n".join(lines)
     (OUT / "report.txt").write_text(report + "\n")
     print(report)
     print(f"\nWritten to {OUT}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
-          f"lipschitz_tests.csv, lipschitz_pooled.csv, all_models.csv, by_bound.csv, episodes.csv and the figures")
+          f"lipschitz_tests.csv, lipschitz_pooled.csv, all_models.csv, by_bound.csv, horizon.csv, episodes.csv and the figures")
 
 if __name__ == "__main__":
     main()

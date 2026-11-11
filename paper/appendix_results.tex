@@ -107,6 +107,14 @@ Sec.~\ref{sec:q1} find no significant difference in safety between SCP+MPPI and 
   \label{fig:horizon_all}
 \end{figure}
 
+\begin{table}[htbp]
+  \centering
+  \caption{Table~\ref{tab:horizon} with every budget the samplers ran at each horizon.}
+  \label{tab:horizon_all}
+  \small
+  \input{\figdir/appendix/table_horizon_all_budgets}
+\end{table}
+
 With 512 sequences the samplers' return at $N=20$ is close to SCP+MPPI's (MPPI 2.07, CEM 2.58, against 2.34; neither
 difference significant), and at $N=30$ below it (1.59 and 1.22 against 2.26; $p=0.043$ and $0.013$)
 (Fig.~\ref{fig:horizon_all}). Together with Fig.~\ref{fig:compute}, this shows that the samplers' best budget depends on
