@@ -9,6 +9,22 @@
 % ---------------------------------------------------------------------------------------------------------------------
 \subsection{Per-model results}\label{app:per_model}
 
+\begin{table}[htbp]
+  \centering
+  \caption{Table~\ref{tab:pooled} on the $c=1.2$ world models.}
+  \label{tab:pooled_c1_2}
+  \small
+  \input{\figdir/appendix/table_pooled_c1_2}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Table~\ref{tab:pooled} on the unbounded ($c=\infty$) world models.}
+  \label{tab:pooled_cinf}
+  \small
+  \input{\figdir/appendix/table_pooled_cinf}
+\end{table}
+
 Table~\ref{tab:per_model} gives each planner's violation rate and return on every $N=10$ world model, pooled over
 $\epsilon\ge0.1$, and Figs.~\ref{fig:grid_violations} and~\ref{fig:grid_return} show the full sweeps. Pure SCP is
 significantly less safe than SCP+MPPI on every model. Against the samplers, the only significant difference is MPPI

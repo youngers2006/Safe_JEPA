@@ -484,12 +484,13 @@ def write_table(folder, name, lines):
     (OUT / folder / f"{name}.tex").write_text("\n".join(lines) + "\n")
     print(f"  {folder}/{name}.tex")
 
-def table_pooled(all_rows):
-    # SCP+MPPI minus each planner over every horizon-10 world model (margin_eps >= POOL_MIN_EPS), paired on model,
-    # margin_eps and seed, with intervals that resample whole seeds (all_models.csv)
+def table_pooled(bound_rows, bound):
+    # SCP+MPPI minus each planner on the horizon-10 world models with one Lipschitz bound, pooled over both tasks and
+    # margin_eps >= POOL_MIN_EPS, paired on task, margin_eps and seed, with intervals that resample whole seeds
+    # (by_bound.csv). One table per bound: the main bound's in the main text, the others in the appendix
     order = [("SCP", "SCP", "--"), ("MPPI", "MPPI", "512"), ("CEM", "CEM", "512"),
              ("MPPI@65536", "MPPI", "time-matched"), ("CEM@65536", "CEM", "time-matched")]
-    by = {r["other"]: r for r in all_rows}
+    by = {r["other"]: r for r in bound_rows if np.isclose(float(r["bound"]), bound)}
     lines = [r"\begin{tabular}{llrccc}", r"\toprule",
              r"Baseline & Budget & Pairs & $\Delta$ violation rate (pp) & McNemar $p$ & $\Delta$ return \\",
              r"\midrule"]
@@ -503,7 +504,8 @@ def table_pooled(all_rows):
                      f"{latex_p(r['p_mcnemar'])} & "
                      f"{latex_ci(r['return_diff'], r['return_diff_lo'], r['return_diff_hi'], 1, 2, True)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    write_table("main_text", "table_pooled_comparison", lines)
+    write_table("main_text" if np.isclose(bound, MAIN_BOUND) else "appendix",
+                f"table_pooled_c{bound:g}".replace(".", "_"), lines)
 
 def table_per_model(headline):
     # Every horizon-10 world model, each planner pooled over margin_eps >= POOL_MIN_EPS (headline.csv): violation rate
@@ -552,11 +554,16 @@ def main():
     fig_grid(rows, "rate", "violation rate", "fig_eps_sweep_all_bounds_violations")
     fig_grid(rows, "return", "episode return", "fig_eps_sweep_all_bounds_return")
     fig_survival(rows, episodes)
-    for name, table in (("all_models.csv", table_pooled), ("headline.csv", table_per_model)):
-        if (ANALYSIS / name).exists():
-            table(load(name))
-        else:
-            skip(name.replace(".csv", " table"), f"no {name}; re-run analyse_results.py")
+    if (ANALYSIS / "by_bound.csv").exists():
+        bound_rows = load("by_bound.csv")
+        for bound in sorted({float(r["bound"]) for r in bound_rows}):
+            table_pooled(bound_rows, bound)
+    else:
+        skip("pooled tables", "no by_bound.csv; re-run analyse_results.py")
+    if (ANALYSIS / "headline.csv").exists():
+        table_per_model(load("headline.csv"))
+    else:
+        skip("per-model table", "no headline.csv; re-run analyse_results.py")
 
 if __name__ == "__main__":
     main()

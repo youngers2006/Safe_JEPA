@@ -139,12 +139,13 @@ six models.
 
 \begin{table}[t]
   \centering
-  \caption{SCP+MPPI minus each baseline over all six $N=10$ world models and $\epsilon\ge0.1$, paired by model, margin
-  and seed. A negative $\Delta$ violation rate or a positive $\Delta$ return favours SCP+MPPI. Brackets: 95\%
-  intervals resampling whole seeds.}
+  \caption{SCP+MPPI minus each baseline on the $c=1.5$ world models at $N=10$, pooled over both tasks and
+  $\epsilon\ge0.1$ and paired by task, margin and seed (Tables~\ref{tab:pooled_c1_2} and~\ref{tab:pooled_cinf} in the
+  appendix give the other bounds). A negative $\Delta$ violation rate or a positive $\Delta$ return favours SCP+MPPI.
+  Brackets: 95\% intervals resampling whole seeds.}
   \label{tab:pooled}
   \small
-  \input{\figdir/main_text/table_pooled_comparison}
+  \input{\figdir/main_text/table_pooled_c1_5}
 \end{table}
 
 \textbf{SCP needs a sampled start.} Started from its own shifted plan, SCP fails in 55\% of episodes over all $N=10$
