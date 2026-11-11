@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # Saved as PDF (for the paper) and PNG (to preview) in OUT, one folder per place in the paper
 ANALYSIS = ROOT / "src/save_data/experiments/analysis_results"
 OUT = ROOT / "paper_graphs"
+# The seeds are capped in analyse_results.py, which reads the episodes; this must match its SEED_CAP so the figures say
+# which seeds they show. The analysis outputs record their cap, and the figures stop if the two differ
+SEED_CAP = 30
 TEXT_WIDTH = 6.0 # inches, the paper's text width: every figure spans it
 MAIN_BOUND = 1.5 # the main world models' Lipschitz bound
 SURVIVAL_TASK = 1 # the main model whose survival curves go in the appendix
@@ -23,6 +26,8 @@ POOL_MIN_EPS = 0.1 # pooled figures use the margin_eps sweep from here up, as th
 HORIZON_TASK, HORIZON_EPS = 1, 0.2 # the horizon tests: PointGoal1's bound-MAIN_BOUND models at margin_eps 0.2
 TIME_MATCHED = {10: 65536, 20: 95040, 30: 120000} # each horizon's time-matched sampler budget
 SAMPLE_BUDGET = 512 # the samplers' budget in the runs named plain MPPI and CEM
+# The baselines in the per-bound comparison tables, in order; add "MPPI" and "CEM" for the 512-sequence samplers
+POOLED_ROWS = ["SCP", "MPPI@65536", "CEM@65536"]
 # Return against compute uses the plan times logged during the runs, comparable within these horizons' runs (H10's
 # time-matched runs shared GPUs differently; its compute matching is the idle timing in the report)
 COMPUTE_HORIZONS = (20, 30)
@@ -216,7 +221,7 @@ def fig_horizon(rows, series, folder, name):
                         mfc=colour if filled else "white", label=label)
     for ax, ylabel in zip(axes, ("violation rate", "episode return")):
         ax.set_xticks(Hs)
-        ax.set_xlabel("planning horizon $H$")
+        ax.set_xlabel("planning horizon $N$")
         ax.set_ylabel(ylabel)
     fig.tight_layout()
     top_legend(fig, axes, ncol=min(len(series), 4))
@@ -256,7 +261,7 @@ def fig_compute(rows):
                             ms=6, ls="none", label=label)
         ax.set_xscale("log")
         ax.set_xlabel("plan time per step (s)")
-        ax.set_title(f"$H={H}$")
+        ax.set_title(f"$N={H}$")
         lo_y, hi_y = ax.get_ylim()
         ax.set_ylim(lo_y - 0.12 * (hi_y - lo_y), hi_y) # room for the budget labels
     axes[0][0].set_ylabel("episode return")
@@ -303,10 +308,10 @@ def fig_model_optimism(rows, episodes):
         return skip("fig_model_optimism", "episodes.csv has no optimism; re-run analyse_results.py")
     rng = np.random.default_rng(0)
     pts = horizon_points(rows)
-    panels = [("$H=10$, every world model", pooled_episodes(episodes))]
+    panels = [("$N=10$, every world model", pooled_episodes(episodes))]
     for H in sorted(h for h in pts if h != 10):
         dirs = {r["data_dir"] for r in pts[H].values()}
-        panels.append((f"$H={H}$", [r for r in episodes if r["data_dir"] in dirs and r["tag"] == f"e4/H_{H}"]))
+        panels.append((f"$N={H}$", [r for r in episodes if r["data_dir"] in dirs and r["tag"] == f"e4/H_{H}"]))
     order = lambda pl: (["SCP+MPPI", "SCP", "MPPI", "CEM"].index(pl.partition("@")[0]), budget_of(pl))
     planners = [sorted({r["planner"] for r in eps if r["planner"].partition("@")[0] in
                         ("SCP+MPPI", "SCP", "MPPI", "CEM")}, key=order) for _, eps in panels]
@@ -458,9 +463,94 @@ def fig_trade_off(rows, episodes):
     top_legend(fig, axes, ncol=3)
     save(fig, "ablation", "fig_return_vs_violations")
 
+# Tables (LaTeX, booktabs), written beside the figures so the paper's numbers come from the same outputs
+
+def latex_p(p):
+    if not np.isfinite(p):
+        return "--"
+    if p >= 0.1:
+        return f"{p:.2f}"
+    if p >= 1e-3:
+        return f"{p:.2g}"
+    e = int(np.floor(np.log10(p)))
+    m = round(p / 10 ** e)
+    m, e = (1, e + 1) if m == 10 else (m, e)
+    return f"${m}\\times 10^{{{e}}}$"
+
+def latex_prob(p):
+    # A probability, with the ends shown as bounds rather than as certainty
+    if not np.isfinite(p):
+        return "--"
+    return "$>0.999$" if p > 0.999 else "$<0.001$" if p < 0.001 else f"{p:.3f}" if p > 0.99 or p < 0.01 else f"{p:.2f}"
+
+def latex_ci(x, lo, hi, scale=1.0, digits=2, sign=False):
+    f = (lambda v: f"${v * scale:+.{digits}f}$") if sign else (lambda v: f"${v * scale:.{digits}f}$")
+    return f"{f(x)} [{f(lo)}, {f(hi)}]"
+
+def write_table(folder, name, lines):
+    (OUT / folder).mkdir(parents=True, exist_ok=True)
+    (OUT / folder / f"{name}.tex").write_text("\n".join(lines) + "\n")
+    print(f"  {folder}/{name}.tex")
+
+def table_pooled(bound_rows, bound):
+    # SCP+MPPI minus each planner on the horizon-10 world models with one Lipschitz bound, pooled over both tasks and
+    # margin_eps >= POOL_MIN_EPS, paired on task, margin_eps and seed, with intervals that resample whole seeds
+    # (by_bound.csv). One table per bound: the main bound's in the main text, the others in the appendix
+    # P(safer) and P(higher return): the probability, given the data, that SCP+MPPI's violation rate is lower and its
+    # return higher than the baseline's on these models (Bayesian bootstrap over seeds)
+    names = {"SCP": "SCP", "MPPI": "MPPI (512)", "CEM": "CEM (512)", "MPPI@65536": "MPPI (time-matched)",
+             "CEM@65536": "CEM (time-matched)"}
+    by = {r["other"]: r for r in bound_rows if np.isclose(float(r["bound"]), bound)}
+    lines = [r"\begin{tabular}{lrcccc}", r"\toprule",
+             r"Baseline & Pairs & $\Delta$ violations (pp) & $P$(safer) & $\Delta$ return & $P$(higher return) \\",
+             r"\midrule"]
+    for key in POOLED_ROWS:
+        if key not in by:
+            continue
+        name = names.get(key, key)
+        num = lambda k: float(by[key][k]) if by[key].get(k, "") not in ("", "nan") else np.nan
+        lines.append(f"{name} & {int(num('pairs'))} & "
+                     f"{latex_ci(num('viol_diff'), num('viol_diff_lo'), num('viol_diff_hi'), 100, 1, True)} & "
+                     f"{latex_prob(num('p_safer'))} & "
+                     f"{latex_ci(num('return_diff'), num('return_diff_lo'), num('return_diff_hi'), 1, 2, True)} & "
+                     f"{latex_prob(num('p_higher_return'))} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("main_text" if np.isclose(bound, MAIN_BOUND) else "appendix",
+                f"table_pooled_c{bound:g}".replace(".", "_"), lines)
+
+def table_per_model(headline):
+    # Every horizon-10 world model, each planner pooled over margin_eps >= POOL_MIN_EPS (headline.csv): violation rate
+    # (Wilson) and return (bootstrap) with 95% intervals, and SCP+MPPI's paired McNemar p against it (Holm over models)
+    lines = [r"\begin{tabular}{llrccc}", r"\toprule",
+             r"Task, $c$ & Planner & Episodes & Violation rate & Return & $p$ vs SCP+MPPI \\", r"\midrule"]
+    groups = {}
+    for r in headline:
+        groups.setdefault((int(r["task"]), float(r["bound"])), []).append(r)
+    for i, ((task, b), rs) in enumerate(sorted(groups.items())):
+        if i:
+            lines.append(r"\midrule")
+        rs = sorted(rs, key=lambda r: EVERY.index(r["planner"]) if r["planner"] in EVERY else len(EVERY))
+        for j, r in enumerate(rs):
+            f = {k: float(r[k]) if r.get(k, "") not in ("", "nan") else np.nan for k in
+                 ("episodes", "rate", "rate_lo", "rate_hi", "return", "return_lo", "return_hi",
+                  "p_mcnemar_vs_main_holm")}
+            label = STYLE[r["planner"]][0] if r["planner"] in STYLE else r["planner"]
+            head = f"PG{task}, {bound_label(b)}" if j == 0 else ""
+            lines.append(f"{head} & {label} & {int(f['episodes'])} & "
+                         f"{latex_ci(f['rate'], f['rate_lo'], f['rate_hi'])} & "
+                         f"{latex_ci(f['return'], f['return_lo'], f['return_hi'])} & "
+                         f"{latex_p(f['p_mcnemar_vs_main_holm']) if r['planner'] != 'SCP+MPPI' else ''} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("appendix", "table_per_model", lines)
+
 def main():
     rows, episodes = load("summary.csv"), load("episodes.csv")
-    print(f"Paper figures from {ANALYSIS}, written to {OUT}:")
+    caps = {r.get("seed_cap") for r in rows}
+    if caps != {str(SEED_CAP)}:
+        made = "before SEED_CAP existed" if None in caps else f"with SEED_CAP {', '.join(sorted(caps))}"
+        raise SystemExit(f"{ANALYSIS} was made {made}, not {SEED_CAP}: set SEED_CAP in analyse_results.py and here to "
+                         f"the same value and re-run analyse_results.py")
+    print(f"Paper figures from {ANALYSIS} (seeds 0-{SEED_CAP - 1}), written to {OUT}:")
     fig_sweep(rows, MAIN_TEXT, "main_text", "fig_eps_sweep_c1_5")
     fig_stop_reasons(rows)
     fig_horizon(rows, HORIZON_MAIN, "main_text", "fig_horizon")
@@ -475,6 +565,16 @@ def main():
     fig_grid(rows, "rate", "violation rate", "fig_eps_sweep_all_bounds_violations")
     fig_grid(rows, "return", "episode return", "fig_eps_sweep_all_bounds_return")
     fig_survival(rows, episodes)
+    if (ANALYSIS / "by_bound.csv").exists():
+        bound_rows = load("by_bound.csv")
+        for bound in sorted({float(r["bound"]) for r in bound_rows}):
+            table_pooled(bound_rows, bound)
+    else:
+        skip("pooled tables", "no by_bound.csv; re-run analyse_results.py")
+    if (ANALYSIS / "headline.csv").exists():
+        table_per_model(load("headline.csv"))
+    else:
+        skip("per-model table", "no headline.csv; re-run analyse_results.py")
 
 if __name__ == "__main__":
     main()

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "src/save_data/experiments" # the merged experiments folder
 OUT = RESULTS / "analysis_results"
 PREFIX = "M2_" # only world model folders starting with this ("" for all)
+SEED_CAP = 30 # only seeds 0 to SEED_CAP - 1 are read, so every point uses the same seeds; one with fewer keeps its own
 # Runs at another budget, saved in their own folder under the plain planner names, join the point they extend so they
 # pair with its seeds, named with their budget from their config: a sampler's sequences ("MPPI@65536"), SCP's iteration
 # cap ("SCP+MPPI@100it"). Each rule maps such a folder (its path below the world model's folder) to that point's
@@ -208,7 +209,7 @@ def load_results(results, prefix):
     for f in sorted(results.rglob("*_seed_*.npz")):
         m = re.fullmatch(r"(.+)_seed_(\d+)\.npz", f.name)
         rel = f.parent.relative_to(results).parts
-        if m is None or len(rel) < 2 or not rel[0].startswith(prefix):
+        if m is None or len(rel) < 2 or not rel[0].startswith(prefix) or int(m.group(2)) >= SEED_CAP:
             continue
         tag, planner = point_name(f.parent, m.group(1), rel)
         sources.setdefault((rel[0], tag), {})[planner] = (f.parent, m.group(1))
@@ -299,6 +300,18 @@ def crash_types(eps, horizon):
     return {"episodes": len(eps), "crashes_warned": crashes - unwarned, "crashes_unwarned": unwarned,
             "barrier_active": float(np.mean(slack <= ACTIVE_TOL)) if len(slack) else np.nan,
             "barrier_slack_med": float(np.median(slack)) if len(slack) else np.nan}
+
+def prob_positive(seeds, x, rng):
+    # Probability that the mean of x over pairs is above 0, given the data: the Bayesian bootstrap (Rubin, 1981) over
+    # whole seeds, i.e. the share of draws of flat Dirichlet weights on the seeds whose weighted mean is positive
+    seeds, x = np.asarray(seeds), np.asarray(x, float)
+    keep = ~np.isnan(x)
+    keys, inv = np.unique(seeds[keep], return_inverse=True)
+    if len(keys) == 0:
+        return np.nan
+    sums, counts = np.bincount(inv, x[keep]), np.bincount(inv)
+    w = rng.dirichlet(np.ones(len(keys)), size=N_BOOT)
+    return float(np.mean(w @ sums / (w @ counts) > 0))
 
 def seed_boot(seeds, x, rng):
     # 95% interval for the mean of x over pairs, resampling whole seeds: seed k is the same layout in every model and
@@ -587,7 +600,8 @@ def write_csv(path, rows):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     points, warnings = load_results(RESULTS, PREFIX)
-    lines = [f"Results in {RESULTS} (world model folders starting '{PREFIX}'): {len(points)} sweep points"]
+    lines = [f"Results in {RESULTS} (world model folders starting '{PREFIX}'): {len(points)} sweep points, "
+             f"seeds 0-{SEED_CAP - 1} only (SEED_CAP)"]
     if not points:
         print(lines[0])
         return
@@ -599,7 +613,7 @@ def main():
             summary[(p["data_dir"], p["tag"], pl)] = row
             summary_rows.append({"model": p["model"], "data_dir": p["data_dir"], "tag": p["tag"], "eps": p["eps"],
                                  "horizon": p["horizon"], "bound": p["bound"], "task": p["task"], "planner": pl,
-                                 "seeds": f"{min(episodes)}-{max(episodes)}", **row})
+                                 "seeds": f"{min(episodes)}-{max(episodes)}", "seed_cap": SEED_CAP, **row})
             for s, e in sorted(episodes.items()):
                 episode_rows.append({"model": p["model"], "data_dir": p["data_dir"], "tag": p["tag"], "eps": p["eps"],
                                      "planner": pl, "seed": s, "steps": e["steps"], "violated": e["violated"],
@@ -744,7 +758,7 @@ def main():
     for pl in {r["other"] for r in pooled_rows}:
         keys = [(d, pl) for d, _ in main_models.values() if (d, pl) in pooled_by]
         holm_by.update(zip(keys, holm([pooled_by[k]["p_mcnemar"] for k in keys])))
-    top, headline_rows, lip_rows, lip_pooled, all_rows = [], [], [], [], []
+    top, headline_rows, lip_rows, lip_pooled, all_rows, bound_rows = [], [], [], [], [], []
     bound_str = lambda b: "inf" if np.isinf(b) else f"{b:g}"
     if main_models:
         top += ["", f"=== Headline: each planner pooled over eps >= {POOL_MIN_EPS}; {MAIN} against it on paired seeds: "
@@ -771,8 +785,8 @@ def main():
         # over the horizon-10 models, with intervals that resample whole seeds. The crash types and barrier slack test
         # whether the stronger optimisers add crashes the model did not predict by planning closer to the barrier
         rng = np.random.default_rng(1) # its own stream, so every other interval stays as it was
-        pairs = {}
-        for data_dir, pts in main_models.values():
+        pairs, by_bound = {}, {}
+        for (_, bnd), (data_dir, pts) in main_models.items():
             for p in pts:
                 if p["eps"] < POOL_MIN_EPS or MAIN not in p["planners"]:
                     continue
@@ -780,9 +794,9 @@ def main():
                 for pl, b in p["planners"].items():
                     for s in (sorted(set(a) & set(b)) if pl != MAIN else []):
                         (ua, xa), (ub, xb) = (episode_crash(x[s], p["horizon"]) for x in (a, b))
-                        pairs.setdefault(pl, []).append((s, float(a[s]["violated"]) - float(b[s]["violated"]),
-                                                         a[s]["return"] - b[s]["return"], float(ua) - float(ub),
-                                                         xa - xb))
+                        dv, dr = float(a[s]["violated"]) - float(b[s]["violated"]), a[s]["return"] - b[s]["return"]
+                        pairs.setdefault(pl, []).append((s, dv, dr, float(ua) - float(ub), xa - xb))
+                        by_bound.setdefault((bnd, pl), []).append((s, dv, dr))
         if pairs:
             top += ["", f"=== All {len(main_models)} horizon-10 world models, eps >= {POOL_MIN_EPS}: {MAIN} against each "
                         f"planner on the same model, eps and seed (95% intervals resample seeds) ===",
@@ -826,6 +840,27 @@ def main():
                            + (f"; vs {MAIN}: unwarned {r['unwarned_only_main']}:{r['unwarned_only_other']}, p "
                               f"{fmt_p(r['p_mcnemar_unwarned'])}, active {100 * r['active_diff']:+.1f} "
                               f"[{100 * r['active_diff_lo']:+.1f}, {100 * r['active_diff_hi']:+.1f}]" if r else ""))
+
+            # The same comparison for each Lipschitz bound, pooled over the tasks: the paper's tables, since pooling the
+            # bounds averages the main models with the ones the paper argues against
+            rng_bound = np.random.default_rng(2) # its own stream, so the intervals above stay as they were
+            rng_prob = np.random.default_rng(3) # and the probabilities theirs, so these intervals stay as they were
+            top += [f"  per Lipschitz bound, both tasks: {MAIN} against each planner as above"]
+            for bnd in sorted({bnd for bnd, _ in by_bound}):
+                for pl in ordered({pl for b_, pl in by_bound if b_ == bnd}):
+                    s, dv, dr = (np.array(c, float) for c in zip(*by_bound[(bnd, pl)]))
+                    b, c = int(np.sum(dv > 0)), int(np.sum(dv < 0))
+                    (vlo, vhi), (rlo, rhi) = seed_boot(s, dv, rng_bound), seed_boot(s, dr, rng_bound)
+                    bound_rows.append({"bound": bnd, "other": pl, "pairs": len(s), "only_main": b, "only_other": c,
+                                       "viol_diff": dv.mean(), "viol_diff_lo": vlo, "viol_diff_hi": vhi,
+                                       "p_mcnemar": binom_two_sided(min(b, c), b + c), "return_diff": dr.mean(),
+                                       "return_diff_lo": rlo, "return_diff_hi": rhi,
+                                       "p_safer": prob_positive(s, -dv, rng_prob),
+                                       "p_higher_return": prob_positive(s, dr, rng_prob)})
+                    top.append(f"  c {bound_str(bnd):3s} {pl:13s} {len(s):5d}  {b:4d}:{c:<4d} {100 * dv.mean():+6.1f} "
+                               f"[{100 * vlo:+.1f}, {100 * vhi:+.1f}], p {fmt_p(bound_rows[-1]['p_mcnemar'])}, "
+                               f"{dr.mean():+.2f} [{rlo:+.2f}, {rhi:+.2f}]; P(safer) "
+                               f"{bound_rows[-1]['p_safer']:.3f}, P(higher return) {bound_rows[-1]['p_higher_return']:.3f}")
 
         # Lipschitz bound: each planner on the bound-1.5 model against the same planner on each other bound, on paired
         # seeds (seed k is the same layout for every model), per margin_eps and pooled over margin_eps >= POOL_MIN_EPS
@@ -924,11 +959,12 @@ def main():
     write_csv(OUT / "lipschitz_tests.csv", lip_rows)
     write_csv(OUT / "lipschitz_pooled.csv", lip_pooled)
     write_csv(OUT / "all_models.csv", all_rows)
+    write_csv(OUT / "by_bound.csv", bound_rows)
     report = "\n".join(lines)
     (OUT / "report.txt").write_text(report + "\n")
     print(report)
     print(f"\nWritten to {OUT}: report.txt, headline.csv, summary.csv, tests.csv, pooled_tests.csv, "
-          f"lipschitz_tests.csv, lipschitz_pooled.csv, all_models.csv, episodes.csv and the figures")
+          f"lipschitz_tests.csv, lipschitz_pooled.csv, all_models.csv, by_bound.csv, episodes.csv and the figures")
 
 if __name__ == "__main__":
     main()
