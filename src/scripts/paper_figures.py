@@ -26,6 +26,8 @@ POOL_MIN_EPS = 0.1 # pooled figures use the margin_eps sweep from here up, as th
 HORIZON_TASK, HORIZON_EPS = 1, 0.2 # the horizon tests: PointGoal1's bound-MAIN_BOUND models at margin_eps 0.2
 TIME_MATCHED = {10: 65536, 20: 95040, 30: 120000} # each horizon's time-matched sampler budget
 SAMPLE_BUDGET = 512 # the samplers' budget in the runs named plain MPPI and CEM
+# The baselines in the per-bound comparison tables, in order; add "MPPI" and "CEM" for the 512-sequence samplers
+POOLED_ROWS = ["SCP", "MPPI@65536", "CEM@65536"]
 # Return against compute uses the plan times logged during the runs, comparable within these horizons' runs (H10's
 # time-matched runs shared GPUs differently; its compute matching is the idle timing in the report)
 COMPUTE_HORIZONS = (20, 30)
@@ -475,6 +477,12 @@ def latex_p(p):
     m, e = (1, e + 1) if m == 10 else (m, e)
     return f"${m}\\times 10^{{{e}}}$"
 
+def latex_prob(p):
+    # A probability, with the ends shown as bounds rather than as certainty
+    if not np.isfinite(p):
+        return "--"
+    return "$>0.999$" if p > 0.999 else "$<0.001$" if p < 0.001 else f"{p:.3f}" if p > 0.99 or p < 0.01 else f"{p:.2f}"
+
 def latex_ci(x, lo, hi, scale=1.0, digits=2, sign=False):
     f = (lambda v: f"${v * scale:+.{digits}f}$") if sign else (lambda v: f"${v * scale:.{digits}f}$")
     return f"{f(x)} [{f(lo)}, {f(hi)}]"
@@ -488,21 +496,25 @@ def table_pooled(bound_rows, bound):
     # SCP+MPPI minus each planner on the horizon-10 world models with one Lipschitz bound, pooled over both tasks and
     # margin_eps >= POOL_MIN_EPS, paired on task, margin_eps and seed, with intervals that resample whole seeds
     # (by_bound.csv). One table per bound: the main bound's in the main text, the others in the appendix
-    order = [("SCP", "SCP", "--"), ("MPPI", "MPPI", "512"), ("CEM", "CEM", "512"),
-             ("MPPI@65536", "MPPI", "time-matched"), ("CEM@65536", "CEM", "time-matched")]
+    # P(safer) and P(higher return): the probability, given the data, that SCP+MPPI's violation rate is lower and its
+    # return higher than the baseline's on these models (Bayesian bootstrap over seeds)
+    names = {"SCP": "SCP", "MPPI": "MPPI (512)", "CEM": "CEM (512)", "MPPI@65536": "MPPI (time-matched)",
+             "CEM@65536": "CEM (time-matched)"}
     by = {r["other"]: r for r in bound_rows if np.isclose(float(r["bound"]), bound)}
-    lines = [r"\begin{tabular}{llrccc}", r"\toprule",
-             r"Baseline & Budget & Pairs & $\Delta$ violation rate (pp) & McNemar $p$ & $\Delta$ return \\",
-             r"\midrule"]
-    for key, name, budget in order:
+    lines = [r"\setlength{\tabcolsep}{3.5pt} % local to the table float: seven columns in the text width",
+             r"\begin{tabular}{@{}lrccccc@{}}", r"\toprule",
+             r"Baseline & Pairs & $\Delta$ violations (pp) & McNemar $p$ & $P$(safer) & $\Delta$ return & "
+             r"$P$(higher return) \\", r"\midrule"]
+    for key in POOLED_ROWS:
         if key not in by:
             continue
-        r = {k: float(by[key][k]) for k in ("pairs", "viol_diff", "viol_diff_lo", "viol_diff_hi", "p_mcnemar",
-                                            "return_diff", "return_diff_lo", "return_diff_hi")}
-        lines.append(f"{name} & {budget} & {int(r['pairs'])} & "
-                     f"{latex_ci(r['viol_diff'], r['viol_diff_lo'], r['viol_diff_hi'], 100, 1, True)} & "
-                     f"{latex_p(r['p_mcnemar'])} & "
-                     f"{latex_ci(r['return_diff'], r['return_diff_lo'], r['return_diff_hi'], 1, 2, True)} \\\\")
+        name = names.get(key, key)
+        num = lambda k: float(by[key][k]) if by[key].get(k, "") not in ("", "nan") else np.nan
+        lines.append(f"{name} & {int(num('pairs'))} & "
+                     f"{latex_ci(num('viol_diff'), num('viol_diff_lo'), num('viol_diff_hi'), 100, 1, True)} & "
+                     f"{latex_p(num('p_mcnemar'))} & {latex_prob(num('p_safer'))} & "
+                     f"{latex_ci(num('return_diff'), num('return_diff_lo'), num('return_diff_hi'), 1, 2, True)} & "
+                     f"{latex_prob(num('p_higher_return'))} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("main_text" if np.isclose(bound, MAIN_BOUND) else "appendix",
                 f"table_pooled_c{bound:g}".replace(".", "_"), lines)

@@ -301,6 +301,18 @@ def crash_types(eps, horizon):
             "barrier_active": float(np.mean(slack <= ACTIVE_TOL)) if len(slack) else np.nan,
             "barrier_slack_med": float(np.median(slack)) if len(slack) else np.nan}
 
+def prob_positive(seeds, x, rng):
+    # Probability that the mean of x over pairs is above 0, given the data: the Bayesian bootstrap (Rubin, 1981) over
+    # whole seeds, i.e. the share of draws of flat Dirichlet weights on the seeds whose weighted mean is positive
+    seeds, x = np.asarray(seeds), np.asarray(x, float)
+    keep = ~np.isnan(x)
+    keys, inv = np.unique(seeds[keep], return_inverse=True)
+    if len(keys) == 0:
+        return np.nan
+    sums, counts = np.bincount(inv, x[keep]), np.bincount(inv)
+    w = rng.dirichlet(np.ones(len(keys)), size=N_BOOT)
+    return float(np.mean(w @ sums / (w @ counts) > 0))
+
 def seed_boot(seeds, x, rng):
     # 95% interval for the mean of x over pairs, resampling whole seeds: seed k is the same layout in every model and
     # margin_eps, so its pairs are not independent
@@ -832,6 +844,7 @@ def main():
             # The same comparison for each Lipschitz bound, pooled over the tasks: the paper's tables, since pooling the
             # bounds averages the main models with the ones the paper argues against
             rng_bound = np.random.default_rng(2) # its own stream, so the intervals above stay as they were
+            rng_prob = np.random.default_rng(3) # and the probabilities theirs, so these intervals stay as they were
             top += [f"  per Lipschitz bound, both tasks: {MAIN} against each planner as above"]
             for bnd in sorted({bnd for bnd, _ in by_bound}):
                 for pl in ordered({pl for b_, pl in by_bound if b_ == bnd}):
@@ -841,10 +854,13 @@ def main():
                     bound_rows.append({"bound": bnd, "other": pl, "pairs": len(s), "only_main": b, "only_other": c,
                                        "viol_diff": dv.mean(), "viol_diff_lo": vlo, "viol_diff_hi": vhi,
                                        "p_mcnemar": binom_two_sided(min(b, c), b + c), "return_diff": dr.mean(),
-                                       "return_diff_lo": rlo, "return_diff_hi": rhi})
+                                       "return_diff_lo": rlo, "return_diff_hi": rhi,
+                                       "p_safer": prob_positive(s, -dv, rng_prob),
+                                       "p_higher_return": prob_positive(s, dr, rng_prob)})
                     top.append(f"  c {bound_str(bnd):3s} {pl:13s} {len(s):5d}  {b:4d}:{c:<4d} {100 * dv.mean():+6.1f} "
                                f"[{100 * vlo:+.1f}, {100 * vhi:+.1f}], p {fmt_p(bound_rows[-1]['p_mcnemar'])}, "
-                               f"{dr.mean():+.2f} [{rlo:+.2f}, {rhi:+.2f}]")
+                               f"{dr.mean():+.2f} [{rlo:+.2f}, {rhi:+.2f}]; P(safer) "
+                               f"{bound_rows[-1]['p_safer']:.3f}, P(higher return) {bound_rows[-1]['p_higher_return']:.3f}")
 
         # Lipschitz bound: each planner on the bound-1.5 model against the same planner on each other bound, on paired
         # seeds (seed k is the same layout for every model), per margin_eps and pooled over margin_eps >= POOL_MIN_EPS
