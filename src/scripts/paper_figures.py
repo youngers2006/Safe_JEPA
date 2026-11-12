@@ -215,6 +215,25 @@ def cap_share_lines(rows, axes):
         ax.set_xlabel(r"margin $\epsilon$")
         ax.set_title(f"PointGoal{task}")
 
+def fig_sweep_row(rows, planners, folder, name):
+    # fig_sweep in one row of the text width: violation rate (left pair) and return (right pair) against margin_eps on
+    # each task's main world model, one legend above. Half the height of the 2 x 2 layout, fonts at full size
+    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, 2.1))
+    axes[1].sharey(axes[0])
+    axes[3].sharey(axes[2])
+    for ax, (key, task) in zip(axes, (("rate", 1), ("rate", 2), ("return", 1), ("return", 2))):
+        plot_sweep(ax, sweep_of(rows, task, MAIN_BOUND), planners, key)
+        ax.set_title(f"PointGoal{task}")
+        ax.set_xlabel(r"margin $\epsilon$")
+        ax.tick_params(axis="x", labelsize=7)
+    axes[0].set_ylabel("violation rate")
+    axes[2].set_ylabel("episode return")
+    for ax in (axes[1], axes[3]):
+        ax.tick_params(labelleft=False)
+    fig.tight_layout(w_pad=0.6)
+    top_legend(fig, axes)
+    save(fig, folder, name)
+
 def fig_stop_reasons(rows):
     # How SCP+MPPI's steps ended at each margin_eps, on each task's main world model
     fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 2.4), sharey=True)
@@ -629,6 +648,7 @@ def main():
                          f"the same value and re-run analyse_results.py")
     print(f"Paper figures from {ANALYSIS} (seeds 0-{SEED_CAP - 1}), written to {OUT}:")
     fig_sweep(rows, MAIN_TEXT, "main_text", "fig_eps_sweep_c1_5")
+    fig_sweep_row(rows, MAIN_TEXT, "main_text", "fig_eps_sweep_c1_5_row")
     fig_stop_reasons(rows)
     fig_convergence(rows)
     fig_horizon(rows, HORIZON_MAIN, "main_text", "fig_horizon")
