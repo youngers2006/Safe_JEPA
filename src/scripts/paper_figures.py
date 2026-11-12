@@ -176,8 +176,9 @@ def fig_sweep(rows, planners, folder, name):
     top_legend(fig, axes)
     save(fig, folder, name)
 
-def fig_stop_reasons(rows):
-    # How SCP+MPPI's steps ended at each margin_eps, on each task's main world model
+def stop_reason_bars(rows, axes, labels=None):
+    # Stacked bars of how SCP+MPPI's steps ended at each margin_eps, one axis per task's main world model; labels
+    # optionally replaces the STOPS labels. Returns the categories drawn
     cert = "certified_tol" if "certified_tol" in rows[0] else "certified"
     if cert == "certified":
         print("  (summary.csv has no certified_tol: re-run analyse_results.py to certify at SCP's 1e-4 tolerance)")
@@ -188,8 +189,7 @@ def fig_stop_reasons(rows):
             heights[key] = [np.array([max(0.0, float(r["converged"]) - float(r[cert])) for _, r in s]) for s in sweeps]
         else:
             heights[key] = [np.array([float(r[cert if key == "certified" else key]) for _, r in s]) for s in sweeps]
-    shown = [(k, l, c) for k, l, c in STOPS if any(np.any(h > 1e-9) for h in heights[k])]
-    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 2.4), sharey=True)
+    shown = [(k, (labels or {}).get(k, l), c) for k, l, c in STOPS if any(np.any(h > 1e-9) for h in heights[k])]
     for i, (ax, task, sweep) in enumerate(zip(axes, (1, 2), sweeps)):
         x, bottom = np.arange(len(sweep)), np.zeros(len(sweep))
         for key, label, colour in shown:
@@ -199,10 +199,54 @@ def fig_stop_reasons(rows):
         ax.set_xlabel(r"margin $\epsilon$")
         ax.set_title(f"PointGoal{task}")
         ax.set_ylim(0, 1)
+    return shown
+
+def cap_share_lines(rows, axes):
+    # SCP+MPPI's share of steps that stopped at the iteration cap against margin_eps, a line per Lipschitz bound, one
+    # axis per task
+    bounds = sorted({float(r["bound"]) for r in rows if r["tag"].startswith("e1/") and int(r["horizon"]) == 10})
+    for ax, task in zip(axes, (1, 2)):
+        for b in bounds:
+            sweep = sweep_of(rows, task, b).get("SCP+MPPI", [])
+            if sweep:
+                ax.plot([e for e, _ in sweep], [float(r["max_iters"]) for _, r in sweep], color=bound_colour(b),
+                        marker="o", label=bound_label(b))
+        ax.set_xticks(EPS_TICKS)
+        ax.set_xlabel(r"margin $\epsilon$")
+        ax.set_title(f"PointGoal{task}")
+
+def fig_stop_reasons(rows):
+    # How SCP+MPPI's steps ended at each margin_eps, on each task's main world model
+    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 2.4), sharey=True)
+    shown = stop_reason_bars(rows, axes)
     axes[0].set_ylabel("share of SCP+MPPI's steps")
     fig.tight_layout()
     top_legend(fig, axes, ncol=min(len(shown), 3))
     save(fig, "main_text", "fig_scp_stop_reasons")
+
+def fig_convergence(rows):
+    # The two convergence figures in one row of the text width: how SCP+MPPI's steps ended on the main models (left
+    # pair) and its share of steps at the iteration cap for each Lipschitz bound (right pair), each pair with its legend
+    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, 2.0))
+    axes[1].sharey(axes[0])
+    axes[3].sharey(axes[2])
+    shown = stop_reason_bars(rows, axes[:2], labels={"certified": "certified", "converged_uncertified":
+                             "converged, rollout misses", "converged_infeasible": "converged with slack",
+                             "max_iters": "iteration cap"})
+    cap_share_lines(rows, axes[2:])
+    axes[0].set_ylabel("share of steps")
+    axes[2].set_ylabel("share at the cap")
+    for ax in (axes[1], axes[3]):
+        ax.tick_params(labelleft=False)
+    for ax in axes:
+        ax.tick_params(axis="x", labelsize=7)
+    fig.tight_layout(w_pad=0.6)
+    for pair, ncol in ((axes[:2], min(len(shown), 3)), (axes[2:], 3)):
+        x0, x1 = pair[0].get_position().x0, pair[1].get_position().x1
+        handles, labels = pair[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="lower center", bbox_to_anchor=((x0 + x1) / 2, 1.0), ncol=ncol,
+                   frameon=False, handlelength=1.2, columnspacing=0.8)
+    save(fig, "main_text", "fig_convergence")
 
 def fig_horizon(rows, series, folder, name):
     # Violation rate and return against the planning horizon (PointGoal HORIZON_TASK, bound MAIN_BOUND, margin_eps
@@ -367,17 +411,8 @@ def fig_crash_types(episodes):
 
 def fig_lipschitz_convergence(rows):
     # SCP+MPPI's share of steps that stopped at the iteration cap, against margin_eps, for each Lipschitz bound
-    bounds = sorted({float(r["bound"]) for r in rows if r["tag"].startswith("e1/") and int(r["horizon"]) == 10})
     fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 2.4), sharey=True)
-    for ax, task in zip(axes, (1, 2)):
-        for b in bounds:
-            sweep = sweep_of(rows, task, b).get("SCP+MPPI", [])
-            if sweep:
-                ax.plot([e for e, _ in sweep], [float(r["max_iters"]) for _, r in sweep], color=bound_colour(b),
-                        marker="o", label=bound_label(b))
-        ax.set_xticks(EPS_TICKS)
-        ax.set_xlabel(r"margin $\epsilon$")
-        ax.set_title(f"PointGoal{task}")
+    cap_share_lines(rows, axes)
     axes[0].set_ylabel("share of SCP+MPPI's steps\nat the iteration cap")
     fig.tight_layout()
     top_legend(fig, axes)
@@ -595,6 +630,7 @@ def main():
     print(f"Paper figures from {ANALYSIS} (seeds 0-{SEED_CAP - 1}), written to {OUT}:")
     fig_sweep(rows, MAIN_TEXT, "main_text", "fig_eps_sweep_c1_5")
     fig_stop_reasons(rows)
+    fig_convergence(rows)
     fig_horizon(rows, HORIZON_MAIN, "main_text", "fig_horizon")
     fig_compute(rows)
     fig_latent_safety(rows)
