@@ -19,6 +19,8 @@ OUT = ROOT / "paper_graphs"
 # which seeds they show. The analysis outputs record their cap, and the figures stop if the two differ
 SEED_CAP = 30
 TEXT_WIDTH = 6.0 # inches, the paper's text width: every figure spans it
+ROW_HEIGHT = 1.6 # inches, the height of the one-row margin-sweep figure (fig_eps_sweep_c1_5_row)
+CONVERGENCE_HEIGHT = 1.5 # inches, the height of the one-row convergence figure (fig_convergence)
 MAIN_BOUND = 1.5 # the main world models' Lipschitz bound
 SURVIVAL_TASK = 1 # the main model whose survival curves go in the appendix
 EPS_TICKS = [0.0, 0.1, 0.2, 0.3, 0.5]
@@ -218,7 +220,7 @@ def cap_share_lines(rows, axes):
 def fig_sweep_row(rows, planners, folder, name):
     # fig_sweep in one row of the text width: violation rate (left pair) and return (right pair) against margin_eps on
     # each task's main world model, one legend above. Half the height of the 2 x 2 layout, fonts at full size
-    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, 2.1))
+    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, ROW_HEIGHT))
     axes[1].sharey(axes[0])
     axes[3].sharey(axes[2])
     for ax, (key, task) in zip(axes, (("rate", 1), ("rate", 2), ("return", 1), ("return", 2))):
@@ -246,7 +248,7 @@ def fig_stop_reasons(rows):
 def fig_convergence(rows):
     # The two convergence figures in one row of the text width: how SCP+MPPI's steps ended on the main models (left
     # pair) and its share of steps at the iteration cap for each Lipschitz bound (right pair), each pair with its legend
-    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, 2.0))
+    fig, axes = plt.subplots(1, 4, figsize=(TEXT_WIDTH, CONVERGENCE_HEIGHT))
     axes[1].sharey(axes[0])
     axes[3].sharey(axes[2])
     shown = stop_reason_bars(rows, axes[:2], labels={"certified": "certified", "converged_uncertified":
