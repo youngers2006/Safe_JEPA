@@ -2,41 +2,41 @@ Results in /home/samuel/Github/Safe_JEPA/src/save_data/experiments (world model 
 
 === Headline: each planner pooled over eps >= 0.1; SCP+MPPI against it on paired seeds: pooled McNemar p (Holm over the 6 world models) and CMH p ===
 task bound planner         episodes violations      rate [95% CI]        return [95% CI]  goals  vs SCP+MPPI
-PG1    1.2 SCP+MPPI             120         35  0.29 [0.22, 0.38]    1.44 [  1.06,   1.84]   0.70  
-PG1    1.2 SCP                  120         74  0.62 [0.53, 0.70]    1.27 [  0.97,   1.64]   0.58  McNemar p 2.7e-07 (Holm 8.1e-07), CMH p 9.6e-07
-PG1    1.2 MPPI                 120         36  0.30 [0.23, 0.39]    1.41 [  1.00,   1.86]   0.72  McNemar p 1.000 (Holm 1.000), CMH p 1.000
+PG1    1.2 SCP+MPPI             120         35  0.29 [0.22, 0.38]    1.44 [  1.05,   1.85]   0.70  
+PG1    1.2 SCP                  120         74  0.62 [0.53, 0.70]    1.27 [  0.95,   1.64]   0.58  McNemar p 2.7e-07 (Holm 8.1e-07), CMH p 9.6e-07
+PG1    1.2 MPPI                 120         36  0.30 [0.23, 0.39]    1.41 [  1.01,   1.85]   0.72  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 PG1    1.2 MPPI@65536           120         34  0.28 [0.21, 0.37]    1.48 [  1.10,   1.90]   0.70  McNemar p 1.000 (Holm 1.000), CMH p 1.000
-PG1    1.2 CEM                  120         29  0.24 [0.17, 0.33]    1.49 [  1.14,   1.86]   0.70  McNemar p 0.345 (Holm 1.000), CMH p 0.465
-PG1    1.2 CEM@65536            120         35  0.29 [0.22, 0.38]    1.33 [  0.95,   1.79]   0.65  McNemar p 1.000 (Holm 1.000), CMH p 1.000
+PG1    1.2 CEM                  120         29  0.24 [0.17, 0.33]    1.49 [  1.15,   1.87]   0.70  McNemar p 0.345 (Holm 1.000), CMH p 0.465
+PG1    1.2 CEM@65536            120         35  0.29 [0.22, 0.38]    1.33 [  0.95,   1.81]   0.65  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 PG1    1.5 SCP+MPPI             120         24  0.20 [0.14, 0.28]    1.30 [  1.02,   1.60]   0.47  
-PG1    1.5 SCP                  120         67  0.56 [0.47, 0.64]    0.73 [  0.45,   1.00]   0.45  McNemar p 3.4e-08 (Holm 1.4e-07), CMH p 1.6e-08
-PG1    1.5 MPPI                 120         27  0.23 [0.16, 0.31]    0.87 [  0.68,   1.06]   0.27  McNemar p 0.690 (Holm 1.000), CMH p 0.752
-PG1    1.5 MPPI@65536           120         29  0.24 [0.17, 0.33]    1.15 [  0.90,   1.44]   0.37  McNemar p 0.359 (Holm 1.000), CMH p 0.524
-PG1    1.5 CEM                  120         21  0.17 [0.12, 0.25]    0.98 [  0.75,   1.25]   0.33  McNemar p 0.690 (Holm 1.000), CMH p 0.739
-PG1    1.5 CEM@65536            120         31  0.26 [0.19, 0.34]    0.94 [  0.75,   1.13]   0.29  McNemar p 0.167 (Holm 0.835), CMH p 0.352
-PG1    inf SCP+MPPI             120         34  0.28 [0.21, 0.37]    1.08 [  0.76,   1.43]   0.46  
-PG1    inf SCP                  120         66  0.55 [0.46, 0.64]    1.11 [  0.53,   1.61]   0.73  McNemar p 5.6e-06 (Holm 1.1e-05), CMH p 4.7e-05
-PG1    inf MPPI                 120         24  0.20 [0.14, 0.28]    0.78 [  0.47,   1.12]   0.36  McNemar p 0.099 (Holm 0.494), CMH p 0.174
-PG1    inf MPPI@65536           120         34  0.28 [0.21, 0.37]    0.97 [  0.70,   1.27]   0.42  McNemar p 1.000 (Holm 1.000), CMH p 1.000
-PG1    inf CEM                  120         25  0.21 [0.15, 0.29]    0.72 [  0.47,   1.02]   0.28  McNemar p 0.093 (Holm 0.559), CMH p 0.226
+PG1    1.5 SCP                  120         67  0.56 [0.47, 0.64]    0.73 [  0.46,   1.01]   0.45  McNemar p 3.4e-08 (Holm 1.4e-07), CMH p 1.6e-08
+PG1    1.5 MPPI                 120         27  0.23 [0.16, 0.31]    0.87 [  0.68,   1.05]   0.27  McNemar p 0.690 (Holm 1.000), CMH p 0.752
+PG1    1.5 MPPI@65536           120         29  0.24 [0.17, 0.33]    1.15 [  0.91,   1.43]   0.37  McNemar p 0.359 (Holm 1.000), CMH p 0.524
+PG1    1.5 CEM                  120         21  0.17 [0.12, 0.25]    0.98 [  0.75,   1.24]   0.33  McNemar p 0.690 (Holm 1.000), CMH p 0.739
+PG1    1.5 CEM@65536            120         31  0.26 [0.19, 0.34]    0.94 [  0.75,   1.14]   0.29  McNemar p 0.167 (Holm 0.835), CMH p 0.352
+PG1    inf SCP+MPPI             120         34  0.28 [0.21, 0.37]    1.08 [  0.77,   1.42]   0.46  
+PG1    inf SCP                  120         66  0.55 [0.46, 0.64]    1.11 [  0.48,   1.62]   0.73  McNemar p 5.6e-06 (Holm 1.1e-05), CMH p 4.7e-05
+PG1    inf MPPI                 120         24  0.20 [0.14, 0.28]    0.78 [  0.46,   1.11]   0.36  McNemar p 0.099 (Holm 0.494), CMH p 0.174
+PG1    inf MPPI@65536           120         34  0.28 [0.21, 0.37]    0.97 [  0.69,   1.27]   0.42  McNemar p 1.000 (Holm 1.000), CMH p 1.000
+PG1    inf CEM                  120         25  0.21 [0.15, 0.29]    0.72 [  0.46,   1.00]   0.28  McNemar p 0.093 (Holm 0.559), CMH p 0.226
 PG1    inf CEM@65536            120         30  0.25 [0.18, 0.33]    1.03 [  0.74,   1.34]   0.43  McNemar p 0.523 (Holm 1.000), CMH p 0.661
-PG2    1.2 SCP+MPPI             120         36  0.30 [0.23, 0.39]    1.09 [  0.72,   1.55]   0.33  
-PG2    1.2 SCP                  120         53  0.44 [0.36, 0.53]    1.04 [  0.73,   1.42]   0.32  McNemar p 0.016 (Holm 0.016), CMH p 0.033
-PG2    1.2 MPPI                 120         25  0.21 [0.15, 0.29]    0.69 [  0.45,   0.98]   0.21  McNemar p 0.061 (Holm 0.369), CMH p 0.140
-PG2    1.2 MPPI@65536           120         33  0.28 [0.20, 0.36]    0.91 [  0.58,   1.28]   0.33  McNemar p 0.690 (Holm 1.000), CMH p 0.777
-PG2    1.2 CEM                  120         30  0.25 [0.18, 0.33]    0.68 [  0.45,   0.94]   0.18  McNemar p 0.327 (Holm 1.000), CMH p 0.470
-PG2    1.2 CEM@65536            120         27  0.23 [0.16, 0.31]    0.99 [  0.63,   1.38]   0.33  McNemar p 0.078 (Holm 0.470), CMH p 0.241
+PG2    1.2 SCP+MPPI             120         36  0.30 [0.23, 0.39]    1.09 [  0.71,   1.55]   0.33  
+PG2    1.2 SCP                  120         53  0.44 [0.36, 0.53]    1.04 [  0.73,   1.41]   0.32  McNemar p 0.016 (Holm 0.016), CMH p 0.033
+PG2    1.2 MPPI                 120         25  0.21 [0.15, 0.29]    0.69 [  0.44,   0.99]   0.21  McNemar p 0.061 (Holm 0.369), CMH p 0.140
+PG2    1.2 MPPI@65536           120         33  0.28 [0.20, 0.36]    0.91 [  0.58,   1.30]   0.33  McNemar p 0.690 (Holm 1.000), CMH p 0.777
+PG2    1.2 CEM                  120         30  0.25 [0.18, 0.33]    0.68 [  0.45,   0.95]   0.18  McNemar p 0.327 (Holm 1.000), CMH p 0.470
+PG2    1.2 CEM@65536            120         27  0.23 [0.16, 0.31]    0.99 [  0.64,   1.38]   0.33  McNemar p 0.078 (Holm 0.470), CMH p 0.241
 PG2    1.5 SCP+MPPI             120         27  0.23 [0.16, 0.31]    0.49 [  0.32,   0.68]   0.07  
 PG2    1.5 SCP                  120         72  0.60 [0.51, 0.68]    0.72 [  0.49,   0.98]   0.19  McNemar p 2.1e-10 (Holm 1.3e-09), CMH p 4.6e-09
 PG2    1.5 MPPI                 120         32  0.27 [0.20, 0.35]    0.39 [  0.21,   0.59]   0.06  McNemar p 0.332 (Holm 1.000), CMH p 0.540
 PG2    1.5 MPPI@65536           120         31  0.26 [0.19, 0.34]    0.51 [  0.33,   0.69]   0.07  McNemar p 0.523 (Holm 1.000), CMH p 0.644
 PG2    1.5 CEM                  120         31  0.26 [0.19, 0.34]    0.38 [  0.21,   0.57]   0.05  McNemar p 0.388 (Holm 1.000), CMH p 0.644
-PG2    1.5 CEM@65536            120         28  0.23 [0.17, 0.32]    0.49 [  0.32,   0.67]   0.09  McNemar p 1.000 (Holm 1.000), CMH p 1.000
-PG2    inf SCP+MPPI             120         26  0.22 [0.15, 0.30]    0.48 [  0.28,   0.69]   0.10  
+PG2    1.5 CEM@65536            120         28  0.23 [0.17, 0.32]    0.49 [  0.32,   0.68]   0.09  McNemar p 1.000 (Holm 1.000), CMH p 1.000
+PG2    inf SCP+MPPI             120         26  0.22 [0.15, 0.30]    0.48 [  0.28,   0.70]   0.10  
 PG2    inf SCP                  120         66  0.55 [0.46, 0.64]    0.79 [  0.50,   1.10]   0.25  McNemar p 1.0e-08 (Holm 5.2e-08), CMH p 2.5e-07
 PG2    inf MPPI                 120         24  0.20 [0.14, 0.28]    0.46 [  0.27,   0.68]   0.09  McNemar p 0.839 (Holm 1.000), CMH p 0.874
-PG2    inf MPPI@65536           120         22  0.18 [0.12, 0.26]    0.52 [  0.31,   0.74]   0.10  McNemar p 0.541 (Holm 1.000), CMH p 0.629
-PG2    inf CEM                  120         25  0.21 [0.15, 0.29]    0.49 [  0.27,   0.74]   0.08  McNemar p 1.000 (Holm 1.000), CMH p 1.000
+PG2    inf MPPI@65536           120         22  0.18 [0.12, 0.26]    0.52 [  0.31,   0.73]   0.10  McNemar p 0.541 (Holm 1.000), CMH p 0.629
+PG2    inf CEM                  120         25  0.21 [0.15, 0.29]    0.49 [  0.26,   0.74]   0.08  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 PG2    inf CEM@65536            120         26  0.22 [0.15, 0.30]    0.56 [  0.36,   0.77]   0.11  McNemar p 1.000 (Holm 1.000), CMH p 1.000
 
 === All 6 horizon-10 world models, eps >= 0.1: SCP+MPPI against each planner on the same model, eps and seed (95% intervals resample seeds) ===
@@ -72,31 +72,31 @@ PG2    inf CEM@65536            120         26  0.22 [0.15, 0.30]    0.56 [  0.3
   c inf CEM@65536       240    23:19     +1.7 [-3.6, +7.0], p 0.644, -0.02 [-0.21, +0.18]; P(safer) 0.271, P(higher return) 0.420
 
 === Lipschitz bound, PointGoal1: each planner with bound 1.5 against bound 1.2, inf, paired seeds, pooled over eps >= 0.1 (only-1.5:only-other = episodes where just one of the two violated) ===
-  SCP+MPPI        1.5 vs 1.2: violations 24/120 vs 35/120 (16:27), McNemar p 0.126, CMH p 0.136, return difference -0.14 [-0.56, +0.28]
-  SCP+MPPI        1.5 vs inf: violations 24/120 vs 34/120 (19:29), McNemar p 0.193, CMH p 0.176, return difference +0.22 [-0.19, +0.62]
-  SCP             1.5 vs 1.2: violations 67/120 vs 74/120 (22:29), McNemar p 0.401, CMH p 0.431, return difference -0.54 [-0.97, -0.13]
-  SCP             1.5 vs inf: violations 67/120 vs 66/120 (28:27), McNemar p 1.000, CMH p 1.000, return difference -0.39 [-0.89, +0.22]
-  MPPI            1.5 vs 1.2: violations 27/120 vs 36/120 (18:27), McNemar p 0.233, CMH p 0.244, return difference -0.55 [-0.98, -0.13]
+  SCP+MPPI        1.5 vs 1.2: violations 24/120 vs 35/120 (16:27), McNemar p 0.126, CMH p 0.136, return difference -0.14 [-0.57, +0.27]
+  SCP+MPPI        1.5 vs inf: violations 24/120 vs 34/120 (19:29), McNemar p 0.193, CMH p 0.176, return difference +0.22 [-0.18, +0.61]
+  SCP             1.5 vs 1.2: violations 67/120 vs 74/120 (22:29), McNemar p 0.401, CMH p 0.431, return difference -0.54 [-0.98, -0.13]
+  SCP             1.5 vs inf: violations 67/120 vs 66/120 (28:27), McNemar p 1.000, CMH p 1.000, return difference -0.39 [-0.90, +0.23]
+  MPPI            1.5 vs 1.2: violations 27/120 vs 36/120 (18:27), McNemar p 0.233, CMH p 0.244, return difference -0.55 [-1.00, -0.13]
   MPPI            1.5 vs inf: violations 27/120 vs 24/120 (26:23), McNemar p 0.775, CMH p 0.754, return difference +0.09 [-0.25, +0.42]
   MPPI@65536      1.5 vs 1.2: violations 29/120 vs 34/120 (21:26), McNemar p 0.560, CMH p 0.557, return difference -0.33 [-0.77, +0.07]
-  MPPI@65536      1.5 vs inf: violations 29/120 vs 34/120 (21:26), McNemar p 0.560, CMH p 0.558, return difference +0.18 [-0.16, +0.52]
+  MPPI@65536      1.5 vs inf: violations 29/120 vs 34/120 (21:26), McNemar p 0.560, CMH p 0.558, return difference +0.18 [-0.16, +0.54]
   CEM             1.5 vs 1.2: violations 21/120 vs 29/120 (16:24), McNemar p 0.268, CMH p 0.269, return difference -0.50 [-0.91, -0.12]
-  CEM             1.5 vs inf: violations 21/120 vs 25/120 (19:23), McNemar p 0.644, CMH p 0.625, return difference +0.26 [-0.06, +0.58]
-  CEM@65536       1.5 vs 1.2: violations 31/120 vs 35/120 (21:25), McNemar p 0.659, CMH p 0.666, return difference -0.39 [-0.85, -0.00]
+  CEM             1.5 vs inf: violations 21/120 vs 25/120 (19:23), McNemar p 0.644, CMH p 0.625, return difference +0.26 [-0.07, +0.58]
+  CEM@65536       1.5 vs 1.2: violations 31/120 vs 35/120 (21:25), McNemar p 0.659, CMH p 0.666, return difference -0.39 [-0.85, +0.01]
   CEM@65536       1.5 vs inf: violations 31/120 vs 30/120 (23:22), McNemar p 1.000, CMH p 1.000, return difference -0.09 [-0.43, +0.23]
 
 === Lipschitz bound, PointGoal2: each planner with bound 1.5 against bound 1.2, inf, paired seeds, pooled over eps >= 0.1 (only-1.5:only-other = episodes where just one of the two violated) ===
   SCP+MPPI        1.5 vs 1.2: violations 27/120 vs 36/120 (16:25), McNemar p 0.211, CMH p 0.238, return difference -0.60 [-0.98, -0.27]
   SCP+MPPI        1.5 vs inf: violations 27/120 vs 26/120 (19:18), McNemar p 1.000, CMH p 1.000, return difference +0.02 [-0.19, +0.22]
   SCP             1.5 vs 1.2: violations 72/120 vs 53/120 (40:21), McNemar p 0.020, CMH p 0.019, return difference -0.32 [-0.62, -0.04]
-  SCP             1.5 vs inf: violations 72/120 vs 66/120 (26:20), McNemar p 0.461, CMH p 0.510, return difference -0.06 [-0.39, +0.24]
-  MPPI            1.5 vs 1.2: violations 32/120 vs 25/120 (21:14), McNemar p 0.311, CMH p 0.362, return difference -0.30 [-0.57, -0.06]
-  MPPI            1.5 vs inf: violations 32/120 vs 24/120 (22:14), McNemar p 0.243, CMH p 0.284, return difference -0.07 [-0.29, +0.14]
-  MPPI@65536      1.5 vs 1.2: violations 31/120 vs 33/120 (17:19), McNemar p 0.868, CMH p 0.884, return difference -0.41 [-0.77, -0.10]
-  MPPI@65536      1.5 vs inf: violations 31/120 vs 22/120 (23:14), McNemar p 0.188, CMH p 0.209, return difference -0.01 [-0.21, +0.18]
-  CEM             1.5 vs 1.2: violations 31/120 vs 30/120 (22:21), McNemar p 1.000, CMH p 1.000, return difference -0.29 [-0.52, -0.09]
+  SCP             1.5 vs inf: violations 72/120 vs 66/120 (26:20), McNemar p 0.461, CMH p 0.510, return difference -0.06 [-0.37, +0.24]
+  MPPI            1.5 vs 1.2: violations 32/120 vs 25/120 (21:14), McNemar p 0.311, CMH p 0.362, return difference -0.30 [-0.56, -0.06]
+  MPPI            1.5 vs inf: violations 32/120 vs 24/120 (22:14), McNemar p 0.243, CMH p 0.284, return difference -0.07 [-0.29, +0.15]
+  MPPI@65536      1.5 vs 1.2: violations 31/120 vs 33/120 (17:19), McNemar p 0.868, CMH p 0.884, return difference -0.41 [-0.76, -0.10]
+  MPPI@65536      1.5 vs inf: violations 31/120 vs 22/120 (23:14), McNemar p 0.188, CMH p 0.209, return difference -0.01 [-0.20, +0.18]
+  CEM             1.5 vs 1.2: violations 31/120 vs 30/120 (22:21), McNemar p 1.000, CMH p 1.000, return difference -0.29 [-0.53, -0.08]
   CEM             1.5 vs inf: violations 31/120 vs 25/120 (20:14), McNemar p 0.392, CMH p 0.443, return difference -0.10 [-0.34, +0.11]
-  CEM@65536       1.5 vs 1.2: violations 28/120 vs 27/120 (18:17), McNemar p 1.000, CMH p 1.000, return difference -0.50 [-0.85, -0.17]
+  CEM@65536       1.5 vs 1.2: violations 28/120 vs 27/120 (18:17), McNemar p 1.000, CMH p 1.000, return difference -0.50 [-0.86, -0.17]
   CEM@65536       1.5 vs inf: violations 28/120 vs 26/120 (16:14), McNemar p 0.856, CMH p 0.876, return difference -0.07 [-0.26, +0.10]
 
 === Plan time per step (s), idle timing runs (M2_pointgoal1_c_1_2_seed_0) ===
@@ -399,98 +399,90 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
    30 SCP+MPPI     30    1/30     0.03 [0.01, 0.17]    2.26 [  1.40,   3.21]   1.03    4.032s        0.98      0.27          0.38
    30 SCP          30    7/30     0.23 [0.12, 0.41]    1.11 [  0.16,   2.04]   1.03    3.872s        0.92      0.31          0.00
    30 MPPI         30    0/30     0.00 [0.00, 0.11]    1.59 [  0.94,   2.29]   0.63    0.059s        1.00       nan           nan
-   30 MPPI@32768   30    1/30     0.03 [0.01, 0.17]    1.60 [  1.09,   2.21]   0.57    0.913s        0.99       nan           nan
    30 MPPI@120000  30    0/30     0.00 [0.00, 0.11]    1.12 [  0.75,   1.51]   0.40    3.816s        1.00       nan           nan
    30 CEM          30    0/30     0.00 [0.00, 0.11]    1.22 [  0.80,   1.67]   0.43    0.058s        1.00       nan           nan
-   30 CEM@32768    30    1/30     0.03 [0.01, 0.17]    2.15 [  1.41,   2.97]   0.83    0.915s        0.99       nan           nan
-   30 CEM@120000   30    0/30     0.00 [0.00, 0.11]    1.28 [  0.79,   1.85]   0.40    3.812s        1.00       nan           nan
+   30 CEM@120000   30    0/30     0.00 [0.00, 0.11]    1.28 [  0.80,   1.87]   0.40    3.812s        1.00       nan           nan
   SCP+MPPI against each planner on paired seeds (only-main:only-other = episodes where just one of the two violated); Holm adjusts the McNemar p over this sweep's points
-  vs SCP   H   30: violations 1/30 vs 7/30 (0:6), McNemar p 0.031 (Holm 0.031), log-rank p 0.024, return difference +1.15 [+0.03, +2.27] (Wilcoxon p 0.064)
+  vs SCP   H   30: violations 1/30 vs 7/30 (0:6), McNemar p 0.031 (Holm 0.031), log-rank p 0.024, return difference +1.15 [+0.05, +2.29] (Wilcoxon p 0.064)
   vs SCP   pooled over eps >= 0.1 (1 points): violations 1/30 vs 7/30 (0:6), McNemar p 0.031, CMH p 0.060 (odds ratio 0.11), stratified log-rank p 0.024
-  vs MPPI  H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +0.67 [-0.06, +1.42] (Wilcoxon p 0.043)
+  vs MPPI  H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +0.67 [-0.04, +1.41] (Wilcoxon p 0.043)
   vs MPPI  pooled over eps >= 0.1 (1 points): violations 1/30 vs 0/30 (1:0), McNemar p 1.000, CMH p 1.000 (odds ratio inf), stratified log-rank p 0.317
-  vs MPPI@32768 H   30: violations 1/30 vs 1/30 (0:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.990, return difference +0.66 [-0.36, +1.71] (Wilcoxon p 0.245)
-  vs MPPI@32768 pooled over eps >= 0.1 (1 points): violations 1/30 vs 1/30 (0:0), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.990
-  vs MPPI@120000 H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +1.13 [+0.40, +1.92] (Wilcoxon p 8.7e-04)
+  vs MPPI@120000 H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +1.13 [+0.38, +1.91] (Wilcoxon p 8.7e-04)
   vs MPPI@120000 pooled over eps >= 0.1 (1 points): violations 1/30 vs 0/30 (1:0), McNemar p 1.000, CMH p 1.000 (odds ratio inf), stratified log-rank p 0.317
-  vs CEM   H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +1.04 [+0.21, +1.90] (Wilcoxon p 0.013)
+  vs CEM   H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +1.04 [+0.23, +1.91] (Wilcoxon p 0.013)
   vs CEM   pooled over eps >= 0.1 (1 points): violations 1/30 vs 0/30 (1:0), McNemar p 1.000, CMH p 1.000 (odds ratio inf), stratified log-rank p 0.317
-  vs CEM@32768 H   30: violations 1/30 vs 1/30 (0:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.990, return difference +0.11 [-0.92, +1.14] (Wilcoxon p 0.715)
-  vs CEM@32768 pooled over eps >= 0.1 (1 points): violations 1/30 vs 1/30 (0:0), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.990
-  vs CEM@120000 H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +0.98 [+0.08, +1.93] (Wilcoxon p 0.005)
+  vs CEM@120000 H   30: violations 1/30 vs 0/30 (1:0), McNemar p 1.000 (Holm 1.000), log-rank p 0.317, return difference +0.98 [+0.06, +1.90] (Wilcoxon p 0.005)
   vs CEM@120000 pooled over eps >= 0.1 (1 points): violations 1/30 vs 0/30 (1:0), McNemar p 1.000, CMH p 1.000 (odds ratio inf), stratified log-rank p 0.317
   latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
     SCP+MPPI    0.0005 / 0.0299, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 77.8% (median slack 0.000)
     SCP         0.0029 / 0.0630, warned 0.86; unwarned crashes 1 in 30 episodes; barrier active on 74.2% (median slack 0.000)
     MPPI        0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 74.1% (median slack 0.003)
-    MPPI@32768  0.0003 / 0.0794, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 76.6% (median slack 0.002)
     MPPI@120000 0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 72.7% (median slack 0.003)
     CEM         0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 74.5% (median slack 0.003)
-    CEM@32768   0.0004 / 0.0614, warned 1.00; unwarned crashes 0 in 30 episodes; barrier active on 73.9% (median slack 0.001)
     CEM@120000  0.0000 / 0.0000, warned nan; unwarned crashes 0 in 30 episodes; barrier active on 66.2% (median slack 0.003)
 
 === PG1 cinf H10 (M2_pointgoal1_c_inf_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
-    0 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    2.11 [  1.49,   2.82]   0.70    1.315s        1.00      0.51          0.63
-    0 SCP          30   22/30     0.73 [0.56, 0.86]    1.73 [  1.06,   2.42]   0.93    0.436s        0.98      0.68          0.00
-    0 MPPI         30    7/30     0.23 [0.12, 0.41]    1.53 [  0.96,   2.24]   0.47    0.035s        1.00       nan           nan
-    0 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    2.39 [  1.65,   3.20]   0.87    1.542s        1.00       nan           nan
-    0 CEM          30    7/30     0.23 [0.12, 0.41]    1.31 [  0.91,   1.73]   0.33    0.034s        0.99       nan           nan
-    0 CEM@65536    30    6/30     0.20 [0.10, 0.37]    2.69 [  1.75,   3.81]   1.00    1.542s        1.00       nan           nan
-  0.1 SCP+MPPI     30    5/30     0.17 [0.07, 0.34]    2.00 [  1.24,   2.90]   0.77    1.758s        0.96      0.43          0.58
-  0.1 SCP          30   20/30     0.67 [0.49, 0.81]    2.31 [  1.59,   3.08]   1.07    0.620s        0.95      0.58          0.00
-  0.1 MPPI         30    5/30     0.17 [0.07, 0.34]    1.84 [  1.18,   2.64]   0.70    0.036s        1.00       nan           nan
-  0.1 MPPI@65536   30    8/30     0.27 [0.14, 0.44]    1.81 [  1.17,   2.52]   0.70    1.547s        0.93       nan           nan
+    0 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    2.11 [  1.48,   2.81]   0.70    1.315s        1.00      0.51          0.63
+    0 SCP          30   22/30     0.73 [0.56, 0.86]    1.73 [  1.07,   2.42]   0.93    0.436s        0.98      0.68          0.00
+    0 MPPI         30    7/30     0.23 [0.12, 0.41]    1.53 [  0.97,   2.22]   0.47    0.035s        1.00       nan           nan
+    0 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    2.39 [  1.67,   3.18]   0.87    1.542s        1.00       nan           nan
+    0 CEM          30    7/30     0.23 [0.12, 0.41]    1.31 [  0.91,   1.74]   0.33    0.034s        0.99       nan           nan
+    0 CEM@65536    30    6/30     0.20 [0.10, 0.37]    2.69 [  1.74,   3.76]   1.00    1.542s        1.00       nan           nan
+  0.1 SCP+MPPI     30    5/30     0.17 [0.07, 0.34]    2.00 [  1.23,   2.89]   0.77    1.758s        0.96      0.43          0.58
+  0.1 SCP          30   20/30     0.67 [0.49, 0.81]    2.31 [  1.60,   3.10]   1.07    0.620s        0.95      0.58          0.00
+  0.1 MPPI         30    5/30     0.17 [0.07, 0.34]    1.84 [  1.19,   2.62]   0.70    0.036s        1.00       nan           nan
+  0.1 MPPI@65536   30    8/30     0.27 [0.14, 0.44]    1.81 [  1.18,   2.55]   0.70    1.547s        0.93       nan           nan
   0.1 CEM          30    5/30     0.17 [0.07, 0.34]    1.32 [  0.88,   1.81]   0.40    0.036s        0.98       nan           nan
-  0.1 CEM@65536    30    7/30     0.23 [0.12, 0.41]    1.68 [  1.14,   2.28]   0.60    1.547s        0.99       nan           nan
-  0.2 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    1.60 [  0.98,   2.32]   0.63    1.136s        0.98      0.44          0.48
-  0.2 SCP          30   15/30     0.50 [0.33, 0.67]    1.69 [  1.08,   2.31]   0.87    0.631s        0.86      0.53          0.00
-  0.2 MPPI         30    6/30     0.20 [0.10, 0.37]    1.37 [  0.78,   2.02]   0.60    0.035s        0.99       nan           nan
-  0.2 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    1.51 [  0.99,   2.05]   0.57    1.544s        0.96       nan           nan
+  0.1 CEM@65536    30    7/30     0.23 [0.12, 0.41]    1.68 [  1.14,   2.31]   0.60    1.547s        0.99       nan           nan
+  0.2 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    1.60 [  0.97,   2.34]   0.63    1.136s        0.98      0.44          0.48
+  0.2 SCP          30   15/30     0.50 [0.33, 0.67]    1.69 [  1.07,   2.33]   0.87    0.631s        0.86      0.53          0.00
+  0.2 MPPI         30    6/30     0.20 [0.10, 0.37]    1.37 [  0.79,   2.03]   0.60    0.035s        0.99       nan           nan
+  0.2 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    1.51 [  1.00,   2.06]   0.57    1.544s        0.96       nan           nan
   0.2 CEM          30    4/30     0.13 [0.05, 0.30]    1.35 [  0.70,   2.12]   0.53    0.035s        0.99       nan           nan
-  0.2 CEM@65536    30    7/30     0.23 [0.12, 0.41]    1.72 [  1.06,   2.49]   0.70    1.545s        0.98       nan           nan
-  0.3 SCP+MPPI     30   12/30     0.40 [0.25, 0.58]    0.73 [  0.35,   1.18]   0.33    1.253s        0.97      0.39          0.46
-  0.3 SCP          30   20/30     0.67 [0.49, 0.81]    1.53 [  0.88,   2.32]   0.83    0.772s        0.74      0.47          0.00
+  0.2 CEM@65536    30    7/30     0.23 [0.12, 0.41]    1.72 [  1.05,   2.46]   0.70    1.545s        0.98       nan           nan
+  0.3 SCP+MPPI     30   12/30     0.40 [0.25, 0.58]    0.73 [  0.35,   1.17]   0.33    1.253s        0.97      0.39          0.46
+  0.3 SCP          30   20/30     0.67 [0.49, 0.81]    1.53 [  0.87,   2.33]   0.83    0.772s        0.74      0.47          0.00
   0.3 MPPI         30    7/30     0.23 [0.12, 0.41]    0.36 [  0.07,   0.68]   0.10    0.036s        0.97       nan           nan
   0.3 MPPI@65536   30    8/30     0.27 [0.14, 0.44]    0.65 [  0.22,   1.13]   0.27    1.542s        0.98       nan           nan
   0.3 CEM          30    8/30     0.27 [0.14, 0.44]    0.45 [  0.14,   0.78]   0.17    0.036s        0.96       nan           nan
-  0.3 CEM@65536    30    7/30     0.23 [0.12, 0.41]    0.85 [  0.43,   1.33]   0.37    1.541s        0.95       nan           nan
-  0.5 SCP+MPPI     30   11/30     0.37 [0.22, 0.54]   -0.01 [ -0.33,   0.37]   0.10    1.363s        0.86      0.24          0.47
-  0.5 SCP          30   11/30     0.37 [0.22, 0.54]   -1.08 [ -2.88,   0.00]   0.17    0.601s        0.86      0.44          0.00
-  0.5 MPPI         30    6/30     0.20 [0.10, 0.37]   -0.46 [ -1.00,   0.02]   0.03    0.037s        0.83       nan           nan
-  0.5 MPPI@65536   30   11/30     0.37 [0.22, 0.54]   -0.09 [ -0.35,   0.20]   0.13    1.542s        0.88       nan           nan
-  0.5 CEM          30    8/30     0.27 [0.14, 0.44]   -0.22 [ -0.53,   0.13]   0.03    0.037s        0.86       nan           nan
-  0.5 CEM@65536    30    9/30     0.30 [0.17, 0.48]   -0.14 [ -0.38,   0.13]   0.07    1.542s        0.92       nan           nan
+  0.3 CEM@65536    30    7/30     0.23 [0.12, 0.41]    0.85 [  0.42,   1.33]   0.37    1.541s        0.95       nan           nan
+  0.5 SCP+MPPI     30   11/30     0.37 [0.22, 0.54]   -0.01 [ -0.33,   0.36]   0.10    1.363s        0.86      0.24          0.47
+  0.5 SCP          30   11/30     0.37 [0.22, 0.54]   -1.08 [ -2.92,   0.01]   0.17    0.601s        0.86      0.44          0.00
+  0.5 MPPI         30    6/30     0.20 [0.10, 0.37]   -0.46 [ -0.99,   0.03]   0.03    0.037s        0.83       nan           nan
+  0.5 MPPI@65536   30   11/30     0.37 [0.22, 0.54]   -0.09 [ -0.34,   0.20]   0.13    1.542s        0.88       nan           nan
+  0.5 CEM          30    8/30     0.27 [0.14, 0.44]   -0.22 [ -0.53,   0.14]   0.03    0.037s        0.86       nan           nan
+  0.5 CEM@65536    30    9/30     0.30 [0.17, 0.48]   -0.14 [ -0.38,   0.12]   0.07    1.542s        0.92       nan           nan
   SCP+MPPI against each planner on paired seeds (only-main:only-other = episodes where just one of the two violated); Holm adjusts the McNemar p over this sweep's points
-  vs SCP   eps    0: violations 8/30 vs 22/30 (2:16), McNemar p 0.001 (Holm 0.005), log-rank p 0.001, return difference +0.38 [-0.59, +1.35] (Wilcoxon p 0.349)
-  vs SCP   eps  0.1: violations 5/30 vs 20/30 (0:15), McNemar p 6.1e-05 (Holm 3.1e-04), log-rank p 1.6e-04, return difference -0.31 [-1.49, +0.93] (Wilcoxon p 0.229)
-  vs SCP   eps  0.2: violations 6/30 vs 15/30 (3:12), McNemar p 0.035 (Holm 0.105), log-rank p 0.017, return difference -0.10 [-0.89, +0.72] (Wilcoxon p 0.839)
-  vs SCP   eps  0.3: violations 12/30 vs 20/30 (2:10), McNemar p 0.039 (Holm 0.105), log-rank p 0.055, return difference -0.79 [-1.63, -0.11] (Wilcoxon p 0.012)
-  vs SCP   eps  0.5: violations 11/30 vs 11/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.954, return difference +1.07 [-0.06, +2.90] (Wilcoxon p 0.080)
+  vs SCP   eps    0: violations 8/30 vs 22/30 (2:16), McNemar p 0.001 (Holm 0.005), log-rank p 0.001, return difference +0.38 [-0.59, +1.37] (Wilcoxon p 0.349)
+  vs SCP   eps  0.1: violations 5/30 vs 20/30 (0:15), McNemar p 6.1e-05 (Holm 3.1e-04), log-rank p 1.6e-04, return difference -0.31 [-1.48, +0.93] (Wilcoxon p 0.229)
+  vs SCP   eps  0.2: violations 6/30 vs 15/30 (3:12), McNemar p 0.035 (Holm 0.105), log-rank p 0.017, return difference -0.10 [-0.93, +0.72] (Wilcoxon p 0.839)
+  vs SCP   eps  0.3: violations 12/30 vs 20/30 (2:10), McNemar p 0.039 (Holm 0.105), log-rank p 0.055, return difference -0.79 [-1.62, -0.13] (Wilcoxon p 0.012)
+  vs SCP   eps  0.5: violations 11/30 vs 11/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.954, return difference +1.07 [-0.07, +2.88] (Wilcoxon p 0.080)
   vs SCP   pooled over eps >= 0.1 (4 points): violations 34/120 vs 66/120 (9:41), McNemar p 5.6e-06, CMH p 4.7e-05 (odds ratio 0.33), stratified log-rank p 5.6e-05
-  vs MPPI  eps    0: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.748, return difference +0.57 [-0.23, +1.35] (Wilcoxon p 0.070)
-  vs MPPI  eps  0.1: violations 5/30 vs 5/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.968, return difference +0.16 [-0.43, +0.88] (Wilcoxon p 0.935)
-  vs MPPI  eps  0.2: violations 6/30 vs 6/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.992, return difference +0.23 [-0.33, +0.76] (Wilcoxon p 0.040)
+  vs MPPI  eps    0: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.748, return difference +0.57 [-0.22, +1.34] (Wilcoxon p 0.070)
+  vs MPPI  eps  0.1: violations 5/30 vs 5/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.968, return difference +0.16 [-0.43, +0.84] (Wilcoxon p 0.935)
+  vs MPPI  eps  0.2: violations 6/30 vs 6/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.992, return difference +0.23 [-0.33, +0.77] (Wilcoxon p 0.040)
   vs MPPI  eps  0.3: violations 12/30 vs 7/30 (7:2), McNemar p 0.180 (Holm 0.719), log-rank p 0.156, return difference +0.37 [+0.02, +0.75] (Wilcoxon p 0.013)
-  vs MPPI  eps  0.5: violations 11/30 vs 6/30 (6:1), McNemar p 0.125 (Holm 0.625), log-rank p 0.201, return difference +0.45 [+0.01, +0.95] (Wilcoxon p 0.002)
+  vs MPPI  eps  0.5: violations 11/30 vs 6/30 (6:1), McNemar p 0.125 (Holm 0.625), log-rank p 0.201, return difference +0.45 [+0.03, +0.94] (Wilcoxon p 0.002)
   vs MPPI  pooled over eps >= 0.1 (4 points): violations 34/120 vs 24/120 (20:10), McNemar p 0.099, CMH p 0.174 (odds ratio 1.59), stratified log-rank p 0.130
-  vs MPPI@65536 eps    0: violations 8/30 vs 7/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.714, return difference -0.28 [-1.09, +0.48] (Wilcoxon p 0.570)
-  vs MPPI@65536 eps  0.1: violations 5/30 vs 8/30 (2:5), McNemar p 0.453 (Holm 1.000), log-rank p 0.393, return difference +0.19 [-0.75, +1.18] (Wilcoxon p 0.808)
-  vs MPPI@65536 eps  0.2: violations 6/30 vs 7/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.721, return difference +0.08 [-0.40, +0.59] (Wilcoxon p 0.792)
-  vs MPPI@65536 eps  0.3: violations 12/30 vs 8/30 (5:1), McNemar p 0.219 (Holm 1.000), log-rank p 0.315, return difference +0.09 [-0.31, +0.45] (Wilcoxon p 0.903)
-  vs MPPI@65536 eps  0.5: violations 11/30 vs 11/30 (1:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.905, return difference +0.08 [-0.28, +0.47] (Wilcoxon p 0.556)
+  vs MPPI@65536 eps    0: violations 8/30 vs 7/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.714, return difference -0.28 [-1.09, +0.46] (Wilcoxon p 0.570)
+  vs MPPI@65536 eps  0.1: violations 5/30 vs 8/30 (2:5), McNemar p 0.453 (Holm 1.000), log-rank p 0.393, return difference +0.19 [-0.79, +1.17] (Wilcoxon p 0.808)
+  vs MPPI@65536 eps  0.2: violations 6/30 vs 7/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.721, return difference +0.08 [-0.39, +0.60] (Wilcoxon p 0.792)
+  vs MPPI@65536 eps  0.3: violations 12/30 vs 8/30 (5:1), McNemar p 0.219 (Holm 1.000), log-rank p 0.315, return difference +0.09 [-0.29, +0.46] (Wilcoxon p 0.903)
+  vs MPPI@65536 eps  0.5: violations 11/30 vs 11/30 (1:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.905, return difference +0.08 [-0.28, +0.48] (Wilcoxon p 0.556)
   vs MPPI@65536 pooled over eps >= 0.1 (4 points): violations 34/120 vs 34/120 (10:10), McNemar p 1.000, CMH p 1.000 (odds ratio 1.00), stratified log-rank p 0.958
   vs CEM   eps    0: violations 8/30 vs 7/30 (5:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.711, return difference +0.80 [+0.20, +1.47] (Wilcoxon p 0.067)
-  vs CEM   eps  0.1: violations 5/30 vs 5/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.996, return difference +0.68 [-0.10, +1.54] (Wilcoxon p 0.177)
+  vs CEM   eps  0.1: violations 5/30 vs 5/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.996, return difference +0.68 [-0.07, +1.53] (Wilcoxon p 0.177)
   vs CEM   eps  0.2: violations 6/30 vs 4/30 (4:2), McNemar p 0.688 (Holm 1.000), log-rank p 0.510, return difference +0.24 [-0.29, +0.75] (Wilcoxon p 0.012)
-  vs CEM   eps  0.3: violations 12/30 vs 8/30 (5:1), McNemar p 0.219 (Holm 1.000), log-rank p 0.298, return difference +0.28 [+0.01, +0.63] (Wilcoxon p 0.119)
+  vs CEM   eps  0.3: violations 12/30 vs 8/30 (5:1), McNemar p 0.219 (Holm 1.000), log-rank p 0.298, return difference +0.28 [+0.02, +0.61] (Wilcoxon p 0.119)
   vs CEM   eps  0.5: violations 11/30 vs 8/30 (4:1), McNemar p 0.375 (Holm 1.000), log-rank p 0.489, return difference +0.22 [-0.09, +0.61] (Wilcoxon p 0.040)
   vs CEM   pooled over eps >= 0.1 (4 points): violations 34/120 vs 25/120 (16:7), McNemar p 0.093, CMH p 0.226 (odds ratio 1.52), stratified log-rank p 0.205
-  vs CEM@65536 eps    0: violations 8/30 vs 6/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.487, return difference -0.58 [-1.80, +0.50] (Wilcoxon p 0.556)
-  vs CEM@65536 eps  0.1: violations 5/30 vs 7/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.542, return difference +0.32 [-0.61, +1.29] (Wilcoxon p 0.626)
-  vs CEM@65536 eps  0.2: violations 6/30 vs 7/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.725, return difference -0.13 [-0.96, +0.69] (Wilcoxon p 0.715)
-  vs CEM@65536 eps  0.3: violations 12/30 vs 7/30 (6:1), McNemar p 0.125 (Holm 0.625), log-rank p 0.180, return difference -0.12 [-0.45, +0.21] (Wilcoxon p 0.339)
-  vs CEM@65536 eps  0.5: violations 11/30 vs 9/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.597, return difference +0.13 [-0.18, +0.49] (Wilcoxon p 0.598)
+  vs CEM@65536 eps    0: violations 8/30 vs 6/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.487, return difference -0.58 [-1.79, +0.49] (Wilcoxon p 0.556)
+  vs CEM@65536 eps  0.1: violations 5/30 vs 7/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.542, return difference +0.32 [-0.60, +1.30] (Wilcoxon p 0.626)
+  vs CEM@65536 eps  0.2: violations 6/30 vs 7/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.725, return difference -0.13 [-0.94, +0.69] (Wilcoxon p 0.715)
+  vs CEM@65536 eps  0.3: violations 12/30 vs 7/30 (6:1), McNemar p 0.125 (Holm 0.625), log-rank p 0.180, return difference -0.12 [-0.45, +0.20] (Wilcoxon p 0.339)
+  vs CEM@65536 eps  0.5: violations 11/30 vs 9/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.597, return difference +0.13 [-0.18, +0.50] (Wilcoxon p 0.598)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 34/120 vs 30/120 (13:9), McNemar p 0.523, CMH p 0.661 (odds ratio 1.19), stratified log-rank p 0.547
   latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
     SCP+MPPI    0.0003 / 0.0932, warned 0.90; unwarned crashes 2 in 120 episodes; barrier active on 80.9% (median slack 0.000)
@@ -502,64 +494,64 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
 
 === PG2 c1.2 H10 (M2_pointgoal2_c_1_2_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
-    0 SCP+MPPI     30   18/30     0.60 [0.42, 0.75]    2.45 [  1.32,   3.91]   0.73    0.646s        0.99      0.42          0.46
-    0 SCP          30   19/30     0.63 [0.46, 0.78]    3.15 [  2.01,   4.39]   0.97    0.509s        0.98      0.45          0.00
-    0 MPPI         30    8/30     0.27 [0.14, 0.44]    1.92 [  1.14,   2.85]   0.57    0.030s        1.00       nan           nan
+    0 SCP+MPPI     30   18/30     0.60 [0.42, 0.75]    2.45 [  1.32,   3.93]   0.73    0.646s        0.99      0.42          0.46
+    0 SCP          30   19/30     0.63 [0.46, 0.78]    3.15 [  2.04,   4.41]   0.97    0.509s        0.98      0.45          0.00
+    0 MPPI         30    8/30     0.27 [0.14, 0.44]    1.92 [  1.13,   2.86]   0.57    0.030s        1.00       nan           nan
     0 MPPI@65536   30   14/30     0.47 [0.30, 0.64]    2.58 [  1.60,   3.75]   0.83    1.542s        0.99       nan           nan
-    0 CEM          30    9/30     0.30 [0.17, 0.48]    1.78 [  1.07,   2.67]   0.50    0.030s        1.00       nan           nan
-    0 CEM@65536    30   16/30     0.53 [0.36, 0.70]    2.28 [  1.48,   3.19]   0.63    1.544s        1.00       nan           nan
-  0.1 SCP+MPPI     30   11/30     0.37 [0.22, 0.54]    2.08 [  1.10,   3.42]   0.60    0.653s        0.96      0.38          0.51
-  0.1 SCP          30   12/30     0.40 [0.25, 0.58]    1.57 [  1.01,   2.21]   0.53    0.515s        0.96      0.36          0.00
+    0 CEM          30    9/30     0.30 [0.17, 0.48]    1.78 [  1.06,   2.66]   0.50    0.030s        1.00       nan           nan
+    0 CEM@65536    30   16/30     0.53 [0.36, 0.70]    2.28 [  1.50,   3.17]   0.63    1.544s        1.00       nan           nan
+  0.1 SCP+MPPI     30   11/30     0.37 [0.22, 0.54]    2.08 [  1.12,   3.41]   0.60    0.653s        0.96      0.38          0.51
+  0.1 SCP          30   12/30     0.40 [0.25, 0.58]    1.57 [  1.02,   2.24]   0.53    0.515s        0.96      0.36          0.00
   0.1 MPPI         30    5/30     0.17 [0.07, 0.34]    1.39 [  0.84,   2.08]   0.40    0.033s        1.00       nan           nan
   0.1 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    1.61 [  0.87,   2.65]   0.57    1.558s        0.97       nan           nan
-  0.1 CEM          30    7/30     0.23 [0.12, 0.41]    1.60 [  0.90,   2.48]   0.47    0.033s        0.98       nan           nan
-  0.1 CEM@65536    30    9/30     0.30 [0.17, 0.48]    1.99 [  1.12,   3.00]   0.60    1.555s        0.95       nan           nan
-  0.2 SCP+MPPI     30    7/30     0.23 [0.12, 0.41]    1.58 [  0.71,   2.65]   0.53    0.633s        0.97      0.35          0.51
-  0.2 SCP          30   13/30     0.43 [0.27, 0.61]    1.73 [  0.82,   2.92]   0.57    0.538s        0.93      0.35          0.00
-  0.2 MPPI         30    5/30     0.17 [0.07, 0.34]    1.12 [  0.49,   1.92]   0.33    0.033s        0.98       nan           nan
-  0.2 MPPI@65536   30   12/30     0.40 [0.25, 0.58]    1.39 [  0.66,   2.30]   0.50    1.552s        0.94       nan           nan
-  0.2 CEM          30    4/30     0.13 [0.05, 0.30]    0.74 [  0.44,   1.07]   0.20    0.033s        0.96       nan           nan
-  0.2 CEM@65536    30    5/30     0.17 [0.07, 0.34]    1.15 [  0.61,   1.84]   0.40    1.552s        0.97       nan           nan
+  0.1 CEM          30    7/30     0.23 [0.12, 0.41]    1.60 [  0.91,   2.46]   0.47    0.033s        0.98       nan           nan
+  0.1 CEM@65536    30    9/30     0.30 [0.17, 0.48]    1.99 [  1.11,   3.01]   0.60    1.555s        0.95       nan           nan
+  0.2 SCP+MPPI     30    7/30     0.23 [0.12, 0.41]    1.58 [  0.70,   2.65]   0.53    0.633s        0.97      0.35          0.51
+  0.2 SCP          30   13/30     0.43 [0.27, 0.61]    1.73 [  0.82,   2.89]   0.57    0.538s        0.93      0.35          0.00
+  0.2 MPPI         30    5/30     0.17 [0.07, 0.34]    1.12 [  0.48,   1.93]   0.33    0.033s        0.98       nan           nan
+  0.2 MPPI@65536   30   12/30     0.40 [0.25, 0.58]    1.39 [  0.66,   2.31]   0.50    1.552s        0.94       nan           nan
+  0.2 CEM          30    4/30     0.13 [0.05, 0.30]    0.74 [  0.44,   1.08]   0.20    0.033s        0.96       nan           nan
+  0.2 CEM@65536    30    5/30     0.17 [0.07, 0.34]    1.15 [  0.62,   1.84]   0.40    1.552s        0.97       nan           nan
   0.3 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    0.73 [  0.39,   1.11]   0.17    0.633s        0.93      0.34          0.51
-  0.3 SCP          30   11/30     0.37 [0.22, 0.54]    0.67 [  0.33,   1.09]   0.13    0.669s        0.94      0.37          0.00
-  0.3 MPPI         30    7/30     0.23 [0.12, 0.41]    0.31 [  0.06,   0.58]   0.10    0.033s        0.87       nan           nan
-  0.3 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    0.80 [  0.38,   1.32]   0.23    1.554s        0.91       nan           nan
-  0.3 CEM          30    9/30     0.30 [0.17, 0.48]    0.33 [  0.09,   0.58]   0.07    0.033s        0.91       nan           nan
-  0.3 CEM@65536    30    5/30     0.17 [0.07, 0.34]    0.93 [  0.30,   1.86]   0.30    1.554s        0.89       nan           nan
+  0.3 SCP          30   11/30     0.37 [0.22, 0.54]    0.67 [  0.33,   1.08]   0.13    0.669s        0.94      0.37          0.00
+  0.3 MPPI         30    7/30     0.23 [0.12, 0.41]    0.31 [  0.05,   0.57]   0.10    0.033s        0.87       nan           nan
+  0.3 MPPI@65536   30    7/30     0.23 [0.12, 0.41]    0.80 [  0.38,   1.31]   0.23    1.554s        0.91       nan           nan
+  0.3 CEM          30    9/30     0.30 [0.17, 0.48]    0.33 [  0.10,   0.58]   0.07    0.033s        0.91       nan           nan
+  0.3 CEM@65536    30    5/30     0.17 [0.07, 0.34]    0.93 [  0.31,   1.88]   0.30    1.554s        0.89       nan           nan
   0.5 SCP+MPPI     30   10/30     0.33 [0.19, 0.51]   -0.00 [ -0.22,   0.22]   0.00    0.839s        0.80      0.16          0.53
-  0.5 SCP          30   17/30     0.57 [0.39, 0.73]    0.21 [ -0.03,   0.46]   0.03    0.581s        0.82      0.16          0.00
+  0.5 SCP          30   17/30     0.57 [0.39, 0.73]    0.21 [ -0.04,   0.46]   0.03    0.581s        0.82      0.16          0.00
   0.5 MPPI         30    8/30     0.27 [0.14, 0.44]   -0.04 [ -0.22,   0.13]   0.00    0.031s        0.76       nan           nan
   0.5 MPPI@65536   30    7/30     0.23 [0.12, 0.41]   -0.15 [ -0.34,   0.04]   0.03    1.548s        0.63       nan           nan
-  0.5 CEM          30   10/30     0.33 [0.19, 0.51]    0.03 [ -0.14,   0.20]   0.00    0.031s        0.78       nan           nan
-  0.5 CEM@65536    30    8/30     0.27 [0.14, 0.44]   -0.13 [ -0.36,   0.12]   0.03    1.549s        0.71       nan           nan
+  0.5 CEM          30   10/30     0.33 [0.19, 0.51]    0.03 [ -0.13,   0.20]   0.00    0.031s        0.78       nan           nan
+  0.5 CEM@65536    30    8/30     0.27 [0.14, 0.44]   -0.13 [ -0.37,   0.12]   0.03    1.549s        0.71       nan           nan
   SCP+MPPI against each planner on paired seeds (only-main:only-other = episodes where just one of the two violated); Holm adjusts the McNemar p over this sweep's points
-  vs SCP   eps    0: violations 18/30 vs 19/30 (5:6), McNemar p 1.000 (Holm 1.000), log-rank p 0.967, return difference -0.70 [-2.27, +0.89] (Wilcoxon p 0.289)
-  vs SCP   eps  0.1: violations 11/30 vs 12/30 (4:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.736, return difference +0.51 [-0.35, +1.63] (Wilcoxon p 0.612)
-  vs SCP   eps  0.2: violations 7/30 vs 13/30 (4:10), McNemar p 0.180 (Holm 0.718), log-rank p 0.135, return difference -0.15 [-0.62, +0.35] (Wilcoxon p 0.026)
-  vs SCP   eps  0.3: violations 8/30 vs 11/30 (3:6), McNemar p 0.508 (Holm 1.000), log-rank p 0.332, return difference +0.06 [-0.38, +0.51] (Wilcoxon p 1.000)
+  vs SCP   eps    0: violations 18/30 vs 19/30 (5:6), McNemar p 1.000 (Holm 1.000), log-rank p 0.967, return difference -0.70 [-2.28, +0.97] (Wilcoxon p 0.289)
+  vs SCP   eps  0.1: violations 11/30 vs 12/30 (4:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.736, return difference +0.51 [-0.37, +1.64] (Wilcoxon p 0.612)
+  vs SCP   eps  0.2: violations 7/30 vs 13/30 (4:10), McNemar p 0.180 (Holm 0.718), log-rank p 0.135, return difference -0.15 [-0.61, +0.36] (Wilcoxon p 0.026)
+  vs SCP   eps  0.3: violations 8/30 vs 11/30 (3:6), McNemar p 0.508 (Holm 1.000), log-rank p 0.332, return difference +0.06 [-0.37, +0.51] (Wilcoxon p 1.000)
   vs SCP   eps  0.5: violations 10/30 vs 17/30 (3:10), McNemar p 0.092 (Holm 0.461), log-rank p 0.075, return difference -0.22 [-0.47, +0.03] (Wilcoxon p 0.135)
   vs SCP   pooled over eps >= 0.1 (4 points): violations 36/120 vs 53/120 (14:31), McNemar p 0.016, CMH p 0.033 (odds ratio 0.54), stratified log-rank p 0.021
-  vs MPPI  eps    0: violations 18/30 vs 8/30 (10:0), McNemar p 0.002 (Holm 0.010), log-rank p 0.010, return difference +0.53 [-0.39, +1.69] (Wilcoxon p 0.008)
-  vs MPPI  eps  0.1: violations 11/30 vs 5/30 (8:2), McNemar p 0.109 (Holm 0.438), log-rank p 0.111, return difference +0.69 [-0.18, +1.86] (Wilcoxon p 0.371)
-  vs MPPI  eps  0.2: violations 7/30 vs 5/30 (4:2), McNemar p 0.688 (Holm 1.000), log-rank p 0.562, return difference +0.46 [-0.10, +1.16] (Wilcoxon p 0.171)
-  vs MPPI  eps  0.3: violations 8/30 vs 7/30 (5:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.772, return difference +0.42 [+0.05, +0.84] (Wilcoxon p 0.052)
-  vs MPPI  eps  0.5: violations 10/30 vs 8/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.596, return difference +0.04 [-0.13, +0.22] (Wilcoxon p 0.092)
+  vs MPPI  eps    0: violations 18/30 vs 8/30 (10:0), McNemar p 0.002 (Holm 0.010), log-rank p 0.010, return difference +0.53 [-0.39, +1.66] (Wilcoxon p 0.008)
+  vs MPPI  eps  0.1: violations 11/30 vs 5/30 (8:2), McNemar p 0.109 (Holm 0.438), log-rank p 0.111, return difference +0.69 [-0.17, +1.85] (Wilcoxon p 0.371)
+  vs MPPI  eps  0.2: violations 7/30 vs 5/30 (4:2), McNemar p 0.688 (Holm 1.000), log-rank p 0.562, return difference +0.46 [-0.10, +1.15] (Wilcoxon p 0.171)
+  vs MPPI  eps  0.3: violations 8/30 vs 7/30 (5:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.772, return difference +0.42 [+0.06, +0.83] (Wilcoxon p 0.052)
+  vs MPPI  eps  0.5: violations 10/30 vs 8/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.596, return difference +0.04 [-0.13, +0.21] (Wilcoxon p 0.092)
   vs MPPI  pooled over eps >= 0.1 (4 points): violations 36/120 vs 25/120 (20:9), McNemar p 0.061, CMH p 0.140 (odds ratio 1.63), stratified log-rank p 0.132
-  vs MPPI@65536 eps    0: violations 18/30 vs 14/30 (5:1), McNemar p 0.219 (Holm 0.656), log-rank p 0.361, return difference -0.13 [-1.40, +1.23] (Wilcoxon p 0.626)
-  vs MPPI@65536 eps  0.1: violations 11/30 vs 7/30 (4:0), McNemar p 0.125 (Holm 0.625), log-rank p 0.296, return difference +0.47 [-0.52, +1.65] (Wilcoxon p 0.100)
-  vs MPPI@65536 eps  0.2: violations 7/30 vs 12/30 (1:6), McNemar p 0.125 (Holm 0.625), log-rank p 0.218, return difference +0.18 [-0.62, +1.07] (Wilcoxon p 0.612)
-  vs MPPI@65536 eps  0.3: violations 8/30 vs 7/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.819, return difference -0.08 [-0.25, +0.06] (Wilcoxon p 0.839)
-  vs MPPI@65536 eps  0.5: violations 10/30 vs 7/30 (5:2), McNemar p 0.453 (Holm 0.906), log-rank p 0.385, return difference +0.15 [-0.00, +0.31] (Wilcoxon p 0.213)
+  vs MPPI@65536 eps    0: violations 18/30 vs 14/30 (5:1), McNemar p 0.219 (Holm 0.656), log-rank p 0.361, return difference -0.13 [-1.38, +1.21] (Wilcoxon p 0.626)
+  vs MPPI@65536 eps  0.1: violations 11/30 vs 7/30 (4:0), McNemar p 0.125 (Holm 0.625), log-rank p 0.296, return difference +0.47 [-0.53, +1.64] (Wilcoxon p 0.100)
+  vs MPPI@65536 eps  0.2: violations 7/30 vs 12/30 (1:6), McNemar p 0.125 (Holm 0.625), log-rank p 0.218, return difference +0.18 [-0.60, +1.05] (Wilcoxon p 0.612)
+  vs MPPI@65536 eps  0.3: violations 8/30 vs 7/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.819, return difference -0.08 [-0.24, +0.06] (Wilcoxon p 0.839)
+  vs MPPI@65536 eps  0.5: violations 10/30 vs 7/30 (5:2), McNemar p 0.453 (Holm 0.906), log-rank p 0.385, return difference +0.15 [+0.00, +0.32] (Wilcoxon p 0.213)
   vs MPPI@65536 pooled over eps >= 0.1 (4 points): violations 36/120 vs 33/120 (14:11), McNemar p 0.690, CMH p 0.777 (odds ratio 1.13), stratified log-rank p 0.672
-  vs CEM   eps    0: violations 18/30 vs 9/30 (10:1), McNemar p 0.012 (Holm 0.059), log-rank p 0.024, return difference +0.67 [-0.06, +1.61] (Wilcoxon p 1.1e-04)
-  vs CEM   eps  0.1: violations 11/30 vs 7/30 (7:3), McNemar p 0.344 (Holm 1.000), log-rank p 0.258, return difference +0.48 [-0.42, +1.47] (Wilcoxon p 0.088)
-  vs CEM   eps  0.2: violations 7/30 vs 4/30 (4:1), McNemar p 0.375 (Holm 1.000), log-rank p 0.336, return difference +0.83 [+0.11, +1.72] (Wilcoxon p 0.035)
-  vs CEM   eps  0.3: violations 8/30 vs 9/30 (4:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.724, return difference +0.39 [+0.02, +0.82] (Wilcoxon p 0.061)
+  vs CEM   eps    0: violations 18/30 vs 9/30 (10:1), McNemar p 0.012 (Holm 0.059), log-rank p 0.024, return difference +0.67 [-0.06, +1.59] (Wilcoxon p 1.1e-04)
+  vs CEM   eps  0.1: violations 11/30 vs 7/30 (7:3), McNemar p 0.344 (Holm 1.000), log-rank p 0.258, return difference +0.48 [-0.41, +1.45] (Wilcoxon p 0.088)
+  vs CEM   eps  0.2: violations 7/30 vs 4/30 (4:1), McNemar p 0.375 (Holm 1.000), log-rank p 0.336, return difference +0.83 [+0.13, +1.70] (Wilcoxon p 0.035)
+  vs CEM   eps  0.3: violations 8/30 vs 9/30 (4:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.724, return difference +0.39 [+0.02, +0.81] (Wilcoxon p 0.061)
   vs CEM   eps  0.5: violations 10/30 vs 10/30 (1:1), McNemar p 1.000 (Holm 1.000), log-rank p 1.000, return difference -0.03 [-0.20, +0.14] (Wilcoxon p 1.000)
   vs CEM   pooled over eps >= 0.1 (4 points): violations 36/120 vs 30/120 (16:10), McNemar p 0.327, CMH p 0.470 (odds ratio 1.29), stratified log-rank p 0.422
-  vs CEM@65536 eps    0: violations 18/30 vs 16/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.633, return difference +0.18 [-0.57, +1.27] (Wilcoxon p 0.543)
-  vs CEM@65536 eps  0.1: violations 11/30 vs 9/30 (5:3), McNemar p 0.727 (Holm 1.000), log-rank p 0.603, return difference +0.09 [-0.75, +1.24] (Wilcoxon p 0.670)
-  vs CEM@65536 eps  0.2: violations 7/30 vs 5/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.499, return difference +0.42 [-0.50, +1.39] (Wilcoxon p 0.428)
+  vs CEM@65536 eps    0: violations 18/30 vs 16/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.633, return difference +0.18 [-0.57, +1.24] (Wilcoxon p 0.543)
+  vs CEM@65536 eps  0.1: violations 11/30 vs 9/30 (5:3), McNemar p 0.727 (Holm 1.000), log-rank p 0.603, return difference +0.09 [-0.78, +1.22] (Wilcoxon p 0.670)
+  vs CEM@65536 eps  0.2: violations 7/30 vs 5/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.499, return difference +0.42 [-0.50, +1.38] (Wilcoxon p 0.428)
   vs CEM@65536 eps  0.3: violations 8/30 vs 5/30 (4:1), McNemar p 0.375 (Holm 1.000), log-rank p 0.407, return difference -0.20 [-0.85, +0.19] (Wilcoxon p 0.968)
   vs CEM@65536 eps  0.5: violations 10/30 vs 8/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.559, return difference +0.12 [-0.06, +0.31] (Wilcoxon p 0.124)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 36/120 vs 27/120 (15:6), McNemar p 0.078, CMH p 0.241 (odds ratio 1.49), stratified log-rank p 0.202
@@ -574,65 +566,65 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
 === PG2 c1.5 H10 (M2_pointgoal2_c_1_5_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
     0 SCP+MPPI     30   11/30     0.37 [0.22, 0.54]    1.17 [  0.87,   1.54]   0.10    0.865s        1.00      0.56          0.58
-    0 SCP          30   22/30     0.73 [0.56, 0.86]    0.97 [  0.63,   1.35]   0.13    0.923s        0.99      0.58          0.00
-    0 MPPI         30    8/30     0.27 [0.14, 0.44]    1.11 [  0.79,   1.49]   0.13    0.035s        1.00       nan           nan
-    0 MPPI@65536   30   11/30     0.37 [0.22, 0.54]    1.18 [  0.93,   1.46]   0.10    1.545s        0.99       nan           nan
-    0 CEM          30    8/30     0.27 [0.14, 0.44]    1.21 [  0.84,   1.64]   0.17    0.035s        0.99       nan           nan
-    0 CEM@65536    30   13/30     0.43 [0.27, 0.61]    1.38 [  1.03,   1.79]   0.17    1.546s        1.00       nan           nan
-  0.1 SCP+MPPI     30    4/30     0.13 [0.05, 0.30]    1.06 [  0.73,   1.47]   0.17    0.900s        0.99      0.37          0.47
-  0.1 SCP          30   21/30     0.70 [0.52, 0.83]    1.14 [  0.69,   1.62]   0.23    0.923s        0.95      0.37          0.00
+    0 SCP          30   22/30     0.73 [0.56, 0.86]    0.97 [  0.63,   1.34]   0.13    0.923s        0.99      0.58          0.00
+    0 MPPI         30    8/30     0.27 [0.14, 0.44]    1.11 [  0.80,   1.50]   0.13    0.035s        1.00       nan           nan
+    0 MPPI@65536   30   11/30     0.37 [0.22, 0.54]    1.18 [  0.92,   1.46]   0.10    1.545s        0.99       nan           nan
+    0 CEM          30    8/30     0.27 [0.14, 0.44]    1.21 [  0.85,   1.65]   0.17    0.035s        0.99       nan           nan
+    0 CEM@65536    30   13/30     0.43 [0.27, 0.61]    1.38 [  1.02,   1.79]   0.17    1.546s        1.00       nan           nan
+  0.1 SCP+MPPI     30    4/30     0.13 [0.05, 0.30]    1.06 [  0.73,   1.46]   0.17    0.900s        0.99      0.37          0.47
+  0.1 SCP          30   21/30     0.70 [0.52, 0.83]    1.14 [  0.69,   1.63]   0.23    0.923s        0.95      0.37          0.00
   0.1 MPPI         30    6/30     0.20 [0.10, 0.37]    0.89 [  0.60,   1.23]   0.10    0.036s        0.98       nan           nan
   0.1 MPPI@65536   30    5/30     0.17 [0.07, 0.34]    1.10 [  0.82,   1.42]   0.13    1.545s        0.99       nan           nan
   0.1 CEM          30    6/30     0.20 [0.10, 0.37]    0.95 [  0.63,   1.35]   0.10    0.036s        0.99       nan           nan
   0.1 CEM@65536    30    7/30     0.23 [0.12, 0.41]    1.00 [  0.74,   1.30]   0.13    1.545s        0.99       nan           nan
-  0.2 SCP+MPPI     30    4/30     0.13 [0.05, 0.30]    0.68 [  0.49,   0.89]   0.03    0.965s        0.98      0.36          0.54
-  0.2 SCP          30   14/30     0.47 [0.30, 0.64]    0.85 [  0.41,   1.45]   0.20    0.839s        0.92      0.24          0.00
-  0.2 MPPI         30    6/30     0.20 [0.10, 0.37]    0.77 [  0.37,   1.27]   0.10    0.036s        0.98       nan           nan
-  0.2 MPPI@65536   30    8/30     0.27 [0.14, 0.44]    0.78 [  0.51,   1.11]   0.10    1.542s        0.98       nan           nan
+  0.2 SCP+MPPI     30    4/30     0.13 [0.05, 0.30]    0.68 [  0.48,   0.90]   0.03    0.965s        0.98      0.36          0.54
+  0.2 SCP          30   14/30     0.47 [0.30, 0.64]    0.85 [  0.41,   1.42]   0.20    0.839s        0.92      0.24          0.00
+  0.2 MPPI         30    6/30     0.20 [0.10, 0.37]    0.77 [  0.36,   1.28]   0.10    0.036s        0.98       nan           nan
+  0.2 MPPI@65536   30    8/30     0.27 [0.14, 0.44]    0.78 [  0.50,   1.11]   0.10    1.542s        0.98       nan           nan
   0.2 CEM          30    7/30     0.23 [0.12, 0.41]    0.75 [  0.47,   1.10]   0.07    0.036s        0.96       nan           nan
-  0.2 CEM@65536    30    4/30     0.13 [0.05, 0.30]    0.82 [  0.50,   1.21]   0.13    1.542s        0.97       nan           nan
-  0.3 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    0.50 [  0.15,   0.97]   0.07    0.988s        0.96      0.24          0.52
-  0.3 SCP          30   15/30     0.50 [0.33, 0.67]    0.95 [  0.47,   1.50]   0.27    0.608s        0.88      0.23          0.00
+  0.2 CEM@65536    30    4/30     0.13 [0.05, 0.30]    0.82 [  0.50,   1.20]   0.13    1.542s        0.97       nan           nan
+  0.3 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    0.50 [  0.16,   0.97]   0.07    0.988s        0.96      0.24          0.52
+  0.3 SCP          30   15/30     0.50 [0.33, 0.67]    0.95 [  0.47,   1.51]   0.27    0.608s        0.88      0.23          0.00
   0.3 MPPI         30    8/30     0.27 [0.14, 0.44]    0.29 [  0.04,   0.54]   0.03    0.036s        0.91       nan           nan
-  0.3 MPPI@65536   30    6/30     0.20 [0.10, 0.37]    0.42 [  0.08,   0.78]   0.07    0.742s        0.93       nan           nan
-  0.3 CEM          30    6/30     0.20 [0.10, 0.37]    0.30 [  0.07,   0.53]   0.03    0.036s        0.92       nan           nan
-  0.3 CEM@65536    30    5/30     0.17 [0.07, 0.34]    0.37 [  0.05,   0.72]   0.07    1.551s        0.91       nan           nan
+  0.3 MPPI@65536   30    6/30     0.20 [0.10, 0.37]    0.42 [  0.09,   0.78]   0.07    0.742s        0.93       nan           nan
+  0.3 CEM          30    6/30     0.20 [0.10, 0.37]    0.30 [  0.08,   0.53]   0.03    0.036s        0.92       nan           nan
+  0.3 CEM@65536    30    5/30     0.17 [0.07, 0.34]    0.37 [  0.05,   0.71]   0.07    1.551s        0.91       nan           nan
   0.5 SCP+MPPI     30   13/30     0.43 [0.27, 0.61]   -0.27 [ -0.53,  -0.02]   0.03    0.703s        0.74      0.07          0.33
-  0.5 SCP          30   22/30     0.73 [0.56, 0.86]   -0.04 [ -0.30,   0.23]   0.07    0.452s        0.69      0.11          0.00
-  0.5 MPPI         30   12/30     0.40 [0.25, 0.58]   -0.39 [ -0.67,  -0.14]   0.00    0.037s        0.76       nan           nan
-  0.5 MPPI@65536   30   12/30     0.40 [0.25, 0.58]   -0.28 [ -0.56,  -0.02]   0.00    1.543s        0.82       nan           nan
-  0.5 CEM          30   12/30     0.40 [0.25, 0.58]   -0.46 [ -0.76,  -0.19]   0.00    0.037s        0.79       nan           nan
-  0.5 CEM@65536    30   12/30     0.40 [0.25, 0.58]   -0.24 [ -0.50,   0.03]   0.03    0.742s        0.82       nan           nan
+  0.5 SCP          30   22/30     0.73 [0.56, 0.86]   -0.04 [ -0.30,   0.24]   0.07    0.452s        0.69      0.11          0.00
+  0.5 MPPI         30   12/30     0.40 [0.25, 0.58]   -0.39 [ -0.68,  -0.14]   0.00    0.037s        0.76       nan           nan
+  0.5 MPPI@65536   30   12/30     0.40 [0.25, 0.58]   -0.28 [ -0.55,  -0.02]   0.00    1.543s        0.82       nan           nan
+  0.5 CEM          30   12/30     0.40 [0.25, 0.58]   -0.46 [ -0.76,  -0.20]   0.00    0.037s        0.79       nan           nan
+  0.5 CEM@65536    30   12/30     0.40 [0.25, 0.58]   -0.24 [ -0.50,   0.04]   0.03    0.742s        0.82       nan           nan
   SCP+MPPI against each planner on paired seeds (only-main:only-other = episodes where just one of the two violated); Holm adjusts the McNemar p over this sweep's points
-  vs SCP   eps    0: violations 11/30 vs 22/30 (0:11), McNemar p 9.8e-04 (Holm 0.004), log-rank p 0.002, return difference +0.20 [-0.16, +0.59] (Wilcoxon p 0.191)
+  vs SCP   eps    0: violations 11/30 vs 22/30 (0:11), McNemar p 9.8e-04 (Holm 0.004), log-rank p 0.002, return difference +0.20 [-0.15, +0.58] (Wilcoxon p 0.191)
   vs SCP   eps  0.1: violations 4/30 vs 21/30 (0:17), McNemar p 1.5e-05 (Holm 7.6e-05), log-rank p 7.6e-06, return difference -0.07 [-0.56, +0.37] (Wilcoxon p 0.903)
-  vs SCP   eps  0.2: violations 4/30 vs 14/30 (1:11), McNemar p 0.006 (Holm 0.019), log-rank p 0.005, return difference -0.17 [-0.62, +0.17] (Wilcoxon p 0.984)
+  vs SCP   eps  0.2: violations 4/30 vs 14/30 (1:11), McNemar p 0.006 (Holm 0.019), log-rank p 0.005, return difference -0.17 [-0.63, +0.17] (Wilcoxon p 0.984)
   vs SCP   eps  0.3: violations 6/30 vs 15/30 (3:12), McNemar p 0.035 (Holm 0.035), log-rank p 0.016, return difference -0.45 [-0.96, +0.06] (Wilcoxon p 0.177)
-  vs SCP   eps  0.5: violations 13/30 vs 22/30 (1:10), McNemar p 0.012 (Holm 0.023), log-rank p 0.034, return difference -0.24 [-0.44, -0.06] (Wilcoxon p 0.158)
+  vs SCP   eps  0.5: violations 13/30 vs 22/30 (1:10), McNemar p 0.012 (Holm 0.023), log-rank p 0.034, return difference -0.24 [-0.44, -0.05] (Wilcoxon p 0.158)
   vs SCP   pooled over eps >= 0.1 (4 points): violations 27/120 vs 72/120 (5:50), McNemar p 2.1e-10, CMH p 4.6e-09 (odds ratio 0.18), stratified log-rank p 6.9e-09
-  vs MPPI  eps    0: violations 11/30 vs 8/30 (6:3), McNemar p 0.508 (Holm 1.000), log-rank p 0.408, return difference +0.05 [-0.14, +0.22] (Wilcoxon p 0.135)
+  vs MPPI  eps    0: violations 11/30 vs 8/30 (6:3), McNemar p 0.508 (Holm 1.000), log-rank p 0.408, return difference +0.05 [-0.13, +0.22] (Wilcoxon p 0.135)
   vs MPPI  eps  0.1: violations 4/30 vs 6/30 (0:2), McNemar p 0.500 (Holm 1.000), log-rank p 0.486, return difference +0.17 [+0.01, +0.37] (Wilcoxon p 0.084)
-  vs MPPI  eps  0.2: violations 4/30 vs 6/30 (1:3), McNemar p 0.625 (Holm 1.000), log-rank p 0.518, return difference -0.09 [-0.53, +0.24] (Wilcoxon p 0.043)
-  vs MPPI  eps  0.3: violations 6/30 vs 8/30 (3:5), McNemar p 0.727 (Holm 1.000), log-rank p 0.559, return difference +0.21 [-0.09, +0.64] (Wilcoxon p 0.129)
+  vs MPPI  eps  0.2: violations 4/30 vs 6/30 (1:3), McNemar p 0.625 (Holm 1.000), log-rank p 0.518, return difference -0.09 [-0.53, +0.23] (Wilcoxon p 0.043)
+  vs MPPI  eps  0.3: violations 6/30 vs 8/30 (3:5), McNemar p 0.727 (Holm 1.000), log-rank p 0.559, return difference +0.21 [-0.09, +0.66] (Wilcoxon p 0.129)
   vs MPPI  eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.842, return difference +0.12 [-0.06, +0.30] (Wilcoxon p 0.184)
   vs MPPI  pooled over eps >= 0.1 (4 points): violations 27/120 vs 32/120 (6:11), McNemar p 0.332, CMH p 0.540 (odds ratio 0.79), stratified log-rank p 0.479
-  vs MPPI@65536 eps    0: violations 11/30 vs 11/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.991, return difference -0.01 [-0.23, +0.21] (Wilcoxon p 0.871)
-  vs MPPI@65536 eps  0.1: violations 4/30 vs 5/30 (1:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.729, return difference -0.04 [-0.24, +0.18] (Wilcoxon p 0.428)
+  vs MPPI@65536 eps    0: violations 11/30 vs 11/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.991, return difference -0.01 [-0.23, +0.22] (Wilcoxon p 0.871)
+  vs MPPI@65536 eps  0.1: violations 4/30 vs 5/30 (1:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.729, return difference -0.04 [-0.24, +0.19] (Wilcoxon p 0.428)
   vs MPPI@65536 eps  0.2: violations 4/30 vs 8/30 (1:5), McNemar p 0.219 (Holm 1.000), log-rank p 0.214, return difference -0.10 [-0.28, +0.05] (Wilcoxon p 0.570)
   vs MPPI@65536 eps  0.3: violations 6/30 vs 6/30 (4:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.967, return difference +0.08 [-0.13, +0.31] (Wilcoxon p 0.670)
-  vs MPPI@65536 eps  0.5: violations 13/30 vs 12/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.799, return difference +0.01 [-0.24, +0.25] (Wilcoxon p 0.452)
+  vs MPPI@65536 eps  0.5: violations 13/30 vs 12/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.799, return difference +0.01 [-0.25, +0.25] (Wilcoxon p 0.452)
   vs MPPI@65536 pooled over eps >= 0.1 (4 points): violations 27/120 vs 31/120 (9:13), McNemar p 0.523, CMH p 0.644 (odds ratio 0.83), stratified log-rank p 0.580
-  vs CEM   eps    0: violations 11/30 vs 8/30 (5:2), McNemar p 0.453 (Holm 1.000), log-rank p 0.422, return difference -0.05 [-0.38, +0.27] (Wilcoxon p 0.382)
-  vs CEM   eps  0.1: violations 4/30 vs 6/30 (0:2), McNemar p 0.500 (Holm 1.000), log-rank p 0.493, return difference +0.11 [-0.04, +0.30] (Wilcoxon p 0.229)
-  vs CEM   eps  0.2: violations 4/30 vs 7/30 (0:3), McNemar p 0.250 (Holm 1.000), log-rank p 0.341, return difference -0.07 [-0.32, +0.12] (Wilcoxon p 0.465)
-  vs CEM   eps  0.3: violations 6/30 vs 6/30 (2:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.989, return difference +0.21 [-0.05, +0.62] (Wilcoxon p 0.036)
-  vs CEM   eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.905, return difference +0.19 [+0.01, +0.39] (Wilcoxon p 0.070)
+  vs CEM   eps    0: violations 11/30 vs 8/30 (5:2), McNemar p 0.453 (Holm 1.000), log-rank p 0.422, return difference -0.05 [-0.39, +0.28] (Wilcoxon p 0.382)
+  vs CEM   eps  0.1: violations 4/30 vs 6/30 (0:2), McNemar p 0.500 (Holm 1.000), log-rank p 0.493, return difference +0.11 [-0.03, +0.30] (Wilcoxon p 0.229)
+  vs CEM   eps  0.2: violations 4/30 vs 7/30 (0:3), McNemar p 0.250 (Holm 1.000), log-rank p 0.341, return difference -0.07 [-0.31, +0.13] (Wilcoxon p 0.465)
+  vs CEM   eps  0.3: violations 6/30 vs 6/30 (2:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.989, return difference +0.21 [-0.05, +0.61] (Wilcoxon p 0.036)
+  vs CEM   eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.905, return difference +0.19 [+0.02, +0.40] (Wilcoxon p 0.070)
   vs CEM   pooled over eps >= 0.1 (4 points): violations 27/120 vs 31/120 (4:8), McNemar p 0.388, CMH p 0.644 (odds ratio 0.83), stratified log-rank p 0.538
-  vs CEM@65536 eps    0: violations 11/30 vs 13/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.619, return difference -0.22 [-0.61, +0.12] (Wilcoxon p 0.746)
-  vs CEM@65536 eps  0.1: violations 4/30 vs 7/30 (1:4), McNemar p 0.375 (Holm 1.000), log-rank p 0.334, return difference +0.06 [-0.08, +0.24] (Wilcoxon p 0.777)
+  vs CEM@65536 eps    0: violations 11/30 vs 13/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.619, return difference -0.22 [-0.63, +0.13] (Wilcoxon p 0.746)
+  vs CEM@65536 eps  0.1: violations 4/30 vs 7/30 (1:4), McNemar p 0.375 (Holm 1.000), log-rank p 0.334, return difference +0.06 [-0.09, +0.24] (Wilcoxon p 0.777)
   vs CEM@65536 eps  0.2: violations 4/30 vs 4/30 (1:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.985, return difference -0.14 [-0.42, +0.08] (Wilcoxon p 0.984)
   vs CEM@65536 eps  0.3: violations 6/30 vs 5/30 (5:4), McNemar p 1.000 (Holm 1.000), log-rank p 0.783, return difference +0.13 [-0.09, +0.38] (Wilcoxon p 0.309)
-  vs CEM@65536 eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.832, return difference -0.04 [-0.25, +0.16] (Wilcoxon p 0.761)
+  vs CEM@65536 eps  0.5: violations 13/30 vs 12/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.832, return difference -0.04 [-0.25, +0.17] (Wilcoxon p 0.761)
   vs CEM@65536 pooled over eps >= 0.1 (4 points): violations 27/120 vs 28/120 (9:10), McNemar p 1.000, CMH p 1.000 (odds ratio 0.95), stratified log-rank p 0.875
   latent safety, pooled over eps >= 0.1: share of steps followed by a violation within one horizon, after a plan that met the barrier in the model / one that did not; share of violations preceded by such a warning; crashes with no warning (the model was wrong); share of the plans meeting the barrier that had it active (slack <= 0.01), and their median slack
     SCP+MPPI    0.0001 / 0.0832, warned 1.00; unwarned crashes 0 in 120 episodes; barrier active on 95.2% (median slack -0.000)
@@ -644,63 +636,63 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
 
 === PG2 cinf H10 (M2_pointgoal2_c_inf_seed_0), e1 ===
   eps planner       n violations      rate [95% CI]        return [95% CI]  goals plan time latent-safe certified sampled start
-    0 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    1.18 [  0.85,   1.57]   0.10    1.295s        1.00      0.37          0.66
-    0 SCP          30   21/30     0.70 [0.52, 0.83]    2.16 [  1.34,   3.06]   0.73    1.025s        0.96      0.44          0.00
-    0 MPPI         30    9/30     0.30 [0.17, 0.48]    1.24 [  0.89,   1.62]   0.20    0.034s        1.00       nan           nan
-    0 MPPI@65536   30    9/30     0.30 [0.17, 0.48]    1.30 [  0.86,   1.89]   0.13    1.538s        0.99       nan           nan
+    0 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    1.18 [  0.84,   1.57]   0.10    1.295s        1.00      0.37          0.66
+    0 SCP          30   21/30     0.70 [0.52, 0.83]    2.16 [  1.35,   3.09]   0.73    1.025s        0.96      0.44          0.00
+    0 MPPI         30    9/30     0.30 [0.17, 0.48]    1.24 [  0.88,   1.63]   0.20    0.034s        1.00       nan           nan
+    0 MPPI@65536   30    9/30     0.30 [0.17, 0.48]    1.30 [  0.86,   1.88]   0.13    1.538s        0.99       nan           nan
     0 CEM          30   10/30     0.33 [0.19, 0.51]    1.34 [  0.84,   1.96]   0.23    0.033s        1.00       nan           nan
     0 CEM@65536    30   11/30     0.37 [0.22, 0.54]    1.15 [  0.85,   1.48]   0.10    1.539s        1.00       nan           nan
-  0.1 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    1.09 [  0.72,   1.55]   0.17    1.602s        0.97      0.31          0.66
-  0.1 SCP          30   18/30     0.60 [0.42, 0.75]    1.80 [  1.09,   2.63]   0.53    1.094s        0.90      0.30          0.00
+  0.1 SCP+MPPI     30    6/30     0.20 [0.10, 0.37]    1.09 [  0.72,   1.54]   0.17    1.602s        0.97      0.31          0.66
+  0.1 SCP          30   18/30     0.60 [0.42, 0.75]    1.80 [  1.09,   2.62]   0.53    1.094s        0.90      0.30          0.00
   0.1 MPPI         30    5/30     0.17 [0.07, 0.34]    0.98 [  0.67,   1.33]   0.10    0.033s        0.98       nan           nan
-  0.1 MPPI@65536   30    5/30     0.17 [0.07, 0.34]    1.03 [  0.68,   1.45]   0.13    1.537s        0.97       nan           nan
-  0.1 CEM          30    6/30     0.20 [0.10, 0.37]    1.03 [  0.65,   1.48]   0.13    0.033s        0.97       nan           nan
+  0.1 MPPI@65536   30    5/30     0.17 [0.07, 0.34]    1.03 [  0.68,   1.44]   0.13    1.537s        0.97       nan           nan
+  0.1 CEM          30    6/30     0.20 [0.10, 0.37]    1.03 [  0.64,   1.49]   0.13    0.033s        0.97       nan           nan
   0.1 CEM@65536    30    6/30     0.20 [0.10, 0.37]    1.17 [  0.81,   1.58]   0.17    1.537s        0.96       nan           nan
   0.2 SCP+MPPI     30    5/30     0.17 [0.07, 0.34]    0.59 [  0.32,   0.87]   0.03    1.307s        0.89      0.21          0.61
-  0.2 SCP          30   14/30     0.47 [0.30, 0.64]    1.09 [  0.61,   1.66]   0.30    1.029s        0.84      0.21          0.00
-  0.2 MPPI         30    4/30     0.13 [0.05, 0.30]    0.74 [  0.35,   1.26]   0.17    0.034s        0.95       nan           nan
+  0.2 SCP          30   14/30     0.47 [0.30, 0.64]    1.09 [  0.60,   1.65]   0.30    1.029s        0.84      0.21          0.00
+  0.2 MPPI         30    4/30     0.13 [0.05, 0.30]    0.74 [  0.35,   1.25]   0.17    0.034s        0.95       nan           nan
   0.2 MPPI@65536   30    3/30     0.10 [0.03, 0.26]    0.74 [  0.35,   1.17]   0.13    1.537s        0.93       nan           nan
-  0.2 CEM          30    4/30     0.13 [0.05, 0.30]    0.81 [  0.33,   1.49]   0.10    0.034s        0.93       nan           nan
+  0.2 CEM          30    4/30     0.13 [0.05, 0.30]    0.81 [  0.33,   1.52]   0.10    0.034s        0.93       nan           nan
   0.2 CEM@65536    30    4/30     0.13 [0.05, 0.30]    0.84 [  0.52,   1.20]   0.13    1.537s        0.93       nan           nan
-  0.3 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    0.46 [  0.05,   0.95]   0.13    1.250s        0.84      0.18          0.60
+  0.3 SCP+MPPI     30    8/30     0.27 [0.14, 0.44]    0.46 [  0.05,   0.97]   0.13    1.250s        0.84      0.18          0.60
   0.3 SCP          30   15/30     0.50 [0.33, 0.67]    0.43 [  0.03,   0.83]   0.13    1.199s        0.88      0.21          0.00
-  0.3 MPPI         30    7/30     0.23 [0.12, 0.41]    0.43 [  0.11,   0.82]   0.07    0.033s        0.89       nan           nan
-  0.3 MPPI@65536   30    5/30     0.17 [0.07, 0.34]    0.50 [  0.09,   1.03]   0.10    1.534s        0.88       nan           nan
-  0.3 CEM          30    6/30     0.20 [0.10, 0.37]    0.21 [ -0.15,   0.61]   0.07    0.033s        0.84       nan           nan
-  0.3 CEM@65536    30    7/30     0.23 [0.12, 0.41]    0.39 [  0.03,   0.82]   0.10    1.537s        0.88       nan           nan
-  0.5 SCP+MPPI     30    7/30     0.23 [0.12, 0.41]   -0.22 [ -0.55,   0.14]   0.07    0.730s        0.63      0.20          0.59
-  0.5 SCP          30   19/30     0.63 [0.46, 0.78]   -0.18 [ -0.53,   0.17]   0.03    0.844s        0.66      0.27          0.00
-  0.5 MPPI         30    8/30     0.27 [0.14, 0.44]   -0.30 [ -0.60,   0.01]   0.03    0.033s        0.72       nan           nan
+  0.3 MPPI         30    7/30     0.23 [0.12, 0.41]    0.43 [  0.10,   0.83]   0.07    0.033s        0.89       nan           nan
+  0.3 MPPI@65536   30    5/30     0.17 [0.07, 0.34]    0.50 [  0.07,   1.02]   0.10    1.534s        0.88       nan           nan
+  0.3 CEM          30    6/30     0.20 [0.10, 0.37]    0.21 [ -0.14,   0.61]   0.07    0.033s        0.84       nan           nan
+  0.3 CEM@65536    30    7/30     0.23 [0.12, 0.41]    0.39 [  0.02,   0.83]   0.10    1.537s        0.88       nan           nan
+  0.5 SCP+MPPI     30    7/30     0.23 [0.12, 0.41]   -0.22 [ -0.54,   0.13]   0.07    0.730s        0.63      0.20          0.59
+  0.5 SCP          30   19/30     0.63 [0.46, 0.78]   -0.18 [ -0.53,   0.18]   0.03    0.844s        0.66      0.27          0.00
+  0.5 MPPI         30    8/30     0.27 [0.14, 0.44]   -0.30 [ -0.60,  -0.00]   0.03    0.033s        0.72       nan           nan
   0.5 MPPI@65536   30    9/30     0.30 [0.17, 0.48]   -0.20 [ -0.47,   0.07]   0.03    1.532s        0.64       nan           nan
-  0.5 CEM          30    9/30     0.30 [0.17, 0.48]   -0.10 [ -0.40,   0.23]   0.03    0.033s        0.73       nan           nan
+  0.5 CEM          30    9/30     0.30 [0.17, 0.48]   -0.10 [ -0.41,   0.23]   0.03    0.033s        0.73       nan           nan
   0.5 CEM@65536    30    9/30     0.30 [0.17, 0.48]   -0.14 [ -0.47,   0.20]   0.03    1.532s        0.68       nan           nan
   SCP+MPPI against each planner on paired seeds (only-main:only-other = episodes where just one of the two violated); Holm adjusts the McNemar p over this sweep's points
-  vs SCP   eps    0: violations 8/30 vs 21/30 (2:15), McNemar p 0.002 (Holm 0.012), log-rank p 0.002, return difference -0.97 [-1.89, -0.20] (Wilcoxon p 0.271)
-  vs SCP   eps  0.1: violations 6/30 vs 18/30 (2:14), McNemar p 0.004 (Holm 0.017), log-rank p 0.002, return difference -0.71 [-1.35, -0.12] (Wilcoxon p 0.007)
-  vs SCP   eps  0.2: violations 5/30 vs 14/30 (1:10), McNemar p 0.012 (Holm 0.023), log-rank p 0.011, return difference -0.50 [-0.91, -0.13] (Wilcoxon p 0.025)
-  vs SCP   eps  0.3: violations 8/30 vs 15/30 (1:8), McNemar p 0.039 (Holm 0.039), log-rank p 0.047, return difference +0.03 [-0.48, +0.60] (Wilcoxon p 0.516)
-  vs SCP   eps  0.5: violations 7/30 vs 19/30 (2:14), McNemar p 0.004 (Holm 0.017), log-rank p 0.003, return difference -0.05 [-0.45, +0.36] (Wilcoxon p 0.685)
+  vs SCP   eps    0: violations 8/30 vs 21/30 (2:15), McNemar p 0.002 (Holm 0.012), log-rank p 0.002, return difference -0.97 [-1.86, -0.20] (Wilcoxon p 0.271)
+  vs SCP   eps  0.1: violations 6/30 vs 18/30 (2:14), McNemar p 0.004 (Holm 0.017), log-rank p 0.002, return difference -0.71 [-1.34, -0.12] (Wilcoxon p 0.007)
+  vs SCP   eps  0.2: violations 5/30 vs 14/30 (1:10), McNemar p 0.012 (Holm 0.023), log-rank p 0.011, return difference -0.50 [-0.93, -0.14] (Wilcoxon p 0.025)
+  vs SCP   eps  0.3: violations 8/30 vs 15/30 (1:8), McNemar p 0.039 (Holm 0.039), log-rank p 0.047, return difference +0.03 [-0.49, +0.59] (Wilcoxon p 0.516)
+  vs SCP   eps  0.5: violations 7/30 vs 19/30 (2:14), McNemar p 0.004 (Holm 0.017), log-rank p 0.003, return difference -0.05 [-0.45, +0.37] (Wilcoxon p 0.685)
   vs SCP   pooled over eps >= 0.1 (4 points): violations 26/120 vs 66/120 (6:46), McNemar p 1.0e-08, CMH p 2.5e-07 (odds ratio 0.23), stratified log-rank p 9.1e-08
-  vs MPPI  eps    0: violations 8/30 vs 9/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.789, return difference -0.06 [-0.33, +0.19] (Wilcoxon p 0.655)
-  vs MPPI  eps  0.1: violations 6/30 vs 5/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.714, return difference +0.11 [-0.24, +0.51] (Wilcoxon p 0.612)
-  vs MPPI  eps  0.2: violations 5/30 vs 4/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.711, return difference -0.15 [-0.58, +0.15] (Wilcoxon p 0.641)
-  vs MPPI  eps  0.3: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.844, return difference +0.02 [-0.38, +0.45] (Wilcoxon p 0.715)
-  vs MPPI  eps  0.5: violations 7/30 vs 8/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.848, return difference +0.08 [-0.20, +0.41] (Wilcoxon p 0.935)
+  vs MPPI  eps    0: violations 8/30 vs 9/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.789, return difference -0.06 [-0.34, +0.19] (Wilcoxon p 0.655)
+  vs MPPI  eps  0.1: violations 6/30 vs 5/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.714, return difference +0.11 [-0.25, +0.52] (Wilcoxon p 0.612)
+  vs MPPI  eps  0.2: violations 5/30 vs 4/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.711, return difference -0.15 [-0.57, +0.15] (Wilcoxon p 0.641)
+  vs MPPI  eps  0.3: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.844, return difference +0.02 [-0.38, +0.46] (Wilcoxon p 0.715)
+  vs MPPI  eps  0.5: violations 7/30 vs 8/30 (2:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.848, return difference +0.08 [-0.20, +0.40] (Wilcoxon p 0.935)
   vs MPPI  pooled over eps >= 0.1 (4 points): violations 26/120 vs 24/120 (13:11), McNemar p 0.839, CMH p 0.874 (odds ratio 1.11), stratified log-rank p 0.739
-  vs MPPI@65536 eps    0: violations 8/30 vs 9/30 (1:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.841, return difference -0.11 [-0.56, +0.28] (Wilcoxon p 0.164)
-  vs MPPI@65536 eps  0.1: violations 6/30 vs 5/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.684, return difference +0.06 [-0.24, +0.43] (Wilcoxon p 0.903)
-  vs MPPI@65536 eps  0.2: violations 5/30 vs 3/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.463, return difference -0.15 [-0.61, +0.23] (Wilcoxon p 0.761)
+  vs MPPI@65536 eps    0: violations 8/30 vs 9/30 (1:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.841, return difference -0.11 [-0.56, +0.27] (Wilcoxon p 0.164)
+  vs MPPI@65536 eps  0.1: violations 6/30 vs 5/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.684, return difference +0.06 [-0.24, +0.44] (Wilcoxon p 0.903)
+  vs MPPI@65536 eps  0.2: violations 5/30 vs 3/30 (3:1), McNemar p 0.625 (Holm 1.000), log-rank p 0.463, return difference -0.15 [-0.60, +0.24] (Wilcoxon p 0.761)
   vs MPPI@65536 eps  0.3: violations 8/30 vs 5/30 (6:3), McNemar p 0.508 (Holm 1.000), log-rank p 0.312, return difference -0.04 [-0.32, +0.19] (Wilcoxon p 0.761)
   vs MPPI@65536 eps  0.5: violations 7/30 vs 9/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.640, return difference -0.02 [-0.32, +0.29] (Wilcoxon p 0.516)
   vs MPPI@65536 pooled over eps >= 0.1 (4 points): violations 26/120 vs 22/120 (14:10), McNemar p 0.541, CMH p 0.629 (odds ratio 1.23), stratified log-rank p 0.453
-  vs CEM   eps    0: violations 8/30 vs 10/30 (1:3), McNemar p 0.625 (Holm 1.000), log-rank p 0.637, return difference -0.15 [-0.47, +0.11] (Wilcoxon p 0.452)
-  vs CEM   eps  0.1: violations 6/30 vs 6/30 (5:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.924, return difference +0.05 [-0.32, +0.41] (Wilcoxon p 0.382)
-  vs CEM   eps  0.2: violations 5/30 vs 4/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.738, return difference -0.22 [-0.95, +0.25] (Wilcoxon p 0.935)
-  vs CEM   eps  0.3: violations 8/30 vs 6/30 (4:2), McNemar p 0.688 (Holm 1.000), log-rank p 0.636, return difference +0.25 [-0.01, +0.53] (Wilcoxon p 0.006)
-  vs CEM   eps  0.5: violations 7/30 vs 9/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.617, return difference -0.12 [-0.42, +0.19] (Wilcoxon p 0.440)
+  vs CEM   eps    0: violations 8/30 vs 10/30 (1:3), McNemar p 0.625 (Holm 1.000), log-rank p 0.637, return difference -0.15 [-0.48, +0.12] (Wilcoxon p 0.452)
+  vs CEM   eps  0.1: violations 6/30 vs 6/30 (5:5), McNemar p 1.000 (Holm 1.000), log-rank p 0.924, return difference +0.05 [-0.33, +0.41] (Wilcoxon p 0.382)
+  vs CEM   eps  0.2: violations 5/30 vs 4/30 (4:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.738, return difference -0.22 [-0.94, +0.26] (Wilcoxon p 0.935)
+  vs CEM   eps  0.3: violations 8/30 vs 6/30 (4:2), McNemar p 0.688 (Holm 1.000), log-rank p 0.636, return difference +0.25 [-0.01, +0.52] (Wilcoxon p 0.006)
+  vs CEM   eps  0.5: violations 7/30 vs 9/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.617, return difference -0.12 [-0.42, +0.18] (Wilcoxon p 0.440)
   vs CEM   pooled over eps >= 0.1 (4 points): violations 26/120 vs 25/120 (15:14), McNemar p 1.000, CMH p 1.000 (odds ratio 1.05), stratified log-rank p 0.877
-  vs CEM@65536 eps    0: violations 8/30 vs 11/30 (1:4), McNemar p 0.375 (Holm 1.000), log-rank p 0.500, return difference +0.03 [-0.26, +0.33] (Wilcoxon p 0.792)
-  vs CEM@65536 eps  0.1: violations 6/30 vs 6/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.993, return difference -0.08 [-0.49, +0.37] (Wilcoxon p 0.428)
+  vs CEM@65536 eps    0: violations 8/30 vs 11/30 (1:4), McNemar p 0.375 (Holm 1.000), log-rank p 0.500, return difference +0.03 [-0.25, +0.34] (Wilcoxon p 0.792)
+  vs CEM@65536 eps  0.1: violations 6/30 vs 6/30 (3:3), McNemar p 1.000 (Holm 1.000), log-rank p 0.993, return difference -0.08 [-0.50, +0.35] (Wilcoxon p 0.428)
   vs CEM@65536 eps  0.2: violations 5/30 vs 4/30 (2:1), McNemar p 1.000 (Holm 1.000), log-rank p 0.747, return difference -0.25 [-0.59, +0.03] (Wilcoxon p 0.080)
   vs CEM@65536 eps  0.3: violations 8/30 vs 7/30 (3:2), McNemar p 1.000 (Holm 1.000), log-rank p 0.721, return difference +0.07 [-0.10, +0.22] (Wilcoxon p 0.685)
   vs CEM@65536 eps  0.5: violations 7/30 vs 9/30 (2:4), McNemar p 0.688 (Holm 1.000), log-rank p 0.663, return difference -0.08 [-0.42, +0.28] (Wilcoxon p 0.393)
@@ -726,11 +718,9 @@ CEM            131072     -    594   1.427   1.427   1.429   1.436
   N 20 vs CEM@95040      30 pairs, 2/3,   -3.3 [-15.4, +6.9], +0.93 [+0.15, +1.71]; P(safer) 0.750, P(higher return) 0.989
   N 30 vs SCP            30 pairs, 1/7,  -20.0 [-36.9, -5.6], +1.15 [+0.01, +2.30]; P(safer) 0.992, P(higher return) 0.982
   N 30 vs MPPI           30 pairs, 1/0,   +3.3 [-8.3, +16.7], +0.67 [-0.04, +1.43]; P(safer) 0.250, P(higher return) 0.967
-  N 30 vs MPPI@32768     30 pairs, 1/1,   +0.0 [-10.6, +10.6], +0.66 [-0.35, +1.72]; P(safer) 0.500, P(higher return) 0.898
-  N 30 vs MPPI@120000    30 pairs, 1/0,   +3.3 [-8.3, +16.7], +1.13 [+0.40, +1.90]; P(safer) 0.250, P(higher return) 0.998
-  N 30 vs CEM            30 pairs, 1/0,   +3.3 [-8.3, +16.7], +1.04 [+0.23, +1.91]; P(safer) 0.250, P(higher return) 0.995
-  N 30 vs CEM@32768      30 pairs, 1/1,   +0.0 [-10.6, +10.6], +0.11 [-0.92, +1.14]; P(safer) 0.500, P(higher return) 0.583
-  N 30 vs CEM@120000     30 pairs, 1/0,   +3.3 [-8.3, +16.7], +0.98 [+0.07, +1.91]; P(safer) 0.250, P(higher return) 0.982
+  N 30 vs MPPI@120000    30 pairs, 1/0,   +3.3 [-8.3, +16.7], +1.13 [+0.40, +1.91]; P(safer) 0.250, P(higher return) 0.998
+  N 30 vs CEM            30 pairs, 1/0,   +3.3 [-8.3, +16.7], +1.04 [+0.22, +1.90]; P(safer) 0.250, P(higher return) 0.993
+  N 30 vs CEM@120000     30 pairs, 1/0,   +3.3 [-8.3, +16.7], +0.98 [+0.09, +1.91]; P(safer) 0.250, P(higher return) 0.985
 
 Warnings:
   /home/samuel/Github/Safe_JEPA/src/save_data/experiments/M2_pointgoal2_c_1_2_seed_0/e1/eps_0.0: CEM has overlapping seed ranges [(0, 29), (20, 29), (30, 39)]; check which run wrote the seed files
